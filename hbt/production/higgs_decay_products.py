@@ -10,7 +10,8 @@ from columnflow.production import Producer, producer
 from columnflow.util import maybe_import
 from columnflow.columnar_util import set_ak_column
 from columnflow.production.util import attach_coffea_behavior
-from columnflow.columnar_util import attach_coffea_behavior as attach_coffea_behavior_fn
+from columnflow.columnar_util import attach_coffea_behavior as attach_coffea_behavior_fn, EMPTY_FLOAT, EMPTY_INT
+from functools import partial
 
 ak = maybe_import("awkward")
 
@@ -30,7 +31,7 @@ def add_field(muons, electrons, nu_mu, nu_e, field: str):
 
 @producer(
     uses={"GenPart.*", attach_coffea_behavior},
-    produces={"higgs_family.*", "bottoms_inv_mass", "taus_inv_mass"},
+    produces={"higgs_family.*"},  # "bottoms_inv_mass", "taus_inv_mass"},
 )
 def higgs_decay_products(self: Producer, events: ak.Array, **kwargs) -> ak.Array:
     """
@@ -109,6 +110,7 @@ def higgs_decay_products(self: Producer, events: ak.Array, **kwargs) -> ak.Array
     W_1["pt"] = W_1.pt
     W_2["pt"] = W_2.pt
     field_list = np.array(tau_children.fields, dtype=str)
+    # from IPython import embed; embed(header="debugger")
     for W_iter in [W_1, W_2]:
         for field in field_list:
             if field != "pt" and field != "pdgId":
@@ -123,7 +125,17 @@ def higgs_decay_products(self: Producer, events: ak.Array, **kwargs) -> ak.Array
     ], axis=1)
 
     # save the column
-    events = set_ak_column(events, "higgs_family", higgs_family)
+    # events = set_ak_column(events, "higgs_family", higgs_family)
+
+    set_ak_column_f32 = partial(set_ak_column, value_type=np.float32)
+    set_ak_column_i32 = partial(set_ak_column, value_type=np.int32)
+
+    float_fields = ("eta", "mass", "phi", "pt", "vx", "vy", "vz", "iso")
+    for field in higgs_family.fields:
+        if field in float_fields:
+            events = set_ak_column_f32(events, f"higgs_family.{field}", ak.fill_none(higgs_family[field], EMPTY_FLOAT))
+        else:
+            events = set_ak_column_i32(events, f"higgs_family.{field}", ak.fill_none(higgs_family[field], EMPTY_INT))
 
     # for validation, to be removed
     # bottoms_inv_mass = attach_coffea_behavior_fn(bottoms, collections={"higgs_family": {"type_name": "GenParticle",

@@ -454,12 +454,93 @@ def add_variables(config: od.Config) -> None:
         unit="GeV",
         x_title=r"$m_{ll+bb}$",
     )
+
+    add_variable(
+        config,
+        name="higgs_fam_hh_mass",
+        expression="pdf_input_vars.dihiggs_mass",
+        binning=(50, 0, 1250),
+        unit="GeV",
+        x_title=r"$m_{inv}(H_{bb}, H_{\tau\tau})$",
+    )
+    add_variable(
+        config,
+        name="higgs_fam_hh_pt",
+        expression="pdf_input_vars.dihiggs_system_pt",
+        binning=(50, 0, 1000),
+        unit="GeV",
+        x_title=r"$p_{T}(H_{bb}, H_{\tau\tau})$",
+    )
+    add_variable(
+        config,
+        name="higgs_fam_hh_pz",
+        expression="pdf_input_vars.dihiggs_system_pz",
+        binning=(100, -1500, 1500),
+        unit="GeV",
+        x_title=r"$p_{z}(H_{bb}, H_{\tau\tau})$",
+    )
+    add_variable(
+        config,
+        name="higgs_fam_hh_phi",
+        expression="pdf_input_vars.dihiggs_system_phi",
+        binning=(50, -3.3, 3.3),
+        unit="GeV",
+        x_title=r"$\phi(H_{bb}, H_{\tau\tau})$",
+    )
+    add_variable(
+        config,
+        name="higgs_fam_h1_theta_star",
+        expression="pdf_input_vars.theta_star_h_1",
+        binning=(50, 0, 3.14),
+        unit="rad",
+        x_title=r"$\theta^*_{H_1}$",
+    )
+    add_variable(
+        config,
+        name="higgs_fam_phi_cms_hh_h_1",
+        expression="pdf_input_vars.phi_star_h_1",
+        binning=(50, -3.14, 3.14),
+        unit="rad",
+        x_title=r"$\phi^*_{H_1}$",
+    )
+    add_variable(
+        config,
+        name="higgs_fam_theta_cms_h_2_tau_1",
+        expression="pdf_input_vars.theta_cms_h_2_tau_1",
+        binning=(50, 0, 3.14),
+        unit="rad",
+        x_title=r"$\theta_{H_2, \tau_1^{**}}$",
+    )
+    add_variable(
+        config,
+        name="higgs_fam_phi_cms_h_2_tau_1",
+        expression="pdf_input_vars.phi_cms_h_2_tau_1",
+        binning=(50, -3.14, 3.14),
+        unit="rad",
+        x_title=r"$\phi^{**}_{\tau_1}$",
+    )
+    add_variable(
+        config,
+        name="higgs_fam_theta_cms_h_1_b_1",
+        expression="pdf_input_vars.theta_cms_h_1_b_1",
+        binning=(50, 0, 3.14),
+        unit="rad",
+        x_title=r"$\theta_{H_1, b_1^{***}}$",
+    )
+    add_variable(
+        config,
+        name="higgs_fam_phi_cms_h_1_b_1",
+        expression="pdf_input_vars.phi_cms_h_1_b_1",
+        binning=(50, -3.14, 3.14),
+        unit="rad",
+        x_title=r"$\phi^{***}_{b_1}$",
+    )
     add_variable(
         config,
         name="hh_pt",
         expression=partial(build_hh, which="pt"),
         aux={"inputs": build_hh.inputs},
-        binning=(40, 0, 400),
+        binning=(40, 0, 500),
         unit="GeV",
         x_title=r"$p_{T,ll+bb}$",
     )

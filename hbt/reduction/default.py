@@ -12,6 +12,8 @@ from columnflow.util import maybe_import
 
 from hbt.util import IF_DATASET_HAS_TOP, IF_DATASET_IS_DY
 
+from hbt.production.higgs_decay_products import higgs_decay_products
+
 ak = maybe_import("awkward")
 
 
@@ -23,16 +25,19 @@ gen_parton_top = cf_gen_parton_top.derive("gen_parton_top", cls_dict={"require_d
         cf_default,
         IF_DATASET_HAS_TOP(gen_parton_top),
         IF_DATASET_IS_DY(gen_dilepton, recoil_corrected_met),
+        higgs_decay_products,
     },
     produces={
         cf_default,
         IF_DATASET_HAS_TOP(gen_parton_top),
         IF_DATASET_IS_DY(gen_dilepton, recoil_corrected_met),
+        higgs_decay_products,
     },
 )
 def default(self: Reducer, events: ak.Array, selection: ak.Array, **kwargs) -> ak.Array:
     # run cf's default reduction which handles event selection and collection creation
     events = self[cf_default](events, selection, **kwargs)
+    events = self[higgs_decay_products](events, **kwargs)
 
     # add generator particles, depending on the dataset
     if self.has_dep(gen_parton_top):

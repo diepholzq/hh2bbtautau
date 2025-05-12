@@ -91,7 +91,6 @@ def top_decay_products(self: Producer, events: ak.Array, **kwargs) -> ak.Array:
     ], axis=3)
     neutrinos = ak.flatten(neutrinos, axis=3)
     neutrinos = ak.firsts(neutrinos, axis=2)
-    # neutrinos = ak.flatten(neutrinos, axis=2)
     antineutrinos = ak.concatenate([
         w_children[w_children.pdgId == -12], w_children[w_children.pdgId == -14], w_children[w_children.pdgId == -16],
     ], axis=3)
@@ -102,23 +101,6 @@ def top_decay_products(self: Producer, events: ak.Array, **kwargs) -> ak.Array:
 
     other_w_children = other_w_children[other_w_children.hasFlags("isFirstCopy")]
     other_w_children = ak.firsts(other_w_children, axis=2)
-
-    #  No real difference
-    # other_top_children = tops.distinctChildren[abs(tops.distinctChildren.pdgId) != 5]
-    # other_top_children = other_top_children[abs(other_top_children.pdgId) != 24]
-    # other_top_children = other_top_children[other_top_children.hasFlags("isFirstCopy")]
-    # other_top_children = ak.firsts(other_top_children, axis=2)
-
-    # from IPython import embed; embed(header="debugger")
-    # tops = tops[:, None, :],
-    # bottoms = bottoms[:, None, :],
-    # w_bosons  = w_bosons[:, None, :],
-    # qq = qq[:, None, :],
-    # qbarqbar  = qbarqbar[:, None, :],
-    # leps      = leps[:, None, :],
-    # antileps  = antileps[:, None, :],
-    # neutrinos = neutrinos[:, None, :],
-    # antineutrinos = antineutrinos[:, None, :]
 
     # build the column
     top_family = ak.concatenate([
