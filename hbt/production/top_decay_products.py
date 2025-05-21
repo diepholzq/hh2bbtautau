@@ -3,22 +3,24 @@
 """
 Producers that determine the generator-level particles related to a top quark decay.
 """
-
+import numpy as np
 from columnflow.production import Producer, producer
 from columnflow.util import maybe_import
 from columnflow.columnar_util import set_ak_column
 from columnflow.production.util import attach_coffea_behavior
+from columnflow.columnar_util import EMPTY_FLOAT, EMPTY_INT
+from functools import partial
 
 ak = maybe_import("awkward")
 
 
 @producer(
     uses={"GenPart.*", attach_coffea_behavior},
-    produces={"top_family.*", "reco_top_mass", "top_mass"},
+    produces={"top_family.*",}  # "reco_top_mass", "top_mass"},
 )
 def top_decay_products(self: Producer, events: ak.Array, **kwargs) -> ak.Array:
     """
-    Creates a new ragged column "higgs_family" that stores the tops and their decay products. The structure
+    Creates a new ragged column "top_family" that stores the tops and their decay products. The structure
     will be as follows:
 
     .. code-block:: python
@@ -117,20 +119,30 @@ def top_decay_products(self: Producer, events: ak.Array, **kwargs) -> ak.Array:
     ], axis=1)
 
     # save the column
-    events = set_ak_column(events, "top_family", top_family)
+    set_ak_column_f32 = partial(set_ak_column, value_type=np.float32)
+    set_ak_column_i32 = partial(set_ak_column, value_type=np.int32)
 
-    events = self[attach_coffea_behavior](events, collections={"top_family": {"type_name": "GenParticle",
-        "check_attr": "metric_table", "skip_fields": "*Idx*G"}}, **kwargs)
+    float_fields = ("eta", "mass", "phi", "pt", "vx", "vy", "vz", "iso")
+    for field in top_family.fields:
+        if field in float_fields:
+            events = set_ak_column_f32(events, f"top_family.{field}", ak.fill_none(top_family[field], EMPTY_FLOAT))
+        else:
+            events = set_ak_column_i32(events, f"top_family.{field}", ak.fill_none(top_family[field], EMPTY_INT))
+    # events = set_ak_column(events, "top_family", top_family)
 
-    # Validation: Reconstruct top mass from invariant mass of decay products
-    relevant_children = top_family[:, [1, 3, 4, 5, 6, 7, 8, 9], 0]
-    relevant_children_summed = relevant_children.sum(axis=1)
-    relevant_children_inv_mass = relevant_children_summed.absolute()
+    # for validation purposes:
+    # events = self[attach_coffea_behavior](events, collections={"top_family": {"type_name": "GenParticle",
+    #     "check_attr": "metric_table", "skip_fields": "*Idx*G"}}, **kwargs)
 
-    tops_inv_mass = events.top_family[:, 0, 0].absolute()
+    # # Validation: Reconstruct top mass from invariant mass of decay products
+    # relevant_children = top_family[:, [1, 3, 4, 5, 6, 7, 8, 9], 0]
+    # relevant_children_summed = relevant_children.sum(axis=1)
+    # relevant_children_inv_mass = relevant_children_summed.absolute()
 
-    events = set_ak_column(events, "reco_top_mass", relevant_children_inv_mass)
-    events = set_ak_column(events, "top_mass", tops_inv_mass)
+    # tops_inv_mass = events.top_family[:, 0, 0].absolute()
+
+    # events = set_ak_column(events, "reco_top_mass", relevant_children_inv_mass)
+    # events = set_ak_column(events, "top_mass", tops_inv_mass)
     # from IPython import embed; embed(header="debugger")
     return events
 
