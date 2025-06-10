@@ -21,6 +21,7 @@ def shape_array(input_array):
     output_array = ak.flatten(input_array, axis=3)
     output_array = ak.flatten(output_array, axis=2)
     output_array = ak.pad_none(output_array, 2, axis=1)
+
     return output_array
 
 
@@ -43,7 +44,7 @@ def higgs_decay_products(self: Producer, events: ak.Array, **kwargs) -> ak.Array
         [
             # event 1
             [
-                [H_bb, H_tautau], [b+, b-], [tau+, tau-], [tau+ nu, tau- nu], [W+, W-] [mu+, mu-], [e+, e-],
+                [H_bb, H_tautau], [b+, b-], [tau+, tau-], [W+, W-], [tau+ nu, tau- nu], [mu+, mu-], [e+, e-],
                 [mu- nu, mu+ nu], [e- mu, e+ mu]
             ],
             # event 2
@@ -51,11 +52,12 @@ def higgs_decay_products(self: Producer, events: ak.Array, **kwargs) -> ak.Array
         ],
 
     where H1 decays to bb and H2 decays to tautau. If a certain particle is not present in an event, the
-    corresponding array entry will be None.
+    corresponding array entry will be EMPTY_FLOAT / EMPTY_INT.
     """
 
     mother_gen_flags = ["isLastCopy", "fromHardProcess"]
     children_gen_flags = ["isFirstCopy", "fromHardProcess"]
+    tau_children_flags = ["isFirstCopy", "isTauDecayProduct"]
 
     # find and sort higgses
     abs_id = abs(events.GenPart.pdgId)
@@ -74,7 +76,7 @@ def higgs_decay_products(self: Producer, events: ak.Array, **kwargs) -> ak.Array
     bottoms = bottoms[ak.argsort(ak.fill_none(bottoms.pdgId, 0), axis=1, ascending=True)]
 
     taus = higgs_children[abs(higgs_children.pdgId) == 15]
-    tau_children = taus.distinctChildrenDeep[taus.distinctChildrenDeep.hasFlags("isFirstCopy")]
+    tau_children = taus.distinctChildrenDeep[taus.distinctChildrenDeep.hasFlags(*tau_children_flags)]
     taus = ak.flatten(taus, axis=2)
     taus = taus[ak.argsort(ak.fill_none(taus.pdgId, 0), axis=1, ascending=True)]
 
@@ -85,11 +87,12 @@ def higgs_decay_products(self: Producer, events: ak.Array, **kwargs) -> ak.Array
     muons = muons[ak.argsort(ak.fill_none(muons.pdgId, 0), axis=1, ascending=True)]
     electrons = shape_array(tau_children[abs(tau_children.pdgId) == 11])
     electrons = electrons[ak.argsort(ak.fill_none(electrons.pdgId, 0), axis=1, ascending=True)]
+    # if ak.max(ak.num(nu_tau)) != 2:
+    #     from IPython import embed; embed()
     nu_mu = shape_array(tau_children[abs(tau_children.pdgId) == 14])
     nu_mu = nu_mu[ak.argsort(ak.fill_none(nu_mu.pdgId, 0), axis=1, ascending=False)]
     nu_e = shape_array(tau_children[abs(tau_children.pdgId) == 12])
     nu_e = nu_e[ak.argsort(ak.fill_none(nu_e.pdgId, 0), axis=1, ascending=False)]
-
     # events = self[attach_coffea_behavior](events, collections = "GenPart", **kwargs)
 
     tau_children_sorted = ak.concatenate([
@@ -109,6 +112,10 @@ def higgs_decay_products(self: Producer, events: ak.Array, **kwargs) -> ak.Array
     W_2["pdgId"] = -24
     W_1["pt"] = W_1.pt
     W_2["pt"] = W_2.pt
+    W_1["eta"] = W_1.eta
+    W_2["eta"] = W_2.eta
+    W_1["phi"] = W_1.phi
+    W_2["phi"] = W_2.phi
     field_list = np.array(tau_children.fields, dtype=str)
     # from IPython import embed; embed(header="debugger")
     for W_iter in [W_1, W_2]:

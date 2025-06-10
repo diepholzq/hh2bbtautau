@@ -20,7 +20,7 @@ from hbt.production.weights import (
 from hbt.production.btag import normalized_btag_weights_deepjet, normalized_btag_weights_pnet
 from hbt.production.tau import tau_weights
 from hbt.production.trigger_sf import trigger_weight
-from hbt.production.create_pdf_input_vars import create_pdf_input_vars
+from hbt.production.create_pdf_input_vars import create_pdf_input_vars_top
 from hbt.util import IF_DATASET_HAS_LHE_WEIGHTS, IF_RUN_3
 
 ak = maybe_import("awkward")
@@ -33,13 +33,13 @@ top_pt_weight = cf_top_pt_weight.derive("top_pt_weight", cls_dict={"require_data
     uses={
         category_ids, stitched_normalization_weights, normalized_pu_weight, normalized_ps_weights,
         normalized_btag_weights_deepjet, IF_RUN_3(normalized_btag_weights_pnet),
-        IF_DATASET_HAS_LHE_WEIGHTS(normalized_pdf_weight, normalized_murmuf_weight), create_pdf_input_vars,
+        IF_DATASET_HAS_LHE_WEIGHTS(normalized_pdf_weight, normalized_murmuf_weight), create_pdf_input_vars_top,
         # weight producers added dynamically if produce_weights is set
     },
     produces={
         category_ids, stitched_normalization_weights, normalized_pu_weight, normalized_ps_weights,
         normalized_btag_weights_deepjet, IF_RUN_3(normalized_btag_weights_pnet),
-        IF_DATASET_HAS_LHE_WEIGHTS(normalized_pdf_weight, normalized_murmuf_weight), create_pdf_input_vars,
+        IF_DATASET_HAS_LHE_WEIGHTS(normalized_pdf_weight, normalized_murmuf_weight), create_pdf_input_vars_top,
         # weight producers added dynamically if produce_weights is set
     },
     # whether weight producers should be added and called
@@ -56,7 +56,7 @@ def default(self: Producer, events: ak.Array, **kwargs) -> ak.Array:
     # mc-only weights
     if self.dataset_inst.is_mc:
         # normalization weights
-        events = self[create_pdf_input_vars](events, **kwargs)
+        events = self[create_pdf_input_vars_top](events, **kwargs)
         events = self[stitched_normalization_weights](events, **kwargs)
 
         # normalized pdf weight

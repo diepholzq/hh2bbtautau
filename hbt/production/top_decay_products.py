@@ -16,7 +16,7 @@ ak = maybe_import("awkward")
 
 @producer(
     uses={"GenPart.*", attach_coffea_behavior},
-    produces={"top_family.*",}  # "reco_top_mass", "top_mass"},
+    produces={"top_family.*"},  # "reco_top_mass", "top_mass"},
 )
 def top_decay_products(self: Producer, events: ak.Array, **kwargs) -> ak.Array:
     """

@@ -1489,6 +1489,7 @@ def add_config(
             f"{cfg.x.met_name}.{{pt,phi,significance,covXX,covXY,covYY}}",
             "PV.npvs",
             "higgs_family.*",
+            "top_family.*",
             # keep all columns added during selection and reduction, but skip cutflow features
             ColumnCollection.ALL_FROM_SELECTOR,
             skip_column("cutflow.*"),
