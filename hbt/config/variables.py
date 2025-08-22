@@ -492,7 +492,7 @@ def add_variables(config: od.Config) -> None:
         name="higgs_fam_h1_cos_theta",
         expression="pdf_input_vars.cos_theta_h_1",
         binning=(50, -1, 1),
-        x_title=r"$cos(\theta(H_1^*, HH))$",
+        x_title=r"$cos(\theta(H_1^{HH}))$",
     )
     add_variable(
         config,
@@ -500,14 +500,14 @@ def add_variables(config: od.Config) -> None:
         expression="pdf_input_vars.phi_star_h_1",
         binning=(50, -3.14, 3.14),
         unit="rad",
-        x_title=r"$\phi(H_1^*)$",
+        x_title=r"$\phi(H_1^{HH})$",
     )
     add_variable(
         config,
         name="higgs_fam_cos_theta_cms_h_2_tau_1",
         expression="pdf_input_vars.cos_theta_cms_h_2_tau_1",
         binning=(50, -1, 1),
-        x_title=r"$cos(\theta(H_2, \tau_1^{**}))$",
+        x_title=r"$cos(\theta(\tau_1^{H_2))$",
     )
     add_variable(
         config,
@@ -515,14 +515,14 @@ def add_variables(config: od.Config) -> None:
         expression="pdf_input_vars.phi_cms_h_2_tau_1",
         binning=(50, -3.14, 3.14),
         unit="rad",
-        x_title=r"$\phi(\tau_1^{**})$",
+        x_title=r"$\phi(\tau_1^{H_2})$",
     )
     add_variable(
         config,
         name="higgs_fam_cos_theta_cms_h_1_b_1",
         expression="pdf_input_vars.cos_theta_cms_h1_b1",  # CHANGE
         binning=(50, -1, 1),
-        x_title=r"$cos(\theta(H_1, b_1^{***}))$",
+        x_title=r"$cos(\theta(b_1^{H_1}))$",
     )
     add_variable(
         config,
@@ -530,72 +530,72 @@ def add_variables(config: od.Config) -> None:
         expression="pdf_input_vars.phi_cms_h_1_b_1",
         binning=(50, -3.14, 3.14),
         unit="rad",
-        x_title=r"$\phi(b_1^{***})$",
+        x_title=r"$\phi(b_1^{H_1})$",
     )
-    add_variable(
-        config,
-        name="higgs_fam_h_bb_pt",
-        expression="higgs_family[:,0,0].pt",
-        binning=(50, 0, 500),
-        unit="GeV",
-        x_title=r"$p_T(H_{bb})$",
-    )
-    add_variable(
-        config,
-        name="higgs_fam_h_tautau_pt",
-        expression="higgs_family[:,0,1].pt",
-        binning=(50, 0, 500),
-        unit="GeV",
-        x_title=r"$p_T(H_{\tau\tau})$",
-    )
-    add_variable(
-        config,
-        name="higgs_fam_m_h_bb",
-        expression="higgs_family[:,0,0].mass",
-        binning=(50, 0, 250),
-        unit="GeV",
-        x_title=r"$m_{H_{bb}}$",
-    )
-    add_variable(
-        config,
-        name="higgs_fam_m_h_tautau",
-        expression="higgs_family[:,0,1].mass",
-        binning=(50, 0, 250),
-        unit="GeV",
-        x_title=r"$m_{H_{\tau\tau}}$",
-    )
-    add_variable(
-        config,
-        name="higgs_fam_b_1_pt",
-        expression="higgs_family[:,1,0].pt",
-        binning=(50, 0, 500),
-        unit="GeV",
-        x_title=r"$p_T(H_{b_1})$",
-    )
-    add_variable(
-        config,
-        name="higgs_fam_b_2_pt",
-        expression="higgs_family[:,1,1].pt",
-        binning=(50, 0, 500),
-        unit="GeV",
-        x_title=r"$p_T(H_{b_2})$",
-    )
-    add_variable(
-        config,
-        name="higgs_fam_tau_1_pt",
-        expression="higgs_family[:,2,0].pt",
-        binning=(50, 0, 500),
-        unit="GeV",
-        x_title=r"$p_T(H_{\tau_1})$",
-    )
-    add_variable(
-        config,
-        name="higgs_fam_tau_2_pt",
-        expression="higgs_family[:,2,1].pt",
-        binning=(50, 0, 500),
-        unit="GeV",
-        x_title=r"$p_T(H_{\tau_2})$",
-    )
+    # add_variable(
+    #     config,
+    #     name="higgs_fam_h_bb_pt",
+    #     expression="higgs_family[:,0,0].pt",
+    #     binning=(50, 0, 500),
+    #     unit="GeV",
+    #     x_title=r"$p_T(H_{bb})$",
+    # )
+    # add_variable(
+    #     config,
+    #     name="higgs_fam_h_tautau_pt",
+    #     expression="higgs_family[:,0,1].pt",
+    #     binning=(50, 0, 500),
+    #     unit="GeV",
+    #     x_title=r"$p_T(H_{\tau\tau})$",
+    # )
+    # add_variable(
+    #     config,
+    #     name="higgs_fam_m_h_bb",
+    #     expression="higgs_family[:,0,0].mass",
+    #     binning=(50, 0, 250),
+    #     unit="GeV",
+    #     x_title=r"$m_{H_{bb}}$",
+    # )
+    # add_variable(
+    #     config,
+    #     name="higgs_fam_m_h_tautau",
+    #     expression="higgs_family[:,0,1].mass",
+    #     binning=(50, 0, 250),
+    #     unit="GeV",
+    #     x_title=r"$m_{H_{\tau\tau}}$",
+    # )
+    # add_variable(
+    #     config,
+    #     name="higgs_fam_b_1_pt",
+    #     expression="higgs_family[:,1,0].pt",
+    #     binning=(50, 0, 500),
+    #     unit="GeV",
+    #     x_title=r"$p_T(H_{b_1})$",
+    # )
+    # add_variable(
+    #     config,
+    #     name="higgs_fam_b_2_pt",
+    #     expression="higgs_family[:,1,1].pt",
+    #     binning=(50, 0, 500),
+    #     unit="GeV",
+    #     x_title=r"$p_T(H_{b_2})$",
+    # )
+    # add_variable(
+    #     config,
+    #     name="higgs_fam_tau_1_pt",
+    #     expression="higgs_family[:,2,0].pt",
+    #     binning=(50, 0, 500),
+    #     unit="GeV",
+    #     x_title=r"$p_T(H_{\tau_1})$",
+    # )
+    # add_variable(
+    #     config,
+    #     name="higgs_fam_tau_2_pt",
+    #     expression="higgs_family[:,2,1].pt",
+    #     binning=(50, 0, 500),
+    #     unit="GeV",
+    #     x_title=r"$p_T(H_{\tau_2})$",
+    # )
     add_variable(
         config,
         name="hh_pt",

@@ -42,7 +42,7 @@ def top_decay_products(self: Producer, events: ak.Array, **kwargs) -> ak.Array:
     # find hard top quarks
     mother_gen_flags = ["isLastCopy", "fromHardProcess"]
     children_gen_flags = ["isFirstCopy", "fromHardProcess"]
-    # events = events[0:1000]
+
     abs_id = abs(events.GenPart.pdgId)
     tops = events.GenPart[abs_id == 6]
     tops = tops[tops.hasFlags(*children_gen_flags)]
@@ -64,7 +64,7 @@ def top_decay_products(self: Producer, events: ak.Array, **kwargs) -> ak.Array:
     qq = w_children[w_children.pdgId > 0]
     qq = qq[qq.pdgId < 5]
     qq = ak.flatten(qq, axis=3)
-    qq = ak.firsts(qq, axis=2)
+    qq = ak.firsts(qq, axis=2)                  # ist das korrekt so? siehe higgs beispiel
     # qq = ak.flatten(qq, axis=2)
     qbarqbar = w_children[w_children.pdgId < 0]
     qbarqbar = qbarqbar[qbarqbar.pdgId > -5]
@@ -78,21 +78,18 @@ def top_decay_products(self: Producer, events: ak.Array, **kwargs) -> ak.Array:
     leps = ak.flatten(leps, axis=3)
     leps = ak.firsts(leps, axis=2)
 
-    # leps_mask = ak.num(leps, axis=2) != 0
-    # leps= ak.mask(leps, ak.num(leps, axis=2) != 0)  #this one
-    # leps = ak.flatten(leps, axis=2)
     antileps = ak.concatenate([
         w_children[w_children.pdgId == -11], w_children[w_children.pdgId == -13], w_children[w_children.pdgId == -15],
     ], axis=3)
     antileps = ak.flatten(antileps, axis=3)
     antileps = ak.firsts(antileps, axis=2)
-    # antileps= ak.mask(antileps, ak.num(leps, axis=2) != 0)   #this one
-    # antileps = ak.flatten(antileps, axis=2)
+
     neutrinos = ak.concatenate([
         w_children[w_children.pdgId == 12], w_children[w_children.pdgId == 14], w_children[w_children.pdgId == 16],
     ], axis=3)
     neutrinos = ak.flatten(neutrinos, axis=3)
     neutrinos = ak.firsts(neutrinos, axis=2)
+
     antineutrinos = ak.concatenate([
         w_children[w_children.pdgId == -12], w_children[w_children.pdgId == -14], w_children[w_children.pdgId == -16],
     ], axis=3)
@@ -100,7 +97,6 @@ def top_decay_products(self: Producer, events: ak.Array, **kwargs) -> ak.Array:
     antineutrinos = ak.firsts(antineutrinos, axis=2)
 
     other_w_children = w_bosons.distinctChildrenDeep[abs(w_bosons.distinctChildrenDeep.pdgId) > 18]
-
     other_w_children = other_w_children[other_w_children.hasFlags("isFirstCopy")]
     other_w_children = ak.firsts(other_w_children, axis=2)
 
@@ -118,7 +114,7 @@ def top_decay_products(self: Producer, events: ak.Array, **kwargs) -> ak.Array:
         other_w_children[:, None, :],
     ], axis=1)
 
-    # save the column
+    # save the column: Keep Nones from being saved
     set_ak_column_f32 = partial(set_ak_column, value_type=np.float32)
     set_ak_column_i32 = partial(set_ak_column, value_type=np.int32)
 
@@ -128,22 +124,7 @@ def top_decay_products(self: Producer, events: ak.Array, **kwargs) -> ak.Array:
             events = set_ak_column_f32(events, f"top_family.{field}", ak.fill_none(top_family[field], EMPTY_FLOAT))
         else:
             events = set_ak_column_i32(events, f"top_family.{field}", ak.fill_none(top_family[field], EMPTY_INT))
-    # events = set_ak_column(events, "top_family", top_family)
 
-    # for validation purposes:
-    # events = self[attach_coffea_behavior](events, collections={"top_family": {"type_name": "GenParticle",
-    #     "check_attr": "metric_table", "skip_fields": "*Idx*G"}}, **kwargs)
-
-    # # Validation: Reconstruct top mass from invariant mass of decay products
-    # relevant_children = top_family[:, [1, 3, 4, 5, 6, 7, 8, 9], 0]
-    # relevant_children_summed = relevant_children.sum(axis=1)
-    # relevant_children_inv_mass = relevant_children_summed.absolute()
-
-    # tops_inv_mass = events.top_family[:, 0, 0].absolute()
-
-    # events = set_ak_column(events, "reco_top_mass", relevant_children_inv_mass)
-    # events = set_ak_column(events, "top_mass", tops_inv_mass)
-    # from IPython import embed; embed(header="debugger")
     return events
 
 
