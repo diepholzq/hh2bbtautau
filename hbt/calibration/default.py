@@ -18,7 +18,7 @@ from columnflow.production.cms.seeds import (
 )
 from columnflow.util import maybe_import
 
-from hbt.util import IF_RUN_2, IF_RUN_3, IF_DATA, IF_MC
+from hbt.util import IF_RUN_3, IF_DATA, IF_MC
 
 ak = maybe_import("awkward")
 
@@ -148,10 +148,17 @@ def default_init(self: Calibrator, **kwargs) -> None:
         })
         # derive tec calibrators
         add_calib_cls("tec_full", tec, cls_dict={
+<< << << < HEAD
             "met_name": met_name,
         })
         add_calib_cls("tec_nominal", tec, cls_dict={
             "met_name": met_name,
+== == == =
+            "propagate_met": False,  # not needed after JET-to-MET propagation
+        })
+        add_calib_cls("tec_nominal", tec, cls_dict={
+            "propagate_met": False,  # not needed after JET-to-MET propagation
+>>>>>> > 515e5c8ceb997449ca05d6cc5adeb9b95d5f0bc8
             "with_uncertainties": False,
         })
         # derive electron scale and resolution calibrators
@@ -166,10 +173,15 @@ def default_init(self: Calibrator, **kwargs) -> None:
             "deterministic_seed_index": 0,
             "with_uncertainties": False,
         })
+
         # derive met_phi calibrator (currently only used in run 2)
+<< << << < HEAD
         add_calib_cls("met_phi", met_phi, cls_dict={
             "met_name": met_name,
         })
+== == == =
+        add_calib_cls("met_phi", met_phi)
+>>>>>> > 515e5c8ceb997449ca05d6cc5adeb9b95d5f0bc8
 
         # change the flag
         self.config_inst.set_aux(flag, True)
@@ -199,7 +211,11 @@ def default_init(self: Calibrator, **kwargs) -> None:
         IF_RUN_3(self.eec_nominal_cls),
         IF_RUN_3(self.deterministic_eer_full_cls),
         IF_RUN_3(self.deterministic_eer_nominal_cls),
+<<<<<<< HEAD
         IF_RUN_2(self.met_phi_cls),
+=======
+        self.met_phi_cls,
+>>>>>>> 515e5c8ceb997449ca05d6cc5adeb9b95d5f0bc8
     }
     self.uses |= derived_calibrators
     self.produces |= derived_calibrators

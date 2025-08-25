@@ -23,12 +23,11 @@ from columnflow.production.cms.pileup import pu_weight
 from columnflow.production.cms.pdf import pdf_weights
 from columnflow.production.cms.scale import murmuf_weights
 from columnflow.production.cms.parton_shower import ps_weights
+from columnflow.production.cms.dy import gen_dilepton
 from columnflow.production.util import attach_coffea_behavior
 from columnflow.columnar_util import Route, set_ak_column, full_like
 from columnflow.hist_util import create_hist_from_variables, fill_hist
 from columnflow.util import maybe_import, DotDict
-from columnflow.types import Iterable
-
 from hbt.selection.trigger import trigger_selection
 from hbt.selection.lepton import lepton_selection
 from hbt.selection.jet import jet_selection
@@ -36,7 +35,7 @@ import hbt.production.processes as process_producers
 from hbt.production.btag import btag_weights_deepjet, btag_weights_pnet
 from hbt.production.features import cutflow_features
 from hbt.production.patches import patch_ecalBadCalibFilter
-from hbt.util import IF_DATASET_HAS_LHE_WEIGHTS, IF_RUN_3
+from hbt.util import IF_DATASET_HAS_LHE_WEIGHTS, IF_RUN_3, IF_DATA, IF_DATASET_HAS_TAG
 
 np = maybe_import("numpy")
 ak = maybe_import("awkward")
@@ -44,18 +43,6 @@ hist = maybe_import("hist")
 
 
 logger = law.logger.get_logger(__name__)
-
-
-# updated met_filters selector to define dataset dependent filters
-def get_met_filters(self: Selector) -> Iterable[str]:
-    met_filters = set(self.config_inst.x.met_filters[self.dataset_inst.data_source])
-    if self.dataset_inst.has_tag("broken_ecalBadCalibFilter"):
-        met_filters -= {"Flag.ecalBadCalibFilter"}
-
-    return list(met_filters)
-
-
-met_filters = cf_met_filters.derive("met_filters", cls_dict={"get_met_filters": get_met_filters})
 
 
 # helper to identify bad events that should be considered missing altogether
@@ -74,19 +61,26 @@ def get_bad_events(self: Selector, events: ak.Array) -> ak.Array:
         if ak.any(bad_lhe_mask):
             bad_mask = bad_mask & bad_lhe_mask
             frac = ak.mean(bad_lhe_mask)
-            logger.warning(
-                f"found {ak.sum(bad_lhe_mask)} events ({frac * 100:.1f}%) with bad LHEPdfWeights",
-            )
+            logger.warning(f"found {ak.sum(bad_lhe_mask)} events ({frac * 100:.1f}%) with bad LHEPdfWeights")
 
     return bad_mask
+
+
+@selector(
+    uses={gen_dilepton},
+    exposed=False,
+)
+def dy_drop_tautau(self: Selector, events: ak.Array, **kwargs) -> tuple[ak.Array, ak.Array]:
+    events = self[gen_dilepton](events, **kwargs)
+    return events, events.gen_dilepton_pdgid != 15
 
 
 @selector(
     uses={
         json_filter, met_filters, IF_RUN_3(jet_veto_map), trigger_selection, lepton_selection, jet_selection,
         mc_weight, pu_weight, ps_weights, btag_weights_deepjet, IF_RUN_3(btag_weights_pnet), process_ids,
-        cutflow_features, attach_coffea_behavior, patch_ecalBadCalibFilter,
-        IF_DATASET_HAS_LHE_WEIGHTS(pdf_weights, murmuf_weights),
+        cutflow_features, attach_coffea_behavior, IF_DATA(patch_ecalBadCalibFilter),
+        IF_DATASET_HAS_LHE_WEIGHTS(pdf_weights, murmuf_weights), IF_DATASET_HAS_TAG("dy_drop_tautau")(dy_drop_tautau),
     },
     produces={
         trigger_selection, lepton_selection, jet_selection, mc_weight, pu_weight, ps_weights, btag_weights_deepjet,
@@ -114,6 +108,15 @@ def default(
     no_sel = ~bad_mask
     results += SelectionResult(steps={"bad": no_sel})
 
+    # MC filtering (e.g. for overlap cleaning in background estimations, DY decay channel selection, etc)
+    mc_filter_mask = full_like(events.event, True, dtype=bool)
+    # 1. drop tautau events in DY if necessary
+    if self.has_dep(dy_drop_tautau):
+        events, dy_drop_tautau_mask = self[dy_drop_tautau](events, **kwargs)
+        mc_filter_mask = mc_filter_mask & dy_drop_tautau_mask
+    # join to selection result
+    results += SelectionResult(steps={"mc_filter": mc_filter_mask})
+
     # filter bad data events according to golden lumi mask
     if self.dataset_inst.is_data:
         events, json_filter_results = self[json_filter](events, **kwargs)
@@ -123,10 +126,10 @@ def default(
 
     # met filter selection
     events, met_filter_results = self[met_filters](events, **kwargs)
-    # patch for the broken "Flag_ecalBadCalibFilter" MET filter in prompt data (tag set in config)
-    if self.dataset_inst.has_tag("broken_ecalBadCalibFilter"):
-        # fold decision into met filter results
+    # optionally apply custom "Flag_ecalBadCalibFilter" MET filter in prompt data (tag set in config)
+    if self.dataset_inst.has_tag("needs_custom_ecalBadCalibFilter"):
         events = self[patch_ecalBadCalibFilter](events, **kwargs)
+        # fold decision into met filter results
         met_filter_results.steps.met_filter = (
             met_filter_results.steps.met_filter &
             events.patchedEcalBadCalibFilter
@@ -190,10 +193,10 @@ def default(
             )
 
     # create process ids
-    if self.process_ids_dy is not None:
-        events = self[self.process_ids_dy](events, **kwargs)
-    elif self.process_ids_w_lnu is not None:
-        events = self[self.process_ids_w_lnu](events, **kwargs)
+    for tag in self.stitch_tags:
+        if (prod_cls := getattr(self, f"process_ids_{tag}", None)) is not None:
+            events = self[prod_cls](events, **kwargs)
+            break
     else:
         events = self[process_ids](events, **kwargs)
 
@@ -242,15 +245,18 @@ def default(
 @default.init
 def default_init(self: Selector, **kwargs) -> None:
     # build and store derived process id producers
-    for tag in ("dy", "w_lnu"):
+    self.stitch_tags = ["dy_amcatnlo", "dy_lep_amcatnlo", "dy_powheg", "w_lnu"]
+    for tag in self.stitch_tags:
         prod_name = f"process_ids_{tag}"
         setattr(self, prod_name, None)
         if not self.dataset_inst.has_tag(tag):
             continue
+        if not (stitching_cfg := self.config_inst.x(f"{tag}_stitching", None)):
+            continue
         # check if the producer was already created and saved in the config
         if (prod := self.config_inst.x(prod_name, None)) is None:
             # check if this dataset is covered by any dy id producer
-            for stitch_name, cfg in self.config_inst.x(f"{tag}_stitching").items():
+            for stitch_name, cfg in stitching_cfg.items():
                 incl_dataset_inst = cfg["inclusive_dataset"]
                 # the dataset is "covered" if its process is a subprocess of that of the dy dataset
                 if incl_dataset_inst.has_process(self.dataset_inst.processes.get_first()):
@@ -346,6 +352,21 @@ def empty_call(
     no_sel = ~bad_mask
     results += SelectionResult(steps={"bad": no_sel})
 
+    # MC filtering (e.g. for overlap cleaning in background estimations, DY decay channel selection, etc)
+    mc_filter_mask = full_like(events.event, True, dtype=bool)
+    # 1. drop tautau events in DY if necessary
+    if self.has_dep(dy_drop_tautau):
+        mc_filter_mask = mc_filter_mask & self[dy_drop_tautau](events, **kwargs)
+    # join to selection result
+    results += SelectionResult(steps={"mc_filter": mc_filter_mask})
+
+    # filter bad data events according to golden lumi mask
+    if self.dataset_inst.is_data:
+        events, json_filter_results = self[json_filter](events, **kwargs)
+        results += json_filter_results
+    else:
+        results += SelectionResult(steps={"json": full_like(events.event, True, dtype=bool)})
+
     # mc-only functions
     if self.dataset_inst.is_mc:
         events = self[mc_weight](events, **kwargs)
@@ -381,10 +402,10 @@ def empty_call(
             )
 
     # create process ids
-    if self.process_ids_dy is not None:
-        events = self[self.process_ids_dy](events, **kwargs)
-    elif self.process_ids_w_lnu is not None:
-        events = self[self.process_ids_w_lnu](events, **kwargs)
+    for tag in self.stitch_tags:
+        if (prod_cls := getattr(self, f"process_ids_{tag}", None)) is not None:
+            events = self[prod_cls](events, **kwargs)
+            break
     else:
         events = self[process_ids](events, **kwargs)
 
@@ -460,6 +481,9 @@ def increment_stats(
     keys_for_stats = []
     keys_for_hists = []
 
+    # helper to cast to float64
+    f64 = lambda a: ak.values_astype(a, np.float64)
+
     def add(key, sel, weight=None, for_stats=False, for_hists=True):
         stats_map[key] = sel if weight is None else (weight, sel)
         if for_stats and key not in keys_for_stats:
@@ -526,7 +550,7 @@ def increment_stats(
         if "sum_mc_weight_per_process" not in stats:
             stats["sum_mc_weight_per_process"] = defaultdict(float)
         for proc_id in np.unique(events.process_id):
-            proc_weights = events.mc_weight[events.process_id == proc_id]
+            proc_weights = f64(events.mc_weight[events.process_id == proc_id])
             stats["num_events_per_process"][str(proc_id)] += float(len(proc_weights))
             stats["sum_mc_weight_per_process"][str(proc_id)] += float(ak.sum(proc_weights))
 
@@ -549,6 +573,6 @@ def increment_stats(
             fill_hist(hists[key], fill_data, last_edge_inclusive=True)
 
         if key in keys_for_stats:
-            stats[key] += float(ak.sum(sel if is_num else weight[sel]))
+            stats[key] += float(ak.sum(f64(sel if is_num else weight[sel])))
 
     return events, results

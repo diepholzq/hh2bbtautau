@@ -14,7 +14,6 @@ from hbt.util import IF_DATASET_HAS_TOP, IF_DATASET_IS_DY
 
 # from hbt.production.higgs_decay_products import higgs_decay_products
 from hbt.production.top_decay_products import top_decay_products
-
 ak = maybe_import("awkward")
 
 

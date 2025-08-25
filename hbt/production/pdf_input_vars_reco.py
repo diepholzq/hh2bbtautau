@@ -4,14 +4,13 @@ from columnflow.columnar_util import set_ak_column
 from columnflow.production.util import attach_coffea_behavior
 from columnflow.columnar_util import attach_coffea_behavior as attach_coffea_behavior_fn
 import numpy as np
-from hbt.production.res_networks import reg_dnn
 # import vector
 
 ak = maybe_import("awkward")
 
 
 @producer(
-    uses={"higgs_family.*", "HHBJet", attach_coffea_behavior, reg_dnn},
+    uses={"higgs_family.*", "HHBJet", attach_coffea_behavior},
     produces={"pdf_input_vars_reco_higgs.*"},
 )
 def create_pdf_input_vars_reco_higgs(self: Producer, events: ak.Array, **kwargs) -> ak.Array:

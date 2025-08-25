@@ -4,8 +4,8 @@
 Default histogram producers (mostly for event weight generation).
 """
 
-from columnflow.histograming import HistProducer
-from columnflow.histograming.default import cf_default
+from columnflow.histogramming import HistProducer
+from columnflow.histogramming.default import cf_default
 from columnflow.columnar_util import Route
 from columnflow.util import maybe_import, pattern_matcher
 
@@ -34,7 +34,7 @@ def default(self: HistProducer, events: ak.Array, **kwargs) -> ak.Array:
 def default_init(self: HistProducer) -> None:
     # use the config's auxiliary event_weights, drop some of them based on drop_weights, and on this
     # weight producer instance, store weight_columns, used columns, and shifts
-    self.weight_columns = []
+    self.weight_columns = set()
 
     if self.dataset_inst.is_data:
         return
@@ -44,7 +44,7 @@ def default_init(self: HistProducer) -> None:
     do_drop = pattern_matcher(self.drop_weights) if self.drop_weights else (lambda _, /: False)
 
     # collect all possible weight columns and affected shifts
-    all_weights = self.config_inst.x.event_weights
+    all_weights = self.config_inst.x.event_weights.copy()
     all_weights.update(self.dataset_inst.x("event_weights", {}))
     for weight_name, shift_insts in all_weights.items():
         if not do_keep(weight_name) or do_drop(weight_name):
@@ -55,11 +55,16 @@ def default_init(self: HistProducer) -> None:
         if is_lhe_weight and self.dataset_inst.has_tag("no_lhe_weights"):
             continue
 
-        self.weight_columns.append(weight_name)
+        self.weight_columns.add(weight_name)
         self.uses.add(weight_name)
         self.shifts |= {shift_inst.name for shift_inst in shift_insts}
 
 
+no_weight = default.derive("no_weight", cls_dict={
+    "drop_weights": {"*"},
+})
+
+# weight producer for cross checking histograms without stitching
 normalization_inclusive = default.derive("normalization_inclusive", cls_dict={
     "drop_weights": {"normalization_weight"},
 })
@@ -71,4 +76,16 @@ normalization_only = default.derive("normalization_only", cls_dict={
 normalization_inclusive_only = default.derive("normalization_inclusive_only", cls_dict={
     "keep_weights": {"normalization_weight_inclusive"},
     "drop_weights": None,
+})
+
+no_trigger_weight = default.derive("no_trigger_weight", cls_dict={
+    "drop_weights": {"normalization_weight_inclusive", "trigger_weight"},
+})
+
+no_tau_weight = default.derive("no_tau_weight", cls_dict={
+    "drop_weights": {"normalization_weight_inclusive", "tau_weight"},
+})
+
+no_dy_weight = default.derive("no_dy_weight", cls_dict={
+    "drop_weights": {"normalization_weight_inclusive", "dy_weight"},
 })
