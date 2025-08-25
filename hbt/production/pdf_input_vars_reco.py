@@ -4,13 +4,14 @@ from columnflow.columnar_util import set_ak_column
 from columnflow.production.util import attach_coffea_behavior
 from columnflow.columnar_util import attach_coffea_behavior as attach_coffea_behavior_fn
 import numpy as np
+from hbt.production.res_networks import reg_dnn
 # import vector
 
 ak = maybe_import("awkward")
 
 
 @producer(
-    uses={"higgs_family.*", "HHBJet", attach_coffea_behavior},
+    uses={"higgs_family.*", "HHBJet", attach_coffea_behavior, reg_dnn},
     produces={"pdf_input_vars_reco_higgs.*"},
 )
 def create_pdf_input_vars_reco_higgs(self: Producer, events: ak.Array, **kwargs) -> ak.Array:
@@ -100,7 +101,8 @@ def create_pdf_input_vars_reco_higgs(self: Producer, events: ak.Array, **kwargs)
     theta_cms_h1_b1 = h1.deltaangle(b1_cms_h1)     # angle between b1 in cms of h1 and h1 in lab system
     cos_theta_cms_h1_b1 = np.cos(theta_cms_h1_b1)
     phi_cms_h1_b1 = b1_cms_h1.phi   # phi of b1 in h1's cms
-
+    from IPython import embed
+    embed(header="reco pdf inputs higgs")
     pdf_input_vars = ak.zip({"dihiggs_mass": dihiggs_mass,
                              "dihiggs_system_pt": dihiggs_system_pt,
                              "dihiggs_system_pz": dihiggs_system_pz,

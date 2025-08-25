@@ -33,13 +33,15 @@ top_pt_weight = cf_top_pt_weight.derive("top_pt_weight", cls_dict={"require_data
     uses={
         category_ids, stitched_normalization_weights, normalized_pu_weight, normalized_ps_weights,
         normalized_btag_weights_deepjet, IF_RUN_3(normalized_btag_weights_pnet),
-        IF_DATASET_HAS_LHE_WEIGHTS(normalized_pdf_weight, normalized_murmuf_weight), create_pdf_input_vars_reco_higgs,
+        IF_DATASET_HAS_LHE_WEIGHTS(normalized_pdf_weight,
+        normalized_murmuf_weight), create_pdf_input_vars_reco_higgs,
         # weight producers added dynamically if produce_weights is set
     },
     produces={
         category_ids, stitched_normalization_weights, normalized_pu_weight, normalized_ps_weights,
         normalized_btag_weights_deepjet, IF_RUN_3(normalized_btag_weights_pnet),
-        IF_DATASET_HAS_LHE_WEIGHTS(normalized_pdf_weight, normalized_murmuf_weight), create_pdf_input_vars_reco_higgs,
+        IF_DATASET_HAS_LHE_WEIGHTS(normalized_pdf_weight,
+        normalized_murmuf_weight), create_pdf_input_vars_reco_higgs,
         # weight producers added dynamically if produce_weights is set
     },
     # whether weight producers should be added and called
@@ -51,7 +53,7 @@ def default(self: Producer, events: ak.Array, **kwargs) -> ak.Array:
        collections={"HHBJet": default_coffea_collections["Jet"]},
     )
     events = self[category_ids](events, **kwargs)
-
+    # normalization weights
     # mc-only weights
     if self.dataset_inst.is_mc:
         # normalization weights
