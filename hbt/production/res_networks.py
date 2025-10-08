@@ -402,9 +402,6 @@ class _res_dnn_evaluation(Producer):
 
         return events
 
-    # start the evaluator
-    self.evaluator.start()
-
 
 @_res_dnn_evaluation.teardown
 def _res_dnn_evaluation_teardown(self: Producer, **kwargs) -> None:

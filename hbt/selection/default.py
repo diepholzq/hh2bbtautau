@@ -77,7 +77,7 @@ def dy_drop_tautau(self: Selector, events: ak.Array, **kwargs) -> tuple[ak.Array
 
 @selector(
     uses={
-        json_filter, met_filters, IF_RUN_3(jet_veto_map), trigger_selection, lepton_selection, jet_selection,
+        json_filter, cf_met_filters, IF_RUN_3(jet_veto_map), trigger_selection, lepton_selection, jet_selection,
         mc_weight, pu_weight, ps_weights, btag_weights_deepjet, IF_RUN_3(btag_weights_pnet), process_ids,
         cutflow_features, attach_coffea_behavior, IF_DATA(patch_ecalBadCalibFilter),
         IF_DATASET_HAS_LHE_WEIGHTS(pdf_weights, murmuf_weights), IF_DATASET_HAS_TAG("dy_drop_tautau")(dy_drop_tautau),
@@ -125,7 +125,7 @@ def default(
         results += SelectionResult(steps={"json": full_like(events.event, True, dtype=bool)})
 
     # met filter selection
-    events, met_filter_results = self[met_filters](events, **kwargs)
+    events, met_filter_results = self[cf_met_filters](events, **kwargs)
     # optionally apply custom "Flag_ecalBadCalibFilter" MET filter in prompt data (tag set in config)
     if self.dataset_inst.has_tag("needs_custom_ecalBadCalibFilter"):
         events = self[patch_ecalBadCalibFilter](events, **kwargs)
@@ -310,7 +310,7 @@ def empty_init(self: Selector, **kwargs) -> None:
     # remove unused dependencies
     unused = {
         json_filter,
-        met_filters,
+        cf_met_filters,
         cutflow_features,
         patch_ecalBadCalibFilter,
         jet_selection,

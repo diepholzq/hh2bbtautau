@@ -38,6 +38,8 @@ def top_decay_products(self: Producer, events: ak.Array, **kwargs) -> ak.Array:
     where the first entry in each array belongs to the first top, and the second entry in each array belongs to the
     second top.
     """
+    from IPython import embed
+    embed(header="top_decay_products")
 
     # find hard top quarks
     mother_gen_flags = ["isLastCopy", "fromHardProcess"]

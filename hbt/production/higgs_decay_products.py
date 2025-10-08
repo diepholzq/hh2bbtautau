@@ -36,12 +36,12 @@ def shape_array(input_array: ak.Array) -> ak.Array:
     produces={"higgs_family.*"},  # "bottoms_inv_mass", "taus_inv_mass"},
 )
 def higgs_decay_products(self: Producer, events: ak.Array, **kwargs):
+    # TODO: change
     """
     Creates a new ragged column "higgs_family" that stores the H and their decay products. The structure will be as
     follows:
 
     .. code-block:: python
-
         [
             # event 1
             [

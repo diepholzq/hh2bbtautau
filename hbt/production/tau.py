@@ -270,9 +270,9 @@ def tau_trigger_efficiencies(self: Producer, events: ak.Array, **kwargs) -> ak.A
     ch_tautau = self.config_inst.get_channel("tautau")
 
     # find out which tautau triggers are passed
-    tautau_trigger_passed = ak.zeros_like(events.channel_id, dtype=np.bool)
-    tautaujet_trigger_passed = ak.zeros_like(events.channel_id, dtype=np.bool)
-    tautauvbf_trigger_passed = ak.zeros_like(events.channel_id, dtype=np.bool)
+    tautau_trigger_passed = ak.zeros_like(events.channel_id, dtype=np.bool_)
+    tautaujet_trigger_passed = ak.zeros_like(events.channel_id, dtype=np.bool_)
+    tautauvbf_trigger_passed = ak.zeros_like(events.channel_id, dtype=np.bool_)
     for trigger in self.config_inst.x.triggers:
         if trigger.has_tag("cross_tau_tau"):
             tautau_trigger_passed = (

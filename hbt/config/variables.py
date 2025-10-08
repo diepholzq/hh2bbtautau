@@ -621,14 +621,14 @@ def add_variables(config: od.Config) -> None:
     add_variable(
         config,
         name="higgs_fam_h1_cos_theta",
-        expression="pdf_input_vars.cos_theta_h_1",
+        expression="pdf_input_vars.cos_theta_h1",
         binning=(50, -1, 1),
         x_title=r"$cos(\theta(H_1^{HH}))$",
     )
     add_variable(
         config,
         name="higgs_fam_phi_cms_hh_h_1",
-        expression="pdf_input_vars.phi_star_h_1",
+        expression="pdf_input_vars.phi_h1",
         binning=(50, -3.14, 3.14),
         unit="rad",
         x_title=r"$\phi(H_1^{HH})$",
@@ -636,14 +636,14 @@ def add_variables(config: od.Config) -> None:
     add_variable(
         config,
         name="higgs_fam_cos_theta_cms_h_2_tau_1",
-        expression="pdf_input_vars.cos_theta_cms_h_2_tau_1",
+        expression="pdf_input_vars.cos_theta_cms_h2_tau1",
         binning=(50, -1, 1),
-        x_title=r"$cos(\theta(\tau_1^{H_2))$",
+        x_title=r"$cos(\theta(\tau_1^{H_2})$",
     )
     add_variable(
         config,
         name="higgs_fam_phi_cms_h_2_tau_1",
-        expression="pdf_input_vars.phi_cms_h_2_tau_1",
+        expression="pdf_input_vars.phi_cms_h2_tau1",
         binning=(50, -3.14, 3.14),
         unit="rad",
         x_title=r"$\phi(\tau_1^{H_2})$",
@@ -658,7 +658,7 @@ def add_variables(config: od.Config) -> None:
     add_variable(
         config,
         name="higgs_fam_phi_cms_h_1_b_1",
-        expression="pdf_input_vars.phi_cms_h_1_b_1",
+        expression="pdf_input_vars.phi_cms_h1_b1",
         binning=(50, -3.14, 3.14),
         unit="rad",
         x_title=r"$\phi(b_1^{H_1})$",
@@ -766,7 +766,7 @@ def add_variables(config: od.Config) -> None:
     add_variable(
         config,
         name="top_fam_ttbar_mass",
-        expression="pdf_input_vars.ttbar_mass",
+        expression="pdf_input_vars.s_hat",
         binning=(50, 0, 1500),
         unit="GeV",
         x_title=r"$m_{inv}(t \bar{t})$",
@@ -774,7 +774,7 @@ def add_variables(config: od.Config) -> None:
     add_variable(
         config,
         name="top_fam_ttbar_system_pt",
-        expression="pdf_input_vars.ttbar_system_pt",
+        expression="pdf_input_vars.s_hat_system_pt",
         binning=(50, 0, 650),
         unit="GeV",
         x_title=r"$p_{T}(t \bar{t})$",
@@ -782,7 +782,7 @@ def add_variables(config: od.Config) -> None:
     add_variable(
         config,
         name="top_fam_ttbar_system_pz",
-        expression="pdf_input_vars.ttbar_system_pz",
+        expression="pdf_input_vars.s_hat_system_pz",
         binning=(100, -2000, 2000),
         unit="GeV",
         x_title=r"$p_{z}(t \bar{t})$",
@@ -790,62 +790,83 @@ def add_variables(config: od.Config) -> None:
     add_variable(
         config,
         name="top_fam_ttbar_system_phi",
-        expression="pdf_input_vars.ttbar_system_phi",
+        expression="pdf_input_vars.s_hat_system_phi",
         binning=(50, -3.3, 3.3),
         unit="GeV",
         x_title=r"$\phi(t \bar{t})$",
     )
     add_variable(
         config,
-        name="top_fam_cos_theta_t_1",
-        expression="pdf_input_vars.cos_theta_t_1",
+        name="top_fam_cos_theta_t1",
+        expression="pdf_input_vars.cos_theta_t",
         binning=(50, -1, 1),
-        x_title=r"$cos(\theta({t_1^*}, t \bar{t}$))",
+        x_title=r"$\theta t$",
     )
     add_variable(
         config,
-        name="top_fam_phi_star_t_1",
-        expression="pdf_input_vars.phi_star_t_1",
+        name="top_fam_phi_t_1",
+        expression="pdf_input_vars.phi_t",
         binning=(50, -3.14, 3.14),
         unit="rad",
-        x_title=r"$\phi(t_1^*)$",
+        x_title=r"$\phi t$",
     )
     add_variable(
         config,
-        name="top_fam_cos_theta_cms_t_1_b_1",
-        expression="pdf_input_vars.cos_theta_cms_t_1_b_1",
+        name="top_fam_W_t0_phi",
+        expression="pdf_input_vars.W_t0_phi",
+        binning=(50, -3.14, 3.14),
+        x_title=r"$\phi W_{t}$",
+    )
+    add_variable(
+        config,
+        name="top_fam_W_t0_cos_theta",
+        expression="pdf_input_vars.W_t0cos_theta",
         binning=(50, -1, 1),
-        x_title=r"$cos(\theta(t_1, b_1^{**}))$",
+        x_title=r"cos($\theta W_1$)",
     )
     add_variable(
         config,
-        name="top_fam_phi_cms_t_1_b_1",
-        expression="pdf_input_vars.phi_cms_t_1_b_1",
+        name="top_fam_W_t1_phi",
+        expression="pdf_input_vars.W_t1_phi",
         binning=(50, -3.14, 3.14),
-        unit="rad",
-        x_title=r"$\phi(b_1^{**})$",
+        x_title=r"$\phi W_{\bar{t}}$",
     )
     add_variable(
         config,
-        name="top_fam_cos_theta_cms_t1_b1_W",
-        expression="pdf_input_vars.cos_theta_cms_t1_b1_W",
+        name="top_fam_W_t1_cos_theta",
+        expression="pdf_input_vars.W_t1cos_theta",
         binning=(50, -1, 1),
-        x_title=r"$cos(\theta(W_1^{**}, b_1^{**}))$",
+        x_title=r"cos($\theta W_2$)",
     )
     add_variable(
         config,
-        name="top_fam_theta_cms_t_1_tau_nu_tau_b_1",
-        expression="pdf_input_vars.theta_cms_t_1_tau_nu_tau_b_1",
-        binning=(50, -3.14, 3.14),
-        x_title=r"$\theta(b_1^{**}, \tau\nu_{\tau}^{**})$",
+        name="top_fam_W_t0_child_cos_theta",
+        expression="pdf_input_vars.W_t0_child_cos_theta",
+        binning=(50, -1, 1),
+        x_title=r"cos($\theta W_{1, child}$)",
     )
     add_variable(
         config,
-        name="top_fam_theta_cms_t_1_tau_b_1",
-        expression="pdf_input_vars.theta_cms_t_1_tau_b_1",
-        binning=(50, -3.14, 3.14),
-        x_title=r"$\theta(b_1^{**}, \tau^{**})$",
+        name="top_fam_W_t1_child_cos_theta",
+        expression="pdf_input_vars.W_t1_child_cos_theta",
+        binning=(50, -1, 1),
+        x_title=r"cos($\theta W_{2, child}$)",
     )
+    add_variable(
+        config,
+        name="top_fam_W_t0_child_phi",
+        expression="pdf_input_vars.W_t0_child_phi",
+        binning=(50, -3.14, 3.14),
+        x_title=r"$\phi W_{t, child}$",
+    )
+    add_variable(
+        config,
+        name="top_fam_W_t1_child_phi",
+        expression="pdf_input_vars.W_t1_child_phi",
+        binning=(50, -3.14, 3.14),
+        x_title=r"$\phi W_{\bar{t}, child}$",
+    )
+
     # single lepton variables
     # single electron
     add_variable(
