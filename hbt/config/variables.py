@@ -15,6 +15,7 @@ from columnflow.util import maybe_import
 
 from hbt.util import create_lvector_xyz
 
+np = maybe_import("numpy")
 ak = maybe_import("awkward")
 
 
@@ -866,6 +867,246 @@ def add_variables(config: od.Config) -> None:
         binning=(50, -3.14, 3.14),
         x_title=r"$\phi W_{\bar{t}, child}$",
     )
+    # ttbar ditau pdf inputs
+    add_variable(
+        config, aux={"underflow": False},
+        name="top_ditau_M_2tau_vis_2b",
+        expression="pdf_input_vars_top_ditau.M_2tau_vis_2b",
+        binning=(50, 0, 1000),
+        x_title=r"$M_{\tau_{vis}\bar{\tau}_{vis}b\bar{b}}$",
+    )
+    add_variable(
+        config, aux={"underflow": False},
+        name="top_ditau_y_tau_vis_antib",
+        expression="pdf_input_vars_top_ditau.y_tau_vis_antib",
+        binning=(50, -5, 5),
+        x_title=r"$y_{\tau_{vis}\bar{b}}$",
+    )
+    add_variable(
+        config, aux={"underflow": False},
+        name="top_ditau_y_antitau_vis_b",
+        expression="pdf_input_vars_top_ditau.y_antitau_vis_b",
+        binning=(50, -5, 5),
+        x_title=r"$y_{\bar{\tau}_{vis}b}$",
+    )
+    add_variable(
+        config, aux={"underflow": False},
+        name="top_ditau_pt_antitau_vis_b",
+        expression="pdf_input_vars_top_ditau.pt_antitau_vis_b",
+        binning=(50, 0, 600),
+        x_title=r"$P_{T_{\bar{\tau}_{vis}b}}$",
+    )
+    add_variable(
+        config, aux={"underflow": False},
+        name="top_ditau_pt_tau_vis_antib",
+        expression="pdf_input_vars_top_ditau.pt_tau_vis_antib",
+        binning=(50, 0, 600),
+        x_title=r"$P_{T_{\tau_{vis}\bar{b}}}$",
+    )
+    add_variable(
+        config, aux={"underflow": False},
+        name="top_ditau_M_tau_vis_antib",
+        expression="pdf_input_vars_top_ditau.M_tau_vis_antib",
+        binning=(50, -150, 300),
+        x_title=r"$M_{\tau_{vis}\bar{b}}$",
+    )
+    add_variable(
+        config, aux={"underflow": False},
+        name="top_ditau_M_antitau_vis_b",
+        expression="pdf_input_vars_top_ditau.M_antitau_vis_b",
+        binning=(50, -150, 300),
+        x_title=r"$M_{\bar{\tau}_{vis}b}$",
+    )
+    add_variable(
+        config, aux={"underflow": False},
+        name="top_ditau_M_2tau_2b",
+        expression="pdf_input_vars_top_ditau.M_2tau_2b",
+        binning=(50, 0, 1000),
+        x_title=r"$M_{\tau\bar{\tau}b\bar{b}}$",
+    )
+    add_variable(
+        config, aux={"underflow": False},
+        name="top_ditau_y_tau_antib",
+        expression="pdf_input_vars_top_ditau.y_tau_antib",
+        binning=(50, -5, 5),
+        x_title=r"$y_{\tau\bar{b}}$",
+    )
+    add_variable(
+        config, aux={"underflow": False},
+        name="top_ditau_y_antitau_b",
+        expression="pdf_input_vars_top_ditau.y_antitau_b",
+        binning=(50, -5, 5),
+        x_title=r"$y_{\bar{\tau}b}$",
+    )
+    add_variable(
+        config, aux={"underflow": False},
+        name="top_ditau_pt_antitau_b",
+        expression="pdf_input_vars_top_ditau.pt_antitau_b",
+        binning=(50, 0, 600),
+        x_title=r"$P_{T_{\bar{\tau}b}}$",
+    )
+    add_variable(
+        config, aux={"underflow": False},
+        name="top_ditau_pt_tau_antib",
+        expression="pdf_input_vars_top_ditau.pt_tau_antib",
+        binning=(50, 0, 600),
+        x_title=r"$P_{T_{\tau\bar{b}}}$",
+    )
+    add_variable(
+        config, aux={"underflow": False},
+        name="top_ditau_M_tau_antib",
+        expression="pdf_input_vars_top_ditau.M_tau_antib",
+        binning=(50, -50, 300),
+        x_title=r"$M_{\tau\bar{b}}$",
+    )
+    add_variable(
+        config, aux={"underflow": False},
+        name="top_ditau_M_antitau_b",
+        expression="pdf_input_vars_top_ditau.M_antitau_b",
+        binning=(50, -50, 300),
+        x_title=r"$M_{\bar{\tau}b}$",
+    )
+    add_variable(
+        config, aux={"underflow": False},
+        name="top_ditau_four_part_mass_ratio",
+        expression="pdf_input_vars_top_ditau.four_part_mass_ratio",
+        binning=(50, -10, 10),
+        x_title=r"$\frac{M_{\tau_{vis}\bar{\tau}_{vis}b\bar{b}}}{M_{\tau\bar{\tau}b\bar{b}}}$",
+    )
+    add_variable(
+        config, aux={"underflow": False},
+        name="top_ditau_pt_ratio_tau",
+        expression="pdf_input_vars_top_ditau.pt_ratio_tau",
+        binning=(50, -10, 10),
+        x_title=r"$\frac{P_{t_{\tau_{vis}\bar{b}}}}{P_{t_{\tau\bar{b}}}}$",
+    )
+    add_variable(
+        config, aux={"underflow": False},
+        name="top_ditau_two_part_mass_ratio_tau",
+        expression="pdf_input_vars_top_ditau.two_part_mass_ratio_tau",
+        binning=(50, -10, 10),
+        x_title=r"$\frac{M_{\tau_{vis}\bar{b}}}{M_{\tau\bar{b}}}$",
+    )
+    # higgs is ttbar ditau inputs
+    add_variable(
+        config, aux={"underflow": False},
+        name="top_ditau_higgs_M_2tau_vis_2b",
+        expression="pdf_input_vars_top_ditau_higgs.M_2tau_vis_2b",
+        binning=(50, 0, 1000),
+        x_title=r"$M_{\tau_{vis}\bar{\tau}_{vis}b\bar{b}}$",
+    )
+    add_variable(
+        config, aux={"underflow": False},
+        name="top_ditau_higgs_y_tau_vis_antib",
+        expression="pdf_input_vars_top_ditau_higgs.y_tau_vis_antib",
+        binning=(50, -5, 5),
+        x_title=r"$y_{\tau_{vis}\bar{b}}$",
+    )
+    add_variable(
+        config, aux={"underflow": False},
+        name="top_ditau_higgs_y_antitau_vis_b",
+        expression="pdf_input_vars_top_ditau_higgs.y_antitau_vis_b",
+        binning=(50, -5, 5),
+        x_title=r"$y_{\bar{\tau}_{vis}b}$",
+    )
+    add_variable(
+        config, aux={"underflow": False},
+        name="top_ditau_higgs_pt_antitau_vis_b",
+        expression="pdf_input_vars_top_ditau_higgs.pt_antitau_vis_b",
+        binning=(50, 0, 600),
+        x_title=r"$P_{T_{\bar{\tau}_{vis}b}}$",
+    )
+    add_variable(
+        config, aux={"underflow": False},
+        name="top_ditau_higgs_pt_tau_vis_antib",
+        expression="pdf_input_vars_top_ditau_higgs.pt_tau_vis_antib",
+        binning=(50, 0, 600),
+        x_title=r"$P_{T_{\tau_{vis}\bar{b}}}$",
+    )
+    add_variable(
+        config, aux={"underflow": False},
+        name="top_ditau_higgs_M_tau_vis_antib",
+        expression="pdf_input_vars_top_ditau_higgs.M_tau_vis_antib",
+        binning=(50, -150, 300),
+        x_title=r"$M_{\tau_{vis}\bar{b}}$",
+    )
+    add_variable(
+        config, aux={"underflow": False},
+        name="top_ditau_higgs_M_antitau_vis_b",
+        expression="pdf_input_vars_top_ditau_higgs.M_antitau_vis_b",
+        binning=(50, -150, 300),
+        x_title=r"$M_{\bar{\tau}_{vis}b}$",
+    )
+    add_variable(
+        config, aux={"underflow": False},
+        name="top_ditau_higgs_M_2tau_2b",
+        expression="pdf_input_vars_top_ditau_higgs.M_2tau_2b",
+        binning=(50, 0, 1000),
+        x_title=r"$M_{\tau\bar{\tau}b\bar{b}}$",
+    )
+    add_variable(
+        config, aux={"underflow": False},
+        name="top_ditau_higgs_y_tau_antib",
+        expression="pdf_input_vars_top_ditau_higgs.y_tau_antib",
+        binning=(50, -5, 5),
+        x_title=r"$y_{\tau\bar{b}}$",
+    )
+    add_variable(
+        config, aux={"underflow": False},
+        name="top_ditau_higgs_y_antitau_b",
+        expression="pdf_input_vars_top_ditau_higgs.y_antitau_b",
+        binning=(50, -5, 5),
+        x_title=r"$y_{\bar{\tau}b}$",
+    )
+    add_variable(
+        config, aux={"underflow": False},
+        name="top_ditau_higgs_pt_antitau_b",
+        expression="pdf_input_vars_top_ditau_higgs.pt_antitau_b",
+        binning=(50, 0, 600),
+        x_title=r"$P_{T_{\bar{\tau}b}}$",
+    )
+    add_variable(
+        config, aux={"underflow": False},
+        name="top_ditau_higgs_pt_tau_antib",
+        expression="pdf_input_vars_top_ditau_higgs.pt_tau_antib",
+        binning=(50, 0, 600),
+        x_title=r"$P_{T_{\tau\bar{b}}}$",
+    )
+    add_variable(
+        config, aux={"underflow": False},
+        name="top_ditau_higgs_M_tau_antib",
+        expression="pdf_input_vars_top_ditau_higgs.M_tau_antib",
+        binning=(50, -50, 300),
+        x_title=r"$M_{\tau\bar{b}}$",
+    )
+    add_variable(
+        config, aux={"underflow": False},
+        name="top_ditau_higgs_M_antitau_b",
+        expression="pdf_input_vars_top_ditau_higgs.M_antitau_b",
+        binning=(50, -50, 300),
+        x_title=r"$M_{\bar{\tau}b}$",
+    )
+    add_variable(
+        config, aux={"underflow": False},
+        name="top_ditau_higgs_four_part_mass_ratio",
+        expression="pdf_input_vars_top_ditau_higgs.four_part_mass_ratio",
+        binning=(50, -10, 10),
+        x_title=r"$\frac{M_{\tau_{vis}\bar{\tau}_{vis}b\bar{b}}}{M_{\tau\bar{\tau}b\bar{b}}}$",
+    )
+    add_variable(
+        config, aux={"underflow": False},
+        name="top_ditau_higgs_pt_ratio_tau",
+        expression="pdf_input_vars_top_ditau_higgs.pt_ratio_tau",
+        binning=(50, -10, 10),
+        x_title=r"$\frac{P_{t_{\tau_{vis}\bar{b}}}}{P_{t_{\tau\bar{b}}}}$",
+    )
+    add_variable(
+        config, aux={"underflow": False},
+        name="top_ditau_higgs_two_part_mass_ratio_tau",
+        expression="pdf_input_vars_top_ditau_higgs.two_part_mass_ratio_tau",
+        binning=(50, -10, 10),
+        x_title=r"$\frac{M_{\tau_{vis}\bar{b}}}{M_{\tau\bar{b}}}$",
+    )
 
     # single lepton variables
     # single electron
@@ -1032,8 +1273,78 @@ def add_variables(config: od.Config) -> None:
             config,
             name=f"res_dnn_{proc}_fine",
             expression=f"res_dnn_{proc}",
-            binning=(5000, 0.0, 1.0),
+            binning=np.linspace(0.0, 0.8, 801).tolist() + np.linspace(0.8, 1.0, 1001)[1:].tolist(),
             x_title=rf"{proc.upper()} output bin, res. DNN",
+            aux={"x_transformations": "equal_distance_with_indices"},
+        )
+
+        add_variable(
+            config,
+            name=f"run3_dnn_moe_{proc}",
+            expression=f"run3_dnn_moe_{proc}",
+            binning=(25, 0.0, 1.0),
+            x_title=rf"DNN {proc.upper()} output node",
+        )
+
+        add_variable(
+            config,
+            name=f"run3_dnn_moe_{proc}_10",
+            expression=f"run3_dnn_moe_{proc}",
+            binning=(10, 0.0, 1.0),
+            x_title=rf"DNN {proc.upper()} output node",
+        )
+
+        add_variable(
+            config,
+            name=f"run3_dnn_moe_{proc}_fine",
+            expression=f"run3_dnn_moe_{proc}",
+            binning=np.linspace(0.0, 0.8, 801).tolist() + np.linspace(0.8, 1.0, 1001)[1:].tolist(),
+            x_title=rf"DNN {proc.upper()} output node",
+            aux={"x_transformations": "equal_distance_with_indices"},
+        )
+
+        add_variable(
+            config,
+            name=f"run3_dnn_moe_{proc}_fine_5k",
+            expression=f"run3_dnn_moe_{proc}",
+            binning=(5000, 0.0, 1.0),
+            x_title=rf"DNN {proc.upper()} output node",
+            aux={"x_transformations": "equal_distance_with_indices"},
+        )
+
+        add_variable(
+            config,
+            name=f"run3_dnn_simple_{proc}_fine",
+            expression=f"run3_dnn_simple_{proc}",
+            binning=np.linspace(0.0, 0.8, 801).tolist() + np.linspace(0.8, 1.0, 1001)[1:].tolist(),
+            x_title=rf"DNN {proc.upper()} output node",
+            aux={"x_transformations": "equal_distance_with_indices"},
+        )
+
+        add_variable(
+            config,
+            name=f"run3_dnn_simple_kl1_{proc}_fine",
+            expression=f"run3_dnn_simple_kl1_{proc}",
+            binning=np.linspace(0.0, 0.8, 801).tolist() + np.linspace(0.8, 1.0, 1001)[1:].tolist(),
+            x_title=rf"DNN {proc.upper()} output node",
+            aux={"x_transformations": "equal_distance_with_indices"},
+        )
+
+        add_variable(
+            config,
+            name=f"run3_dnn_simple_kl0_{proc}_fine",
+            expression=f"run3_dnn_simple_kl0_{proc}",
+            binning=np.linspace(0.0, 0.8, 801).tolist() + np.linspace(0.8, 1.0, 1001)[1:].tolist(),
+            x_title=rf"DNN {proc.upper()} output node",
+            aux={"x_transformations": "equal_distance_with_indices"},
+        )
+
+        add_variable(
+            config,
+            name=f"run3_dnn_simple_allkl_{proc}_fine",
+            expression=f"run3_dnn_simple_allkl_{proc}",
+            binning=np.linspace(0.0, 0.8, 801).tolist() + np.linspace(0.8, 1.0, 1001)[1:].tolist(),
+            x_title=rf"DNN {proc.upper()} output node",
             aux={"x_transformations": "equal_distance_with_indices"},
         )
 

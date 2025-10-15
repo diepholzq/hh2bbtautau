@@ -24,6 +24,12 @@ def signed_cos_deltaangle(a, b):
     return a_times_b / (abs_a * abs_b)
 
 
+def weird_conversion(array: ak.Array, axis: int = 0) -> ak.Array:
+    array = ak.from_numpy(ak.to_numpy(array).astype(np.float64))
+    array = ak.fill_none(array, EMPTY_FLOAT, axis=axis)
+    return array
+
+
 @producer(
     uses={"higgs_family.*", attach_coffea_behavior},
     produces={"pdf_input_vars.*"},
@@ -148,15 +154,229 @@ def create_pdf_input_vars_top(self: Producer, events: ak.Array, **kwargs) -> ak.
 
 @producer(
     uses={"top_family.*", attach_coffea_behavior},
-    produces={"pdf_input_vars.*"},
+    produces={"pdf_input_vars_top_ditau.*"},
 )
 def create_pdf_input_vars_top_ditau(self: Producer, events: ak.Array, **kwargs) -> ak.Array:
     """
-    Creates a new column "pdf_input_vars" that stores the PDF inputs for the top pdf in the ditau case
+    Creates a new column "pdf_input_vars_top_ditau" that stores the PDF inputs for the top pdf in the ditau case
     """
-    events = attach_coffea_behavior_fn(events, collections={"top_family": {"type_name": "GenParticle",
-        "check_attr": "metric_table", "skip_fields": "*Idx*G"}})
 
-    # top_family = events.top_family
-    # ditau_mask = ak.all(abs(top_family[:, 5].pdgId) == 15, axis=1)
+    # Get top_family column and attach coffea behaviour
+    top_family = attach_coffea_behavior_fn(events.top_family, collections={
+        "bottoms": {
+            "type_name": "GenParticle", "check_attr": "metric_table", "skip_fields": "*Idx*G",
+        },
+        "leps": {
+            "type_name": "GenParticle", "check_attr": "metric_table", "skip_fields": "*Idx*G",
+        },
+        "antileps": {
+            "type_name": "GenParticle", "check_attr": "metric_table", "skip_fields": "*Idx*G",
+        },
+        "neutrinos": {
+            "type_name": "GenParticle", "check_attr": "metric_table", "skip_fields": "*Idx*G",
+        },
+        "antineutrinos": {
+            "type_name": "GenParticle", "check_attr": "metric_table", "skip_fields": "*Idx*G",
+        },
+    })
+
+    # Extract relevant particles
+    tau_mask = top_family.leps.pdgId == 15
+    antitau_mask = top_family.antileps.pdgId == -15
+    ditau_mask = ak.all(ak.concatenate([
+        ak.any(tau_mask, axis=1)[:, None], ak.any(antitau_mask, axis=1)[:, None],
+    ], axis=1), axis=1)
     # ditau_decays = ak.mask(top_family, ditau_mask)
+    # bs = ak.mask(ditau_decays.bottoms, top_family.bottoms.pdgId == 5)
+    # bs = ak.where(ditau_mask, top_family.bottoms[:, 0], ak.full_like(top_family.bottoms[:, 0], EMPTY_FLOAT))
+    # bs = ditau_decays.bottoms[:, 0][:, None]
+    bs = ak.mask(top_family, ditau_mask).bottoms[:, 0][:, None]
+    antibs = ak.mask(top_family, ditau_mask).bottoms[:, 1][:, None]
+    tau_vis = ak.mask(top_family, ditau_mask).leps - ak.mask(top_family, ditau_mask).neutrinos
+    antitau_vis = ak.mask(top_family, ditau_mask).antileps - ak.mask(top_family, ditau_mask).antineutrinos
+
+    tau_vis_antib = tau_vis.add(antibs)
+    antitau_vis_b = antitau_vis.add(bs)
+
+    # Build inputs
+    M_2tau_vis_2b = tau_vis_antib.add(antitau_vis_b).absolute()
+
+    y_tau_vis_antib = 1 / 2 * np.log(
+        (tau_vis_antib.energy + tau_vis_antib.pz) / (tau_vis_antib.energy - tau_vis_antib.pz))
+    y_tau_vis_antib = np.nan_to_num(y_tau_vis_antib)    # , nan=EMPTY_FLOAT)
+    y_tau_vis_antib = ak.firsts(y_tau_vis_antib)
+    y_antitau_vis_b = 1 / 2 * np.log((antitau_vis_b.energy + antitau_vis_b.pz) /
+        (antitau_vis_b.energy - antitau_vis_b.pz))
+    y_antitau_vis_b = ak.firsts(np.nan_to_num(y_antitau_vis_b))
+
+    pt_tau_vis_antib = tau_vis_antib.pt
+    pt_antitau_vis_b = antitau_vis_b.pt
+
+    M_tau_vis_antib = tau_vis_antib.absolute()
+    M_antitau_vis_b = antitau_vis_b.absolute()
+
+    # Same inputs, but with tau replacing tau_vis to estimate impact of missing neutrinos
+    taus = ak.mask(top_family, ditau_mask).leps
+    antitaus = ak.mask(top_family, ditau_mask).antileps
+
+    tau_antib = taus.add(antibs)
+    antitau_b = antitaus.add(bs)
+
+    M_2tau_2b = tau_antib.add(antitau_b).absolute()
+
+    y_tau_antib = ak.firsts(
+        np.nan_to_num(1 / 2 * np.log((tau_antib.energy + tau_antib.pz) / (tau_antib.energy - tau_antib.pz))))
+    y_antitau_b = ak.firsts(
+        np.nan_to_num(1 / 2 * np.log((antitau_b.energy + antitau_b.pz) / (antitau_b.energy - antitau_b.pz))))
+
+    pt_tau_antib = tau_antib.pt
+    pt_antitau_b = antitau_b.pt
+
+    M_tau_antib = tau_antib.absolute()
+    M_antitau_b = antitau_b.absolute()
+
+    # Ratio of these inputs
+    four_part_mass_ratio = M_2tau_vis_2b * 1 / M_2tau_2b
+    # rapidity_ratio_tau = ak.to_numpy(y_tau_vis_b) * 1 / ak.to_numpy(y_tau_b)
+    pt_ratio_tau = pt_tau_vis_antib / pt_tau_antib
+    two_part_mass_ratio_tau = M_tau_vis_antib / M_tau_antib
+
+    # Remove Nones
+    M_2tau_vis_2b = weird_conversion(M_2tau_vis_2b, axis=1)
+    y_tau_vis_antib = weird_conversion(y_tau_vis_antib)
+    y_antitau_vis_b = weird_conversion(y_antitau_vis_b)
+    pt_tau_vis_antib = weird_conversion(pt_tau_vis_antib, axis=1)
+    pt_antitau_vis_b = weird_conversion(pt_antitau_vis_b, axis=1)
+    M_tau_vis_antib = weird_conversion(M_tau_vis_antib, axis=1)
+    M_antitau_vis_b = weird_conversion(M_antitau_vis_b, axis=1)
+    M_2tau_2b = weird_conversion(M_2tau_2b, axis=1)
+    y_tau_antib = weird_conversion(y_tau_antib)
+    y_antitau_b = weird_conversion(y_antitau_b)
+    pt_tau_antib = weird_conversion(pt_tau_antib, axis=1)
+    pt_antitau_b = weird_conversion(pt_antitau_b, axis=1)
+    M_tau_antib = weird_conversion(M_tau_antib, axis=1)
+    M_antitau_b = weird_conversion(M_antitau_b, axis=1)
+    four_part_mass_ratio = weird_conversion(four_part_mass_ratio, axis=1)
+    # rapidity_ratio_tau = weird_conversion(rapidity_ratio_tau)
+    pt_ratio_tau = weird_conversion(pt_ratio_tau, axis=1)
+    two_part_mass_ratio_tau = weird_conversion(two_part_mass_ratio_tau, axis=1)
+
+    pdf_input_vars_top_ditau = ak.zip({
+        "M_2tau_vis_2b": M_2tau_vis_2b,
+        "y_tau_vis_antib": y_tau_vis_antib,
+        "y_antitau_vis_b": y_antitau_vis_b,
+        "pt_tau_vis_antib": pt_tau_vis_antib,
+        "pt_antitau_vis_b": pt_antitau_vis_b,
+        "M_tau_vis_antib": M_tau_vis_antib,
+        "M_antitau_vis_b": M_antitau_vis_b,
+        "M_2tau_2b": M_2tau_2b,
+        "y_tau_antib": y_tau_antib,
+        "y_antitau_b": y_antitau_b,
+        "pt_tau_antib": pt_tau_antib,
+        "pt_antitau_b": pt_antitau_b,
+        "M_tau_antib": M_tau_antib,
+        "M_antitau_b": M_antitau_b,
+        "four_part_mass_ratio": four_part_mass_ratio,
+        # "rapidity_ratio_tau": rapidity_ratio_tau,
+        "pt_ratio_tau": pt_ratio_tau,
+        "two_part_mass_ratio_tau": two_part_mass_ratio_tau,
+    }, with_name="pdf_input_vars_top_ditau")
+    events = set_ak_column(events, "pdf_input_vars_top_ditau", pdf_input_vars_top_ditau)
+    return events
+
+
+@producer(
+    uses={"higgs_family.*", attach_coffea_behavior},
+    produces={"pdf_input_vars_top_ditau_higgs.*"},
+)
+def create_pdf_input_vars_top_ditau_higgs(self: Producer, events: ak.Array, **kwargs) -> ak.Array:
+    """
+    Creates a new column "pdf_input_vars_top_ditau" that stores the PDF inputs for the top pdf in the ditau case
+    """
+    # attach coffea behaviour
+    higgs_family = attach_coffea_behavior_fn(events.higgs_family, collections={
+        "bottoms": {
+            "type_name": "GenParticle", "check_attr": "metric_table", "skip_fields": "*Idx*G",
+        },
+        "taus": {
+            "type_name": "GenParticle", "check_attr": "metric_table", "skip_fields": "*Idx*G",
+        },
+        "tau_leptonic_decay_products": {
+            "type_name": "GenParticle", "check_attr": "metric_table", "skip_fields": "*Idx*G",
+        },
+    })
+    # from IPython import embed
+    # embed(header="higgs ditau stuff")
+    bs = higgs_family.bottoms[:, 1][:, None]
+    antibs = higgs_family.bottoms[:, 0][:, None]
+    tau_vis = higgs_family.taus[:, 1] - higgs_family.tau_leptonic_decay_products[:, 0, 1]
+    antitau_vis = higgs_family.taus[:, 0] - higgs_family.tau_leptonic_decay_products[:, 0, 0]
+    taus = higgs_family.taus[:, 1]
+    antitaus = higgs_family.taus[:, 0]
+
+    tau_vis_antib = tau_vis[:, None].add(antibs)
+    antitau_vis_b = antitau_vis[:, None].add(bs)
+
+    # Build inputs
+    M_2tau_vis_2b = tau_vis_antib.add(antitau_vis_b).absolute()
+
+    y_tau_vis_antib = 1 / 2 * np.log(
+        (tau_vis_antib.energy + tau_vis_antib.pz) / (tau_vis_antib.energy - tau_vis_antib.pz))
+    y_tau_vis_antib = np.nan_to_num(y_tau_vis_antib)    # , nan=EMPTY_FLOAT)
+    y_tau_vis_antib = ak.firsts(y_tau_vis_antib)
+    y_antitau_vis_b = 1 / 2 * np.log((antitau_vis_b.energy + antitau_vis_b.pz) /
+        (antitau_vis_b.energy - antitau_vis_b.pz))
+    y_antitau_vis_b = ak.firsts(np.nan_to_num(y_antitau_vis_b))
+
+    pt_tau_vis_antib = tau_vis_antib.pt
+    pt_antitau_vis_b = antitau_vis_b.pt
+
+    M_tau_vis_antib = tau_vis_antib.absolute()
+    M_antitau_vis_b = antitau_vis_b.absolute()
+
+    # Same inputs, but with tau replacing tau_vis to estimate impact of missing neutrinos
+    tau_antib = taus[:, None].add(antibs)
+    antitau_b = antitaus[:, None].add(bs)
+
+    M_2tau_2b = tau_antib.add(antitau_b).absolute()
+
+    y_tau_antib = ak.firsts(
+        np.nan_to_num(1 / 2 * np.log((tau_antib.energy + tau_antib.pz) / (tau_antib.energy - tau_antib.pz))))
+    y_antitau_b = ak.firsts(
+        np.nan_to_num(1 / 2 * np.log((antitau_b.energy + antitau_b.pz) / (antitau_b.energy - antitau_b.pz))))
+
+    pt_tau_antib = tau_antib.pt
+    pt_antitau_b = antitau_b.pt
+
+    M_tau_antib = tau_antib.absolute()
+    M_antitau_b = antitau_b.absolute()
+
+    # Ratio of these inputs
+    four_part_mass_ratio = M_2tau_vis_2b * 1 / M_2tau_2b
+    # rapidity_ratio_tau = ak.to_numpy(y_tau_vis_b) * 1 / ak.to_numpy(y_tau_b)
+    pt_ratio_tau = pt_tau_vis_antib / pt_tau_antib
+    two_part_mass_ratio_tau = M_tau_vis_antib / M_tau_antib
+
+    pdf_input_vars_top_ditau_higgs = ak.zip({
+        "M_2tau_vis_2b": M_2tau_vis_2b,
+        "y_tau_vis_antib": y_tau_vis_antib,
+        "y_antitau_vis_b": y_antitau_vis_b,
+        "pt_tau_vis_antib": pt_tau_vis_antib,
+        "pt_antitau_vis_b": pt_antitau_vis_b,
+        "M_tau_vis_antib": M_tau_vis_antib,
+        "M_antitau_vis_b": M_antitau_vis_b,
+        "M_2tau_2b": M_2tau_2b,
+        "y_tau_antib": y_tau_antib,
+        "y_antitau_b": y_antitau_b,
+        "pt_tau_antib": pt_tau_antib,
+        "pt_antitau_b": pt_antitau_b,
+        "M_tau_antib": M_tau_antib,
+        "M_antitau_b": M_antitau_b,
+        "four_part_mass_ratio": four_part_mass_ratio,
+        # "rapidity_ratio_tau": rapidity_ratio_tau,
+        "pt_ratio_tau": pt_ratio_tau,
+        "two_part_mass_ratio_tau": two_part_mass_ratio_tau,
+    }, with_name="pdf_input_vars_top_ditau_higgs")
+    events = set_ak_column(events, "pdf_input_vars_top_ditau_higgs", pdf_input_vars_top_ditau_higgs)
+
+    return events

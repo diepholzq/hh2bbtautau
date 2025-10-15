@@ -15,7 +15,7 @@ import order as od
 
 from columnflow.selection import Selector, SelectionResult, selector
 from columnflow.selection.cms.json_filter import json_filter
-from columnflow.selection.cms.met_filters import met_filters as cf_met_filters
+from columnflow.selection.cms.met_filters import met_filters
 from columnflow.selection.cms.jets import jet_veto_map
 from columnflow.production.processes import process_ids
 from columnflow.production.cms.mc_weight import mc_weight
@@ -28,18 +28,21 @@ from columnflow.production.util import attach_coffea_behavior
 from columnflow.columnar_util import Route, set_ak_column, full_like
 from columnflow.hist_util import create_hist_from_variables, fill_hist
 from columnflow.util import maybe_import, DotDict
+from columnflow.types import TYPE_CHECKING
+
 from hbt.selection.trigger import trigger_selection
 from hbt.selection.lepton import lepton_selection
 from hbt.selection.jet import jet_selection
 import hbt.production.processes as process_producers
-from hbt.production.btag import btag_weights_deepjet, btag_weights_pnet
+from hbt.production.weights import btag_weights_deepjet, btag_weights_pnet
 from hbt.production.features import cutflow_features
 from hbt.production.patches import patch_ecalBadCalibFilter
 from hbt.util import IF_DATASET_HAS_LHE_WEIGHTS, IF_RUN_3, IF_DATA, IF_DATASET_HAS_TAG
 
 np = maybe_import("numpy")
 ak = maybe_import("awkward")
-hist = maybe_import("hist")
+if TYPE_CHECKING:
+    hist = maybe_import("hist")
 
 
 logger = law.logger.get_logger(__name__)
@@ -77,7 +80,7 @@ def dy_drop_tautau(self: Selector, events: ak.Array, **kwargs) -> tuple[ak.Array
 
 @selector(
     uses={
-        json_filter, cf_met_filters, IF_RUN_3(jet_veto_map), trigger_selection, lepton_selection, jet_selection,
+        json_filter, met_filters, IF_RUN_3(jet_veto_map), trigger_selection, lepton_selection, jet_selection,
         mc_weight, pu_weight, ps_weights, btag_weights_deepjet, IF_RUN_3(btag_weights_pnet), process_ids,
         cutflow_features, attach_coffea_behavior, IF_DATA(patch_ecalBadCalibFilter),
         IF_DATASET_HAS_LHE_WEIGHTS(pdf_weights, murmuf_weights), IF_DATASET_HAS_TAG("dy_drop_tautau")(dy_drop_tautau),
@@ -125,7 +128,7 @@ def default(
         results += SelectionResult(steps={"json": full_like(events.event, True, dtype=bool)})
 
     # met filter selection
-    events, met_filter_results = self[cf_met_filters](events, **kwargs)
+    events, met_filter_results = self[met_filters](events, **kwargs)
     # optionally apply custom "Flag_ecalBadCalibFilter" MET filter in prompt data (tag set in config)
     if self.dataset_inst.has_tag("needs_custom_ecalBadCalibFilter"):
         events = self[patch_ecalBadCalibFilter](events, **kwargs)
@@ -310,7 +313,7 @@ def empty_init(self: Selector, **kwargs) -> None:
     # remove unused dependencies
     unused = {
         json_filter,
-        cf_met_filters,
+        met_filters,
         cutflow_features,
         patch_ecalBadCalibFilter,
         jet_selection,

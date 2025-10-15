@@ -56,15 +56,34 @@ def add_config(
         name=config_name,
         id=config_id,
         campaign=campaign,
+        channels=[
+            od.Channel(name="etau", id=1, label=r"$e\tau_{h}$"),
+            od.Channel(name="mutau", id=2, label=r"$\mu\tau_{h}$"),
+            od.Channel(name="tautau", id=3, label=r"$\tau_{h}\tau_{h}$"),
+            od.Channel(name="ee", id=4, label=r"$ee$"),
+            od.Channel(name="mumu", id=5, label=r"$\mu\mu$"),
+            od.Channel(name="emu", id=6, label=r"$e\mu$"),
+        ],
         aux={
             "sync": sync_mode,
         },
     )
 
-    # store a full postfix
-    for tag in {2022: ["preEE", "postEE"], 2023: ["preBPix", "postBPix"]}.get(year, []):
-        if campaign.has_tag(tag):
-            cfg.x.full_postfix = f"{year2}{tag}"
+    # the postfix coming with cmsdb refers to the centrally used postfix of the simulation campaign like EE or BPix,
+    # but we also often use an adjusted postfix like preEE or postEE to reduce ambiguity; this postfix is already stored
+    # in the campaign's tags coming with cmsdb, but still store them as an additional auxiliary field "full_postfix"
+    full_postfix = ""
+    if year == 2016:
+        assert campaign.has_tag({"preVFP", "postVFP"}, mode=any)
+        full_postfix = "preVFP" if campaign.has_tag("preVFP") else "postVFP"
+    elif year == 2022:
+        assert campaign.has_tag({"preEE", "postEE"}, mode=any)
+        full_postfix = "preEE" if campaign.has_tag("preEE") else "postEE"
+    elif year == 2023:
+        assert campaign.has_tag({"preBPix", "postBPix"}, mode=any)
+        full_postfix = "preBPix" if campaign.has_tag("preBPix") else "postBPix"
+    campaign.x.full_postfix = full_postfix
+    cfg.x.full_postfix = full_postfix
 
     ################################################################################################
     # helpers
@@ -206,9 +225,7 @@ def add_config(
 
         # hh vbf
         "hh_vbf_hbb_htt_kv1_k2v1_kl1_madgraph",
-        *if_not_era(year=2023, tag="preBPix", values=[
-            "hh_vbf_hbb_htt_kv1_k2v0_kl1_madgraph",
-        ]),
+        "hh_vbf_hbb_htt_kv1_k2v0_kl1_madgraph",
         "hh_vbf_hbb_htt_kv1p74_k2v1p37_kl14p4_madgraph",
         "hh_vbf_hbb_htt_kv2p12_k2v3p87_klm5p96_madgraph",
         "hh_vbf_hbb_htt_kvm0p012_k2v0p03_kl10p2_madgraph",
@@ -446,16 +463,17 @@ def add_config(
             dataset.add_tag("w_lnu")
         if re.match(r"^w_lnu_\dj_(|pt.+_)amcatnlo$", dataset.name):
             dataset.add_tag("w_lnu_stitched")
+        # datasets that are allowed to contain some events with missing lhe infos
+        # (known to happen for amcatnlo)
+        if dataset.name.endswith("_amcatnlo") or re.match(r"^z_vbf_.*madgraph$", dataset.name):
+            dataset.add_tag("partial_lhe_weights")
         # datasets that are known to have no lhe info at all
         if law.util.multi_match(dataset.name, [
             r"^(ww|wz|zz)_.*pythia$",
             r"^tt(w|z)_.*amcatnlo$",
         ]):
             dataset.add_tag("no_lhe_weights")
-        # datasets that are allowed to contain some events with missing lhe infos
-        # (known to happen for amcatnlo)
-        if dataset.name.endswith("_amcatnlo") or re.match(r"^z_vbf_.*madgraph$", dataset.name):
-            dataset.add_tag("partial_lhe_weights")
+            dataset.remove_tag("partial_lhe_weights")
         if dataset_name.startswith("hh_"):
             dataset.add_tag("signal")
             dataset.add_tag("nonresonant_signal")
@@ -507,7 +525,7 @@ def add_config(
     cfg.x.default_variables = ("njet", "nbtag", "res_pdnn_hh", "res_dnn_hh")
     cfg.x.default_hist_producer = "default"
 
-    # process groups for conveniently looping over certain processs
+    # process groups for conveniently looping over certain processes
     # (used in wrapper_factory and during plotting)
     cfg.x.process_groups = {
         "signals": [
@@ -655,6 +673,10 @@ def add_config(
         "sm_data_unstitched": data_group + sm_group_unstitched,
         "dy": [dataset.name for dataset in cfg.datasets if dataset.has_tag("dy")],
         "w_lnu": [dataset.name for dataset in cfg.datasets if dataset.has_tag("w_lnu")],
+        "bkg_data_dy": backgrounds + [
+            dataset.name for dataset in cfg.datasets
+            if dataset.is_data and re.match(r"^data_(e|mu)_.+$", dataset.name)
+        ],
     }
 
     # category groups for conveniently looping over certain categories
@@ -699,7 +721,7 @@ def add_config(
 
     # lumi values in 1/pb (= 1000/fb)
     # https://twiki.cern.ch/twiki/bin/view/CMS/LumiRecommendationsRun2?rev=7
-    # https://twiki.cern.ch/twiki/bin/view/CMS/LumiRecommendationsRun3?rev=25
+    # https://twiki.cern.ch/twiki/bin/view/CMS/LumiRecommendationsRun3?rev=27
     # https://twiki.cern.ch/twiki/bin/view/CMS/PdmVRun3Analysis
     # difference pre-post VFP: https://cds.cern.ch/record/2854610/files/DP2023_006.pdf
     # Lumis for Run3 within the Twiki are outdated as stated here:
@@ -730,19 +752,19 @@ def add_config(
         })
     elif year == 2022 and campaign.has_tag("preEE"):
         cfg.x.luminosity = Number(7_980.4541, {
-            "lumi_13p6TeV_correlated": 0.014j,
+            "lumi_13p6TeV_2022": 0.014j,
         })
     elif year == 2022 and campaign.has_tag("postEE"):
         cfg.x.luminosity = Number(26_671.6097, {
-            "lumi_13p6TeV_correlated": 0.014j,
+            "lumi_13p6TeV_2022": 0.014j,
         })
     elif year == 2023 and campaign.has_tag("preBPix"):
         cfg.x.luminosity = Number(18_062.6591, {
-            "lumi_13p6TeV_correlated": 0.013j,
+            "lumi_13p6TeV_2023": 0.013j,
         })
     elif year == 2023 and campaign.has_tag("postBPix"):
         cfg.x.luminosity = Number(9_693.1301, {
-            "lumi_13p6TeV_correlated": 0.013j,
+            "lumi_13p6TeV_2023": 0.013j,
         })
     else:
         assert False
@@ -758,20 +780,38 @@ def add_config(
     if run == 2:
         cfg.x.met_name = "MET"
         cfg.x.raw_met_name = "RawMET"
+
+        # met phi correction config
+        from columnflow.calibration.cms.met import METPhiConfigRun2
+        cfg.x.met_phi_correction = METPhiConfigRun2(
+            met_name=cfg.x.met_name,
+            correction_set_template="{variable}_metphicorr_pfmet_{data_source}",
+            keep_uncorrected=True,
+        )
     elif run == 3:
         cfg.x.met_name = "PuppiMET"
         cfg.x.raw_met_name = "RawPuppiMET"
+
+        # met phi correction config
+        from columnflow.calibration.cms.met import METPhiConfig
+        cfg.x.met_phi_correction = METPhiConfig(
+            met_name=cfg.x.met_name,
+            met_type=cfg.x.met_name,
+            correction_set="met_xy_corrections",
+            keep_uncorrected=True,
+            pt_phi_variations={
+                "stat_xdn": "metphi_statx_down",
+                "stat_xup": "metphi_statx_up",
+                "stat_ydn": "metphi_staty_down",
+                "stat_yup": "metphi_staty_up",
+            },
+            variations={
+                "pu_dn": "minbias_xs_down",
+                "pu_up": "minbias_xs_up",
+            },
+        )
     else:
         assert False
-
-    # met phi correction config
-    from columnflow.calibration.cms.met import METPhiConfig
-    cfg.x.met_phi_correction = METPhiConfig(
-        met_name=cfg.x.met_name,
-        correction_set="met_xy_corrections" if run == 3 else r"{variable}_metphicorr_pfmet_{data_source}",
-        keep_uncorrected=True,
-        variable_config={"phi": ("phi",)},  # not added pt here, just interested in phi correction
-    )
 
     ################################################################################################
     # jet settings
@@ -910,33 +950,43 @@ def add_config(
     else:
         assert False
 
-    # tec config
-    from columnflow.calibration.cms.tau import TECConfig
-    corrector_kwargs = {"wp": "Medium", "wp_VSe": "VVLoose"} if run == 3 else {}
-    cfg.x.tec = TECConfig(tagger=cfg.x.tau_tagger, corrector_kwargs=corrector_kwargs)
-
-    # tau ID working points
+    # deep tau ID working point bitmask/position to name mapping
     if campaign.x.version < 10:
-        cfg.x.tau_id_working_points = DotDict.wrap({
-            "tau_vs_e": {"vvvloose": 1, "vvloose": 2, "vloose": 4, "loose": 8, "medium": 16, "tight": 32, "vtight": 64, "vvtight": 128},  # noqa: E501
-            "tau_vs_jet": {"vvvloose": 1, "vvloose": 2, "vloose": 4, "loose": 8, "medium": 16, "tight": 32, "vtight": 64, "vvtight": 128},  # noqa: E501
-            "tau_vs_mu": {"vloose": 1, "loose": 2, "medium": 4, "tight": 8},
+        cfg.x.deeptau_ids = DotDict.wrap({
+            "vs_e": {"vvvloose": 1, "vvloose": 2, "vloose": 4, "loose": 8, "medium": 16, "tight": 32, "vtight": 64, "vvtight": 128},  # noqa: E501
+            "vs_jet": {"vvvloose": 1, "vvloose": 2, "vloose": 4, "loose": 8, "medium": 16, "tight": 32, "vtight": 64, "vvtight": 128},  # noqa: E501
+            "vs_mu": {"vloose": 1, "loose": 2, "medium": 4, "tight": 8},
         })
     else:
-        cfg.x.tau_id_working_points = DotDict.wrap({
-            "tau_vs_e": {"vvvloose": 1, "vvloose": 2, "vloose": 3, "loose": 4, "medium": 5, "tight": 6, "vtight": 7, "vvtight": 8},  # noqa: E501
-            "tau_vs_jet": {"vvvloose": 1, "vvloose": 2, "vloose": 3, "loose": 4, "medium": 5, "tight": 6, "vtight": 7, "vvtight": 8},  # noqa: E501
-            "tau_vs_mu": {"vloose": 1, "loose": 2, "medium": 3, "tight": 4},
+        cfg.x.deeptau_ids = DotDict.wrap({
+            "vs_e": {"vvvloose": 1, "vvloose": 2, "vloose": 3, "loose": 4, "medium": 5, "tight": 6, "vtight": 7, "vvtight": 8},  # noqa: E501
+            "vs_jet": {"vvvloose": 1, "vvloose": 2, "vloose": 3, "loose": 4, "medium": 5, "tight": 6, "vtight": 7, "vvtight": 8},  # noqa: E501
+            "vs_mu": {"vloose": 1, "loose": 2, "medium": 3, "tight": 4},
         })
+
+    # employed deeptau working points, potentially channel dependent
+    cfg.x.deeptau_wps = DotDict.wrap({
+        "vs_e": "vvloose",
+        "vs_mu": {
+            "etau": "tight",
+            "mutau": "tight",
+            "tautau": "vloose",
+        },
+        "vs_jet": "medium",
+    })
+
+    # tec config
+    from columnflow.calibration.cms.tau import TECConfig
+    corrector_kwargs = {"wp": "Medium", "wp_VSe": "VVLoose"} if run == 3 else {}  # values correspond to wps above
+    cfg.x.tec = TECConfig(tagger=cfg.x.tau_tagger, corrector_kwargs=corrector_kwargs)
 
     # tau trigger working points
     cfg.x.tau_trigger_working_points = DotDict.wrap({
-        "id_vs_jet_v0": "VVLoose",
-        "id_vs_jet_gv0": ("Loose", "VVLoose"),
-        "id_vs_mu_single": "Tight",
-        "id_vs_mu_cross": "VLoose",
-        "id_vs_e_single": "VVLoose",
-        "id_vs_e_cross": "VVLoose",
+        "vs_jet": "Medium",
+        "vs_mu_single": "Tight",
+        "vs_mu_cross": "VLoose",
+        "vs_e_single": "VVLoose",
+        "vs_e_cross": "VVLoose",
         "trigger_corr": "VVLoose",
     })
 
@@ -1123,7 +1173,6 @@ def add_config(
             # https://cms.cern.ch/iCMS/jsp/db_notes/noteInfo.jsp?cmsnoteid=CMS%20AN-2021/005 chapter 4.5 in v12
             # performance studies for run 3 available and show improvements:
             # https://cds.cern.ch/record/2904691/files/DP2024_055.pdf
-
             "particleNetMD": {
                 "hp": {"2022": 0.9883, "2022EE": 0.9883, "2023": 0.9870, "2023BPix": 0.9880}[btag_key],
                 "mp": {"2022": 0.9737, "2022EE": 0.9735, "2023": 0.9714, "2023BPix": 0.9734}[btag_key],
@@ -1218,13 +1267,13 @@ def add_config(
         else:
             assert False
 
-        # dy reweighting
+        # dy reweighting with custom weights
         # https://cms-higgs-leprare.docs.cern.ch/htt-common/DY_reweight
         cfg.x.dy_weight_config = DrellYanConfig(
             era=dy_era,
-            order="NLO",
-            correction="DY_pTll_reweighting",
-            unc_correction="DY_pTll_reweighting_N_uncertainty",
+            correction="dy_weight",
+            njets=True,
+            systs=[],  # TODO: add systematics once existing
         )
 
         # dy boson recoil correction
@@ -1264,6 +1313,8 @@ def add_config(
         {
             "pu_weight": "pu_weight_{name}",
             "normalized_pu_weight": "normalized_pu_weight_{name}",
+            "PuppiMET.pt": "PuppiMET.pt_{name}",
+            "PuppiMET.phi": "PuppiMET.phi_{name}",
         },
     )
 
@@ -1303,10 +1354,10 @@ def add_config(
                 cfg,
                 f"jec_{jec_source}",
                 {
-                    "normalized_btag_deepjet_weight": "normalized_btag_deepjet_weight_{name}",
-                    "normalized_njet_btag_deepjet_weight": "normalized_njet_btag_deepjet_weight_{name}",
-                    "normalized_btag_pnet_weight": "normalized_btag_pnet_weight_{name}",
-                    "normalized_njet_btag_pnet_weight": "normalized_njet_btag_pnet_weight_{name}",
+                    # "normalized_btag_weight_deepjet": "normalized_btag_weight_deepjet_{name}",
+                    # "normalized_njet_btag_weight_deepjet": "normalized_njet_btag_weight_deepjet_{name}",
+                    "normalized_btag_weight_pnet": "normalized_btag_weight_pnet_{name}",
+                    "normalized_njet_btag_weight_pnet": "normalized_njet_btag_weight_pnet_{name}",
                 },
             )
 
@@ -1339,14 +1390,20 @@ def add_config(
 
     # start at id=50
     cfg.x.tau_unc_names = [
-        "jet_dm0", "jet_dm1", "jet_dm10", "jet_dm11",
+        "jet_stat1_dm0", "jet_stat1_dm1", "jet_stat1_dm10", "jet_stat1_dm11",
+        "jet_stat2_dm0", "jet_stat2_dm1", "jet_stat2_dm10", "jet_stat2_dm11",
         "e_barrel", "e_endcap",
         "mu_0p0To0p4", "mu_0p4To0p8", "mu_0p8To1p2", "mu_1p2To1p7", "mu_1p7To2p3",
     ]
     for i, unc in enumerate(cfg.x.tau_unc_names):
-        cfg.add_shift(name=f"tau_{unc}_up", id=50 + 2 * i, type="shape")
-        cfg.add_shift(name=f"tau_{unc}_down", id=51 + 2 * i, type="shape")
-        add_shift_aliases(cfg, f"tau_{unc}", {"tau_weight": f"tau_weight_{unc}_" + "{direction}"})
+        chs = {
+            "jet": ["etau", "mutau", "tautau"],
+            "e": ["etau"],
+            "mu": ["mutau"],
+        }[unc.split("_", 1)[0]]
+        cfg.add_shift(name=f"tau_{unc}_up", id=50 + 2 * i, type="shape", aux={"applies_to_channels": chs})
+        cfg.add_shift(name=f"tau_{unc}_down", id=51 + 2 * i, type="shape", aux={"applies_to_channels": chs})
+        add_shift_aliases(cfg, f"tau_{unc}", {"tau_weight": f"tau_weight_{unc}_{{direction}}"})
 
     cfg.add_shift(name="e_up", id=90, type="shape")
     cfg.add_shift(name="e_down", id=91, type="shape")
@@ -1383,20 +1440,22 @@ def add_config(
 
     cfg.x.btag_unc_names = [
         "hf", "lf",
-        f"hfstats1_{year}", f"hfstats2_{year}",
-        f"lfstats1_{year}", f"lfstats2_{year}",
+        "hfstats1", "hfstats2",
+        "lfstats1", "lfstats2",
         "cferr1", "cferr2",
     ]
     for i, unc in enumerate(cfg.x.btag_unc_names):
         cfg.add_shift(name=f"btag_{unc}_up", id=110 + 2 * i, type="shape")
         cfg.add_shift(name=f"btag_{unc}_down", id=111 + 2 * i, type="shape")
+        unc_no_suffix = unc.replace(f"_{year}{cfg.x.full_postfix}", "")
         add_shift_aliases(
             cfg,
             f"btag_{unc}",
             {
-                "normalized_btag_deepjet_weight": f"normalized_btag_deepjet_weight_{unc}_" + "{direction}",
-                "normalized_njet_btag_deepjet_weight": f"normalized_njet_btag_deepjet_weight_{unc}_" + "{direction}",
-                # TODO: pnet here, or is this another shift? probably the latter
+                # "normalized_btag_weight_deepjet": f"normalized_btag_weight_deepjet_{unc}_{{direction}}",
+                # "normalized_njet_btag_weight_deepjet": f"normalized_njet_btag_weight_deepjet_{unc}_{{direction}}",
+                "normalized_btag_weight_pnet": f"normalized_btag_weight_pnet_{unc_no_suffix}_{{direction}}",
+                "normalized_njet_btag_weight_pnet": f"normalized_njet_btag_weight_pnet_{unc_no_suffix}_{{direction}}",
             },
         )
 
@@ -1444,10 +1503,16 @@ def add_config(
     )
 
     # trigger scale factors
-    trigger_legs = ["e", "mu", "tau_dm0", "tau_dm1", "tau_dm10", "tau_dm11", "jet"]
-    for i, leg in enumerate(trigger_legs):
-        cfg.add_shift(name=f"trigger_{leg}_up", id=180 + 2 * i, type="shape")
-        cfg.add_shift(name=f"trigger_{leg}_down", id=181 + 2 * i, type="shape")
+    cfg.x.trigger_legs = ["e", "mu", "tau_dm0", "tau_dm1", "tau_dm10", "tau_dm11", "jet"]
+    for i, leg in enumerate(cfg.x.trigger_legs):
+        # define the channels that each leg applies to
+        chs = {
+            "e": ["etau"],
+            "mu": ["mutau"],
+            "jet": ["tautau"],
+        }.get(leg, ["etau", "mutau", "tautau"])
+        cfg.add_shift(name=f"trigger_{leg}_up", id=180 + 2 * i, type="shape", aux={"applies_to_channels": chs})
+        cfg.add_shift(name=f"trigger_{leg}_down", id=181 + 2 * i, type="shape", aux={"applies_to_channels": chs})
         add_shift_aliases(cfg, f"trigger_{leg}", {"trigger_weight": f"trigger_weight_{leg}_{{direction}}"})
 
     ################################################################################################
@@ -1467,11 +1532,10 @@ def add_config(
         if year == 2016:
             json_postfix = f"{'pre' if campaign.has_tag('preVFP') else 'post'}VFP"
         json_pog_era = f"{year}{json_postfix}_UL"
-        json_mirror = "/afs/cern.ch/user/m/mrieger/public/mirrors/jsonpog-integration-406118ec"
+        json_mirror = "/afs/cern.ch/work/m/mrieger/public/mirrors/jsonpog-integration-c3be7e71"
     elif run == 3:
         json_pog_era = f"{year}_Summer{year2}{campaign.x.postfix}"
-        json_mirror = "/afs/cern.ch/user/m/mrieger/public/mirrors/jsonpog-integration-406118ec"
-        trigger_json_mirror = "https://gitlab.cern.ch/cclubbtautau/AnalysisCore/-/archive/59ae66c4a39d3e54afad5733895c33b1fb511c47/AnalysisCore-59ae66c4a39d3e54afad5733895c33b1fb511c47.tar.gz"  # noqa: E501
+        json_mirror = "/afs/cern.ch/work/m/mrieger/public/mirrors/jsonpog-integration-c3be7e71"
         campaign_tag = ""
         for tag in ("preEE", "postEE", "preBPix", "postBPix"):
             if campaign.has_tag(tag, mode=any):
@@ -1481,6 +1545,9 @@ def add_config(
         cclub_eras = f"{year}{campaign_tag}"
     else:
         assert False
+
+    # central location for common group files
+    central_hbt_dir = "/afs/cern.ch/work/m/mrieger/public/hbt/external_files"
 
     # common files
     # (versions in the end are for hashing in cases where file contents changed but paths did not)
@@ -1513,12 +1580,21 @@ def add_config(
     # btag scale factor
     add_external("btag_sf_corr", (f"{json_mirror}/POG/BTV/{json_pog_era}/btagging.json.gz", "v1"))
     # Tobias' tautauNN (https://github.com/uhh-cms/tautauNN)
-    add_external("res_pdnn", ("/afs/cern.ch/work/m/mrieger/public/hbt/external_files/res_models/res_prod3/model_fold0.tgz", "v1"))  # noqa: E501
+    add_external("res_pdnn", (f"{central_hbt_dir}/res_models/res_prod3/model_fold0.tgz", "v1"))  # noqa: E501
     # non-parametric (flat) training up to mX = 800 GeV
-    add_external("res_dnn", ("/afs/cern.ch/work/m/mrieger/public/hbt/external_files/res_models/res_prod3_nonparam/model_fold0.tgz", "v1"))  # noqa: E501
+    add_external("res_dnn", (f"{central_hbt_dir}/res_models/res_prod3_nonparam/model_fold0.tgz", "v1"))  # noqa: E501
     # non-parametric regression from the resonant analysis
-    add_external("reg_dnn", ("/afs/cern.ch/work/m/mrieger/public/hbt/models/reg_prod1_nonparam/model_fold0_seed0.tgz", "v1"))  # noqa: E501
-    add_external("reg_dnn_moe", ("/afs/cern.ch/work/m/mrieger/public/hbt/models/reg_prod1_nonparam/model_fold0_moe.tgz", "v1"))  # noqa: E501
+    add_external("reg_dnn", (f"{central_hbt_dir}/res_models/reg_prod1_nonparam/model_fold0_seed0.tgz", "v1"))  # noqa: E501
+    add_external("reg_dnn_moe", (f"{central_hbt_dir}/res_models/reg_prod1_nonparam/model_fold0_moe.tgz", "v1"))  # noqa: E501
+    # dnn models trained with run 2 legacy setup but run 3 data
+    for fold in range(5):
+        add_external(f"run3_dnn_fold{fold}_moe", (f"{central_hbt_dir}/run3_models/run3_dnn/model_fold{fold}_moe.tgz", "v1"))  # noqa: E501
+    # simple version of same model for quick comparisons
+    add_external("run3_dnn_simple", (f"{central_hbt_dir}/run3_models/run3_dnn_simple/model_fold0_seed1.tgz", "v1"))
+    # and again with different kl setups
+    add_external("run3_dnn_simple_kl1", (f"{central_hbt_dir}/run3_models/run3_dnn_simple_kl1/model_fold0_seed1.tgz", "v1"))  # noqa: E501
+    add_external("run3_dnn_simple_kl0", (f"{central_hbt_dir}/run3_models/run3_dnn_simple_kl0/model_fold0_seed1.tgz", "v1"))  # noqa: E501
+    add_external("run3_dnn_simple_allkl", (f"{central_hbt_dir}/run3_models/run3_dnn_simple_allkl/model_fold0_seed1.tgz", "v1"))  # noqa: E501
 
     # run specific files
     if run == 2:
@@ -1535,8 +1611,10 @@ def add_config(
         # hh-btag repository with TF saved model directories trained on Run2 UL samples
         add_external("electron_ss", (f"{json_mirror}/POG/EGM/{json_pog_era}/electronSS.json.gz", "v1"))
         add_external("hh_btag_repo", Ext(
-            "/afs/cern.ch/work/m/mrieger/public/hbt/external_files/hh-btag-master-d7a71eb3.tar.gz",
-            subpaths=DotDict(even="hh-btag-master/models/HHbtag_v2_par_0", odd="hh-btag-master/models/HHbtag_v2_par_1"),
+            f"{central_hbt_dir}/hh-btag-master-d7a71eb3.tar.gz",
+            subpaths=DotDict(
+                even="hh-btag-master/models/HHbtag_v2_par_0",
+                odd="hh-btag-master/models/HHbtag_v2_par_1"),
             version="v2",
         ))
     elif run == 3:
@@ -1550,38 +1628,42 @@ def add_config(
         add_external("electron_sf", (f"{json_mirror}/POG/EGM/{json_pog_era}/electron.json.gz", "v1"))
         # electron energy correction and smearing
         add_external("electron_ss", (f"{json_mirror}/POG/EGM/{json_pog_era}/electronSS_EtDependent.json.gz", "v1"))
-        # hh-btag repository with TF saved model directories trained on 22+23 samples using pnet
+        # hh-btag, https://github.com/elviramartinv/HHbtag/tree/CCLUB
         add_external("hh_btag_repo", Ext(
-            "/afs/cern.ch/work/m/mrieger/public/hbt/external_files/hh-btag-master-d7a71eb3.tar.gz",
-            subpaths=DotDict(even="hh-btag-master/models/HHbtag_v3_par_0", odd="hh-btag-master/models/HHbtag_v3_par_1"),
+            f"{central_hbt_dir}/HHbtag-863627a.tar.gz",
+            subpaths=DotDict(
+                even="HHbtag-863627a294472b37073143499ee346e2e0b7160b/models/HHbtag_v3_par_0",
+                odd="HHbtag-863627a294472b37073143499ee346e2e0b7160b/models/HHbtag_v3_par_1"),
             version="v3",
         ))
+        # vbf-hhtag, https://github.com/elviramartinv/VBFjtag/tree/CCLUB
         add_external("vbf_jtag_repo", Ext(
-            "/afs/cern.ch/work/m/mrieger/public/hbt/external_files/VBFjtag-CCLUB_v1.0_4b5c6e8.tar.gz",
+            f"{central_hbt_dir}/VBFjtag-CCLUB-3905dcc.tar.gz",
             subpaths=DotDict(
-                even="VBFjtag-CCLUB_v1.0/models/VBFjTag_par_0",
-                odd="VBFjtag-CCLUB_v1.0/models/VBFjTag_par_1",
+                even="VBFjtag-3905dcce38cbd9e768596542f2e396651fb690f8/models/VBFjTag_par_0",
+                odd="VBFjtag-3905dcce38cbd9e768596542f2e396651fb690f8/models/VBFjTag_par_1",
             ),
             version="v1",
         ))
         # tau energy correction and scale factors
+        tau_pog_era_cclub = f"{year}{cfg.x.full_postfix}"
         if year == 2022:
             tau_pog_era = f"{year}_{'pre' if campaign.has_tag('preEE') else 'post'}EE"
-            tau_pog_era_cclub = f"{year}{'pre' if campaign.has_tag('preEE') else 'post'}EE"
         elif year == 2023:
             tau_pog_era = f"{year}_{'pre' if campaign.has_tag('preBPix') else 'post'}BPix"
-            tau_pog_era_cclub = f"{year}{'pre' if campaign.has_tag('preBPix') else 'post'}BPix"
         else:
             assert False
-        add_external("tau_sf", (f"{json_mirror}/POG/TAU/{json_pog_era}/tau_DeepTau2018v2p5_{tau_pog_era}.json.gz", "v1"))  # noqa: E501
+        # add_external("tau_sf", (f"{json_mirror}/POG/TAU/{json_pog_era}/tau_DeepTau2018v2p5_{tau_pog_era}.json.gz", "v1"))  # noqa: E501
+        # custom corrections from Lucas Russel, blessed by TAU
+        add_external("tau_sf", (f"{central_hbt_dir}/custom_tau_files/tau_DeepTau2018v2p5_{tau_pog_era}.json.gz", "v1"))  # noqa: E501
         # dy weight and recoil corrections
-        add_external("dy_weight_sf", ("/afs/cern.ch/work/m/mrieger/public/mirrors/external_files/DY_pTll_weights_v3.json.gz", "v1"))  # noqa: E501
-        add_external("dy_recoil_sf", ("/afs/cern.ch/work/m/mrieger/public/mirrors/external_files/Recoil_corrections_v3.json.gz", "v1"))  # noqa: E501
+        add_external("dy_weight_sf", (f"{central_hbt_dir}/custom_dy_files/hbt_corrections.json.gz", "v1"))  # noqa: E501
+        add_external("dy_recoil_sf", (f"{central_hbt_dir}/central_dy_files/Recoil_corrections_v3.json.gz", "v1"))  # noqa: E501
 
         # trigger scale factors
         trigger_sf_internal_subpath = "AnalysisCore-59ae66c4a39d3e54afad5733895c33b1fb511c47/data/TriggerScaleFactors"
         add_external("trigger_sf", Ext(
-            f"{trigger_json_mirror}",
+            f"{central_hbt_dir}/AnalysisCore-59ae66c4.tar.gz",
             subpaths=DotDict(
                 muon=f"{trigger_sf_internal_subpath}/{cclub_eras}/temporary_MuHlt_abseta_pt.json",
                 cross_muon=f"{trigger_sf_internal_subpath}/{cclub_eras}/CrossMuTauHlt.json",
@@ -1622,6 +1704,8 @@ def add_config(
             "Muon.*", skip_column("Muon.track_cov*"),
             "Tau.*", skip_column("Tau.track_cov*"),
             f"{cfg.x.met_name}.{{pt,phi,significance,covXX,covXY,covYY}}",
+            # variations created during met phi calibration and that are not registered shifts to the selector
+            f"{cfg.x.met_name}.{{pt,phi}}_{{unsmeared,metphi_*,minbias_xs_*}}",
             "PV.npvs",
             "higgs_family.*",
             "top_family.*",
@@ -1633,7 +1717,27 @@ def add_config(
             "cutflow.*",
         },
         "cf.UniteColumns": {
+            # all columns except for shifts
             "*", *skip_column("*_{up,down}"),
+
+            # columns for typical dnn training
+            # ColumnCollection.MANDATORY_COFFEA,
+            # "tau2_isolated", "leptons_os", "process_id", "channel_id", "*_weight*",
+            # "Electron.{eta,phi,pt,mass,charge}",
+            # "Muon.{eta,phi,pt,mass,charge}",
+            # "Tau.{eta,phi,pt,mass,charge,decayMode}",
+            # "HHBJet.{pt,eta,phi,mass,hhbtag,btagDeepFlav*,btagPNet*}",
+            # "FatJet.{eta,phi,pt,mass}",
+            # f"{cfg.x.met_name}.{{pt,phi,covXX,covXY,covYY}}",
+            # "reg_dnn_nu{1,2}_p{x,y,z}",
+            # "res_dnn_pnet_*",
+            # *skip_column("*_{up,down}"),
+
+            # columns for dnn-based dy weight tests
+            # ColumnCollection.MANDATORY_COFFEA,
+            # "channel_id", "dy_weight",
+            # "keep_in_union", "gen_ll_{pt,pdgid}", "event_weight", "n_jet", "n_btag_pnet", "n_btag_pnet_hhb",
+            # "{ll,bb,llbb}_{pt,eta,phi,mass}", "{jet,lep}1_{pt,eta,phi}", "met_{pt,phi}",
         },
     })
 
@@ -1653,12 +1757,11 @@ def add_config(
         "normalized_pu_weight": get_shifts("minbias_xs"),
         "normalized_isr_weight": get_shifts("isr"),
         "normalized_fsr_weight": get_shifts("fsr"),
-        # TODO: enable again once we have btag cuts
-        # "normalized_njet_btag_deepjet_weight": get_shifts(*(f"btag_{unc}" for unc in cfg.x.btag_unc_names)),
+        "normalized_njet_btag_weight_pnet": get_shifts(*(f"btag_{unc}" for unc in cfg.x.btag_unc_names)),
         "electron_weight": get_shifts("e"),
         "muon_weight": get_shifts("mu"),
         "tau_weight": get_shifts(*(f"tau_{unc}" for unc in cfg.x.tau_unc_names)),
-        "trigger_weight": get_shifts(*(f"trigger_{leg}" for leg in trigger_legs)),
+        "trigger_weight": get_shifts(*(f"trigger_{leg}" for leg in cfg.x.trigger_legs)),
     })
 
     # define per-dataset event weights
@@ -1701,16 +1804,8 @@ def add_config(
     }
 
     ################################################################################################
-    # external configs: channels, categories, met filters, triggers, variables
+    # external configs: categories, met filters, triggers, variables
     ################################################################################################
-
-    # channels
-    cfg.add_channel(name="etau", id=1, label=r"$e\tau_{h}$")
-    cfg.add_channel(name="mutau", id=2, label=r"$\mu\tau_{h}$")
-    cfg.add_channel(name="tautau", id=3, label=r"$\tau_{h}\tau_{h}$")
-    cfg.add_channel(name="ee", id=4, label=r"$ee$")
-    cfg.add_channel(name="mumu", id=5, label=r"$\mu\mu$")
-    cfg.add_channel(name="emu", id=6, label=r"$e\mu$")
 
     # add categories
     from hbt.config.categories import add_categories
@@ -1755,56 +1850,77 @@ def add_config(
     cfg.x.validate_dataset_lfns = limit_dataset_files is None and not sync_mode
 
     # custom lfn retrieval method in case the underlying campaign is custom uhh
-    if cfg.campaign.x("custom", {}).get("creator") == "uhh":
+    if (nano_creator := cfg.campaign.x("custom", {}).get("creator", None)):
+        # check the nano creator and determine the postfix to be added to the fs names (see law_fs.cfg)
+        if nano_creator == "uhh":
+            # custom nano's, usually stored at desy, so no postfix required
+            fs_postfix = ""
+            # ammend when located on CERN resources
+            if not force_desy_resources and env_is_cern:
+                fs_postfix = "_eos"
+        elif nano_creator == "rucio":
+            # rucio nano's, stored on cern eos, so postfix _eos required
+            fs_postfix = "_desy"
+            if not force_desy_resources and env_is_cern:
+                fs_postfix = "_cern"
+        else:
+            raise ValueError(f"unsupported custom campaign creator: {nano_creator}")
+
         def get_dataset_lfns(
             dataset_inst: od.Dataset,
             shift_inst: od.Shift,
             dataset_key: str,
         ) -> list[str]:
             # destructure dataset_key into parts and create the store path
+            # note: this path goes up to the campaign version but _not_ the directory numbering scheme
             dataset_id, full_campaign, tier = dataset_key.split("/")[1:]
             main_campaign, sub_campaign = full_campaign.split("-", 1)
-            path = f"store/{dataset_inst.data_source}/{main_campaign}/{dataset_id}/{tier}/{sub_campaign}/0"
-
-            # nanogen version that is appended to the fs base
-            # note: this feature is not yet used as we do not have different prod* versions per dataset yet
-            # nanogen_version = dataset_inst.x("nanogen_version", None) or cfg.campaign.x.custom["nanogen_version"]
+            path = f"store/{dataset_inst.data_source}/{main_campaign}/{dataset_id}/{tier}/{sub_campaign}"
 
             # lookup file systems to use
-            fs = f"wlcg_fs_{cfg.campaign.x.custom['name']}"
-            local_fs = f"local_fs_{cfg.campaign.x.custom['name']}"
-            # ammend when located on CERN resources
-            if not force_desy_resources and env_is_cern:
-                fs += "_eos"
-                local_fs += "_eos"
+            fs = f"wlcg_fs_{cfg.campaign.x.custom['name']}{fs_postfix}"
+            local_fs = f"local_fs_{cfg.campaign.x.custom['name']}{fs_postfix}"
 
-            # create the lfn base directory, local or remote
+            # determine the fs of the lfn base directory, local or remote
             dir_cls = law.wlcg.WLCGDirectoryTarget
             if law.config.has_section(local_fs):
                 base = law.target.file.remove_scheme(law.config.get_expanded(local_fs, "base"))
-                # if os.path.exists(os.path.join(base, nanogen_version)):
                 if os.path.exists(base):
                     dir_cls = law.LocalDirectoryTarget
                     fs = local_fs
-            # lfn_base = dir_cls(nanogen_version, fs=fs).child(path, type="d")
+
+            # create the lfn base
             lfn_base = dir_cls(path, fs=fs)
 
+            # determine sub directories with numbering scheme
+            if nano_creator == "uhh":
+                # custom nanos are always put into a single directory named "0"
+                lfn_num_bases = [lfn_base.child("0", type="d")]
+            else:  # rucio
+                # query the directory and filter for numbers
+                lfn_num_bases = [lfn_base.child(d, type="d") for d in lfn_base.listdir() if d.isnumeric()]
+
             # loop though files and interpret paths as lfns
-            return sorted(
-                "/" + lfn_base.child(basename, type="f").path.lstrip("/")
-                for basename in lfn_base.listdir(pattern="*.root")
-            )
+            lfns = sum((
+                [
+                    "/" + lfn_num_base.child(basename, type="f").path.lstrip("/")
+                    for basename in lfn_num_base.listdir(pattern="*.root")
+                ]
+                for lfn_num_base in lfn_num_bases
+            ), [])
+
+            return sorted(lfns)
 
         # define the lfn retrieval function
         cfg.x.get_dataset_lfns = get_dataset_lfns
 
         # define a custom sandbox
-        cfg.x.get_dataset_lfns_sandbox = dev_sandbox("bash::$CF_BASE/sandboxes/cf.sh")
+        cfg.x.get_dataset_lfns_sandbox = dev_sandbox("bash::$HBT_BASE/sandboxes/venv_hbt.sh")
 
-        # define custom remote fs's to look at
+        # define custom remote fs's to look at during lfn itertation when reading files
         cfg.x.get_dataset_lfns_remote_fs = lambda dataset_inst: [
-            f"local_fs_{cfg.campaign.x.custom['name']}",
-            f"wlcg_fs_{cfg.campaign.x.custom['name']}",
+            f"local_fs_{cfg.campaign.x.custom['name']}{fs_postfix}",
+            f"wlcg_fs_{cfg.campaign.x.custom['name']}{fs_postfix}",
         ]
 
     return cfg

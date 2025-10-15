@@ -3,14 +3,16 @@
 """
 Producers that determine the generator-level particles related to a top quark decay.
 """
-import numpy as np
+
+from __future__ import annotations
+
 from columnflow.production import Producer, producer
 from columnflow.util import maybe_import
 from columnflow.columnar_util import set_ak_column
 from columnflow.production.util import attach_coffea_behavior
-from columnflow.columnar_util import EMPTY_FLOAT, EMPTY_INT
-from functools import partial
+from hbt.production.higgs_decay_products import fill_none_fields, shape_array
 
+np = maybe_import("numpy")
 ak = maybe_import("awkward")
 
 
@@ -28,8 +30,8 @@ def top_decay_products(self: Producer, events: ak.Array, **kwargs) -> ak.Array:
         [
             # event 1
             [
-                [t1,t2], [b_t1, b_t2], [W_t1, W_t2], [q_1, q_2], [qbar_1, qbar_2], [l_1, l_2], [lbar_1, lbar_2],
-                [nu_1, nu_2], [nubar_1, nubar_2]
+                [t1,t2], [b_t1, b_t2], [W_t1, W_t2], [q_1, q_2], [qbar_1, qbar_2], [l_2], [lbar_1],
+                [nu_1], [nubar_2]
             ],
             # event 2
             ...
@@ -38,8 +40,6 @@ def top_decay_products(self: Producer, events: ak.Array, **kwargs) -> ak.Array:
     where the first entry in each array belongs to the first top, and the second entry in each array belongs to the
     second top.
     """
-    from IPython import embed
-    embed(header="top_decay_products")
 
     # find hard top quarks
     mother_gen_flags = ["isLastCopy", "fromHardProcess"]
@@ -77,67 +77,43 @@ def top_decay_products(self: Producer, events: ak.Array, **kwargs) -> ak.Array:
     leps = ak.concatenate([
         w_children[w_children.pdgId == 11], w_children[w_children.pdgId == 13], w_children[w_children.pdgId == 15],
     ], axis=3)
-    leps = ak.flatten(leps, axis=3)
-    leps = ak.firsts(leps, axis=2)
+    leps = shape_array(leps, pad_to=1)
 
     antileps = ak.concatenate([
         w_children[w_children.pdgId == -11], w_children[w_children.pdgId == -13], w_children[w_children.pdgId == -15],
     ], axis=3)
-    antileps = ak.flatten(antileps, axis=3)
-    antileps = ak.firsts(antileps, axis=2)
+    antileps = shape_array(antileps, pad_to=1)
+    # antileps = ak.flatten(antileps, axis=3)
+    # antileps = ak.firsts(antileps, axis=2)
 
     neutrinos = ak.concatenate([
         w_children[w_children.pdgId == 12], w_children[w_children.pdgId == 14], w_children[w_children.pdgId == 16],
     ], axis=3)
-    neutrinos = ak.flatten(neutrinos, axis=3)
-    neutrinos = ak.firsts(neutrinos, axis=2)
+    neutrinos = shape_array(neutrinos, pad_to=1)
 
     antineutrinos = ak.concatenate([
         w_children[w_children.pdgId == -12], w_children[w_children.pdgId == -14], w_children[w_children.pdgId == -16],
     ], axis=3)
-    antineutrinos = ak.flatten(antineutrinos, axis=3)
-    antineutrinos = ak.firsts(antineutrinos, axis=2)
+    antineutrinos = shape_array(antineutrinos, pad_to=1)
 
     other_w_children = w_bosons.distinctChildrenDeep[abs(w_bosons.distinctChildrenDeep.pdgId) > 18]
     other_w_children = other_w_children[other_w_children.hasFlags("isFirstCopy")]
     other_w_children = ak.firsts(other_w_children, axis=2)
-
     # build the column
-    top_family = ak.concatenate([
-        tops[:, None, :],
-        bottoms[:, None, :],
-        w_bosons[:, None, :],
-        qq[:, None, :],
-        qbarqbar[:, None, :],
-        leps[:, None, :],
-        antileps[:, None, :],
-        neutrinos[:, None, :],
-        antineutrinos[:, None, :],
-        other_w_children[:, None, :],
-    ], axis=1)
 
-    # save the column: Keep Nones from being saved
-    set_ak_column_f32 = partial(set_ak_column, value_type=np.float32)
-    set_ak_column_i32 = partial(set_ak_column, value_type=np.int32)
+    top_family = ak.zip({
+        "tops": fill_none_fields(tops),
+        "bottoms": fill_none_fields(bottoms),
+        "w_bosons": fill_none_fields(w_bosons),
+        "qq": fill_none_fields(qq),
+        "qbarqbar": fill_none_fields(qbarqbar),
+        "leps": fill_none_fields(leps),
+        "antileps": fill_none_fields(antileps),
+        "neutrinos": fill_none_fields(neutrinos),
+        "antineutrinos": fill_none_fields(antineutrinos),
+        "other_w_children": fill_none_fields(other_w_children),
+    }, with_name="top_family", depth_limit=1)
 
-    float_fields = ("eta", "mass", "phi", "pt", "vx", "vy", "vz", "iso")
-    for field in top_family.fields:
-        if field in float_fields:
-            events = set_ak_column_f32(events, f"top_family.{field}", ak.fill_none(top_family[field], EMPTY_FLOAT))
-        else:
-            events = set_ak_column_i32(events, f"top_family.{field}", ak.fill_none(top_family[field], EMPTY_INT))
+    events = set_ak_column(events, "top_family", top_family)
 
     return events
-
-
-# @top_decay_products.skip
-# def gen_top_decay_products_skip(self: Producer) -> bool:
-#     """
-#     Custom skip function that checks whether the dataset is a MC simulation containing top
-#     quarks in the first place.
-#     """
-#     # never skip when there is not dataset
-#     if not getattr(self, "dataset_inst", None):
-#         return False
-
-#     return self.dataset_inst.is_data or not self.dataset_inst.has_tag("has_top")

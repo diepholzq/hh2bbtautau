@@ -4,7 +4,6 @@
 Custom event and object reducers.
 """
 # from IPython import embed; embed(header="reduction/default.py")
-print("pre imports")
 from columnflow.reduction import Reducer, reducer
 from columnflow.reduction.default import cf_default
 from columnflow.production.cms.dy import gen_dilepton, recoil_corrected_met
@@ -12,15 +11,11 @@ from columnflow.production.cms.top_pt_weight import gen_parton_top as cf_gen_par
 from columnflow.util import maybe_import
 
 from hbt.util import IF_DATASET_HAS_TOP, IF_DATASET_IS_DY
-print("post imports")
-# from hbt.production.higgs_decay_products import higgs_decay_products
-from hbt.production.top_decay_products import top_decay_products
-print("imported top...")
+from hbt.production.higgs_decay_products import higgs_decay_products
+# from hbt.production.top_decay_products import top_decay_products
 ak = maybe_import("awkward")
 
 gen_parton_top = cf_gen_parton_top.derive("gen_parton_top", cls_dict={"require_dataset_tag": None})
-
-print("pre reducer func")
 
 
 @reducer(
@@ -28,23 +23,22 @@ print("pre reducer func")
         cf_default,
         IF_DATASET_HAS_TOP(gen_parton_top),
         IF_DATASET_IS_DY(gen_dilepton, recoil_corrected_met),
-        # higgs_decay_products,
-        top_decay_products,
+        higgs_decay_products,
+        # top_decay_products,
     },
     produces={
         cf_default,
         IF_DATASET_HAS_TOP(gen_parton_top),
         IF_DATASET_IS_DY(gen_dilepton, recoil_corrected_met),
-        # higgs_decay_products,
-        top_decay_products,
+        higgs_decay_products,
+        # top_decay_products,
     },
 )
 def default(self: Reducer, events: ak.Array, selection: ak.Array, **kwargs) -> ak.Array:
-    print("here")
     # run cf's default reduction which handles event selection and collection creation
     events = self[cf_default](events, selection, **kwargs)
-    # events = self[higgs_decay_products](events, **kwargs)
-    events = self[top_decay_products](events, **kwargs)
+    events = self[higgs_decay_products](events, **kwargs)
+    # events = self[top_decay_products](events, **kwargs)
 
     # add generator particles, depending on the dataset
     if self.has_dep(gen_parton_top):

@@ -4,12 +4,18 @@
 Definition of categories.
 """
 
+from __future__ import annotations
+
 import functools
 
+import law
 import order as od
 
-from columnflow.config_util import add_category, create_category_combinations, CategoryGroup
+from columnflow.config_util import add_category, create_category_combinations, CategoryGroup, track_category_changes
 from columnflow.types import Any
+
+
+logger = law.logger.get_logger(__name__)
 
 
 def add_categories(config: od.Config) -> None:
@@ -19,6 +25,9 @@ def add_categories(config: od.Config) -> None:
     # root category (-1 has special meaning in cutflow)
     root_cat = add_category(config, name="all", id=-1, selection="cat_all", label="")
     _add_category = functools.partial(add_category, parent=root_cat)
+
+    # reset the maximum category id counter
+    od.Category._max_id = 0
 
     # lepton channels
     _add_category(config, name="etau", id=1, selection="cat_etau", label=config.channels.n.etau.label)
@@ -98,7 +107,9 @@ def add_categories(config: od.Config) -> None:
         config=config,
         categories=main_categories,
         name_fn=name_fn,
+        parent_mode="safe",
         kwargs_fn=functools.partial(kwargs_fn, add_qcd_group=True),
+        skip_existing=False,
     )
 
     # control categories
@@ -129,6 +140,10 @@ def add_categories(config: od.Config) -> None:
         config=config,
         categories=control_categories,
         name_fn=name_fn,
+        parent_mode="safe",
         kwargs_fn=functools.partial(kwargs_fn, add_qcd_group=False),
+        skip_existing=False,
         skip_fn=skip_fn_ctrl,
     )
+
+    track_category_changes(config)

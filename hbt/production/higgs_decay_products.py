@@ -1,23 +1,23 @@
 # coding: utf-8
-import numpy as np
-
 
 """
 Producers that determine the generator-level particles related to the HH2BBTauTau process.
 """
+
+from __future__ import annotations
 
 from columnflow.production import Producer, producer
 from columnflow.util import maybe_import
 from columnflow.columnar_util import set_ak_column
 from columnflow.production.util import attach_coffea_behavior
 from columnflow.columnar_util import attach_coffea_behavior as attach_coffea_behavior_fn, EMPTY_FLOAT, EMPTY_INT
-# from functools import partial
 
+np = maybe_import("numpy")
 ak = maybe_import("awkward")
 
 
 # Define helper functions
-def shape_array(input_array: ak.Array) -> ak.Array:
+def shape_array(input_array: ak.Array, pad_to: int = 2) -> ak.Array:
     """Shapes the input array so it can be correctly concatenated later
     Args:
         input_array (ak.Array): The array to be shaped
@@ -26,14 +26,34 @@ def shape_array(input_array: ak.Array) -> ak.Array:
     """
     output_array = ak.flatten(input_array, axis=3)
     output_array = ak.flatten(output_array, axis=2)
-    output_array = ak.pad_none(output_array, 2, axis=1)
+    output_array = ak.pad_none(output_array, pad_to, axis=1, clip=True)
 
     return output_array
 
 
+def fill_none_fields(array):
+    """Fills None values with EMPTY_INT/EMPTY_FLOAT depending on field type for ReduceEvents step
+    """
+    float_fields = ("eta", "mass", "phi", "pt", "vx", "vy", "vz", "iso")
+    skip_fields = ("genPartIdxMother", "genPartIdxMotherG", "distinctParentIdxG", "childrenIdxG",
+        "distinctChildrenIdxG", "distinctChildrenDeepIdxG")
+    if not hasattr(array, "fields"):
+        return array
+    new_dict = {}
+    for field in array.fields:
+        if field in skip_fields:
+            continue
+        elif field in float_fields:
+            new_dict[field] = ak.values_astype(ak.fill_none(array[field], EMPTY_FLOAT), type(EMPTY_FLOAT))
+        else:
+            new_dict[field] = ak.values_astype(ak.fill_none(array[field], EMPTY_INT), type(EMPTY_INT))
+    array = ak.zip({field: new_dict[field] for field in new_dict.keys()})
+    return array
+
+
 @producer(
     uses={"GenPart.*", attach_coffea_behavior},
-    produces={"higgs_family.*"},  # "bottoms_inv_mass", "taus_inv_mass"},
+    produces={"higgs_family.*"},
 )
 def higgs_decay_products(self: Producer, events: ak.Array, **kwargs):
     # TODO: change
@@ -45,8 +65,8 @@ def higgs_decay_products(self: Producer, events: ak.Array, **kwargs):
         [
             # event 1
             [
-                [H_bb, H_tautau], [b+, b-], [tau+, tau-], [W+, W-], [tau+ nu, tau- nu], [mu+, mu-], [e+, e-],
-                [mu- nu, mu+ nu], [e- mu, e+ mu]
+                [H_bb, H_tautau], [b+, b-], [tau+, tau-], [W+, W-], [tau+ lep. decay products, tau- lep. decay products],
+                [tau+ hadr. decay products, tau- hadr. decay products]
             ],
             # event 2
             ...
@@ -147,8 +167,8 @@ def higgs_decay_products(self: Producer, events: ak.Array, **kwargs):
     tau_plus_children = ak.pad_none(tau_plus_children, 1)
 
     tau_hadronic_children = ak.concatenate([
-        tau_minus_children[:, None],
         tau_plus_children[:, None],
+        tau_minus_children[:, None],
     ], axis=1)
 
     # qq = taus.children[taus.children.pdgId > 0]
@@ -202,23 +222,6 @@ def higgs_decay_products(self: Producer, events: ak.Array, **kwargs):
     #     tau_hadronic_children[:, None, :]
     # ], axis=1)
 
-    def fill_none_fields(array):
-        float_fields = ("eta", "mass", "phi", "pt", "vx", "vy", "vz", "iso")
-        skip_fields = ("genPartIdxMother", "genPartIdxMotherG", "distinctParentIdxG", "childrenIdxG",
-            "distinctChildrenIdxG", "distinctChildrenDeepIdxG")
-        if not hasattr(array, "fields"):
-            return array
-        new_dict = {}
-        for field in array.fields:
-            if field in skip_fields:
-                continue
-            elif field in float_fields:
-                new_dict[field] = ak.values_astype(ak.fill_none(array[field], EMPTY_FLOAT), type(EMPTY_FLOAT))
-            else:
-                new_dict[field] = ak.values_astype(ak.fill_none(array[field], EMPTY_INT), type(EMPTY_INT))
-        array = ak.zip({field: new_dict[field] for field in new_dict.keys()})
-        return array
-
     higgs_family = ak.zip({
         "higgs": fill_none_fields(higgs_combined),
         "bottoms": fill_none_fields(bottoms),
@@ -231,16 +234,3 @@ def higgs_decay_products(self: Producer, events: ak.Array, **kwargs):
     }, with_name="higgs_family", depth_limit=1)
     events = set_ak_column(events, "higgs_family", higgs_family)
     return events
-
-
-# @top_decay_products.skip
-# def gen_top_decay_products_skip(self: Producer) -> bool:
-#     """
-#     Custom skip function that checks whether the dataset is a MC simulation containing top
-#     quarks in the first place.
-#     """
-#     # never skip when there is not dataset
-#     if not getattr(self, "dataset_inst", None):
-#         return False
-
-#     return self.dataset_inst.is_data or not self.dataset_inst.has_tag("has_top")

@@ -15,13 +15,12 @@ from columnflow.columnar_util import attach_coffea_behavior, default_coffea_coll
 
 from hbt.production.weights import (
     stitched_normalization_weights_dy_tautau_drop, normalized_pu_weight, normalized_pdf_weight,
-    normalized_murmuf_weight, normalized_ps_weights,
+    normalized_murmuf_weight, normalized_ps_weights, normalized_btag_weights_deepjet, normalized_btag_weights_pnet,
 )
-from hbt.production.btag import normalized_btag_weights_deepjet, normalized_btag_weights_pnet
 from hbt.production.tau import tau_weights
 from hbt.production.trigger_sf import trigger_weight
 # from hbt.production.pdf_input_vars_reco import create_pdf_input_vars_reco_higgs
-from hbt.production.create_pdf_input_vars import create_pdf_input_vars_top
+from hbt.production.create_pdf_input_vars import create_pdf_input_vars_top_ditau_higgs
 # from hbt.production.res_networks import reg_dnn, reg_dnn_moe
 from hbt.util import IF_DATASET_HAS_LHE_WEIGHTS, IF_RUN_3
 
@@ -36,15 +35,18 @@ top_pt_weight = cf_top_pt_weight.derive("top_pt_weight", cls_dict={"require_data
         category_ids, stitched_normalization_weights_dy_tautau_drop, normalized_pu_weight, normalized_ps_weights,
         normalized_btag_weights_deepjet, IF_RUN_3(normalized_btag_weights_pnet),
         IF_DATASET_HAS_LHE_WEIGHTS(normalized_pdf_weight,
-        normalized_murmuf_weight), create_pdf_input_vars_top,
+        normalized_murmuf_weight), create_pdf_input_vars_top_ditau_higgs,
         # weight producers added dynamically if produce_weights is set
     },
     produces={
         category_ids, stitched_normalization_weights_dy_tautau_drop, normalized_pu_weight, normalized_ps_weights,
         normalized_btag_weights_deepjet, IF_RUN_3(normalized_btag_weights_pnet),
         IF_DATASET_HAS_LHE_WEIGHTS(normalized_pdf_weight,
-        normalized_murmuf_weight), create_pdf_input_vars_top,
+        normalized_murmuf_weight), create_pdf_input_vars_top_ditau_higgs,
         # weight producers added dynamically if produce_weights is set
+    },
+    shifts={
+        "minbias_xs_{up,down}",  # PuppiMET used in categories, and depends on pu/minbias_xs through met phi correction
     },
     # whether weight producers should be added and called
     produce_weights=True,
@@ -61,7 +63,7 @@ def default(self: Producer, events: ak.Array, **kwargs) -> ak.Array:
     if self.dataset_inst.is_mc:
         # normalization weights
         # events = self[reg_dnn_moe](events, **kwargs)
-        events = self[create_pdf_input_vars_top](events, **kwargs)
+        events = self[create_pdf_input_vars_top_ditau_higgs](events, **kwargs)
         # events = self[create_pdf_input_vars_reco_higgs](events, **kwargs)
         events = self[stitched_normalization_weights_dy_tautau_drop](events, **kwargs)
 

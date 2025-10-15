@@ -18,6 +18,7 @@ from hbt.util import MET_COLUMN
 np = maybe_import("numpy")
 ak = maybe_import("awkward")
 
+
 logger = law.logger.get_logger(__name__)
 
 
@@ -27,7 +28,7 @@ logger = law.logger.get_logger(__name__)
         "Jet.{pt,eta,phi,mass}",
         MET_COLUMN("{pt,phi}"),
     },
-    sandbox=dev_sandbox("bash::$HBT_BASE/sandboxes/venv_columnar_tf.sh"),
+    sandbox=dev_sandbox("bash::$HBT_BASE/sandboxes/venv_hbt.sh"),
 )
 def hhbtag(
     self: Producer,
@@ -39,6 +40,10 @@ def hhbtag(
     """
     Returns the HHBtag score per passed jet.
     """
+    # start the evaluator
+    if not self.evaluator.running:
+        self.evaluator.start()
+
     # get a mask of events where there are at least two tau candidates and at least two jets
     # and only get the scores for jets in these events
     event_mask = (
@@ -172,6 +177,9 @@ def hhbtag(
 
 @hhbtag.init
 def hhbtag_init(self: Producer, **kwargs) -> None:
+    # get the model version (coincides with the external file version)
+    self.hhbtag_version = self.config_inst.x.external_files.hh_btag_repo.version
+
     # produce input columns
     self.hhbtag_version = self.config_inst.x.external_files.hh_btag_repo.version
     if self.config_inst.x.sync:
@@ -206,14 +214,14 @@ def hhbtag_setup(
     """
     from hbt.ml.tf_evaluator import TFEvaluator
 
+    if not getattr(task, "taf_tf_evaluator", None):
+        task.taf_tf_evaluator = TFEvaluator()
+    self.evaluator = task.taf_tf_evaluator
+
     # unpack the external files bundle and setup the evaluator
     bundle = reqs["external_files"]
-    self.evaluator = TFEvaluator()
     self.evaluator.add_model("hhbtag_even", bundle.files.hh_btag_repo.even.abspath)
     self.evaluator.add_model("hhbtag_odd", bundle.files.hh_btag_repo.odd.abspath)
-
-    # get the model version (coincides with the external file version)
-    self.hhbtag_version = self.config_inst.x.external_files.hh_btag_repo.version
 
     # prepare mappings for the HHBtag model (see links above for mapping information)
     channel_map = {
@@ -257,14 +265,13 @@ def hhbtag_setup(
             f"{self.config_inst.x.met_name}",
         )
 
-    # start the evaluator
-    self.evaluator.start()
-
 
 @hhbtag.teardown
-def hhbtag_teardown(self: Producer, **kwargs) -> None:
+def hhbtag_teardown(self: Producer, task: law.Task, **kwargs) -> None:
     """
     Stops the TF evaluator.
     """
-    if (evaluator := getattr(self, "evaluator", None)) is not None:
+    if (evaluator := getattr(task, "taf_tf_evaluator", None)):
         evaluator.stop()
+    task.taf_tf_evaluator = None
+    self.evaluator = None
