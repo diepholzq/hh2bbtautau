@@ -636,25 +636,32 @@ def add_variables(config: od.Config) -> None:
     )
     add_variable(
         config,
-        name="higgs_fam_cos_theta_cms_h_2_tau_1",
-        expression="pdf_input_vars.cos_theta_cms_h2_tau1",
+        name="higgs_fam_cos_theta_cms_h_2_tau_vis1",
+        expression="pdf_input_vars.cos_theta_cms_h2_tau_vis1",
         binning=(50, -1, 1),
-        x_title=r"$cos(\theta(\tau_1^{H_2})$",
+        x_title=r"$cos(\theta(\tau_{vis,1}^{H_2})$",
     )
     add_variable(
         config,
-        name="higgs_fam_phi_cms_h_2_tau_1",
-        expression="pdf_input_vars.phi_cms_h2_tau1",
+        name="higgs_fam_phi_cms_h_2_tau_vis1",
+        expression="pdf_input_vars.phi_cms_h2_tau_vis1",
         binning=(50, -3.14, 3.14),
         unit="rad",
-        x_title=r"$\phi(\tau_1^{H_2})$",
+        x_title=r"$\phi(\tau_{vis,1}^{H_2})$",
     )
     add_variable(
         config,
-        name="higgs_fam_cos_theta_cms_h_1_b_1",
+        name="higgs_fam_cos_theta_cms_h1_b1",
         expression="pdf_input_vars.cos_theta_cms_h1_b1",  # CHANGE
         binning=(50, -1, 1),
         x_title=r"$cos(\theta(b_1^{H_1}))$",
+    )
+    add_variable(
+        config,
+        name="higgs_fam_cos_theta_cms_h1_b2",
+        expression="pdf_input_vars.cos_theta_cms_h1_b2",  # CHANGE
+        binning=(50, -1, 1),
+        x_title=r"$cos(\theta(b_2^{H_1}))$",
     )
     add_variable(
         config,
@@ -664,6 +671,141 @@ def add_variables(config: od.Config) -> None:
         unit="rad",
         x_title=r"$\phi(b_1^{H_1})$",
     )
+    add_variable(
+        config,
+        name="higgs_reco_hh_mass",
+        expression="pdf_input_vars_reco_higgs.dihiggs_mass",
+        binning=(50, 0, 1250),
+        unit="GeV",
+        x_title=r"$m_{inv}(H_{bb}, H_{\tau\tau})$",
+    )
+    add_variable(
+        config,
+        name="higgs_reco_hh_pt",
+        expression="pdf_input_vars_reco_higgs.dihiggs_system_pt",
+        binning=(50, 0, 1000),
+        unit="GeV",
+        x_title=r"$p_{T}(H_{bb}, H_{\tau\tau})$",
+    )
+    add_variable(
+        config,
+        name="higgs_reco_hh_pz",
+        expression="pdf_input_vars_reco_higgs.dihiggs_system_pz",
+        binning=(100, -1500, 1500),
+        unit="GeV",
+        x_title=r"$p_{z}(H_{bb}, H_{\tau\tau})$",
+    )
+    add_variable(
+        config,
+        name="higgs_reco_hh_phi",
+        expression="pdf_input_vars_reco_higgs.dihiggs_system_phi",
+        binning=(50, -3.3, 3.3),
+        unit="GeV",
+        x_title=r"$\phi(H_{bb}, H_{\tau\tau})$",
+    )
+    add_variable(
+        config,
+        name="higgs_reco_h1_cos_theta",
+        expression="pdf_input_vars_reco_higgs.cos_theta_h1",
+        binning=(50, -1, 1),
+        x_title=r"$cos(\theta(H_1^{HH}))$",
+    )
+    add_variable(
+        config,
+        name="higgs_reco_phi_cms_hh_h_1",
+        expression="pdf_input_vars_reco_higgs.phi_h1",
+        binning=(50, -3.14, 3.14),
+        unit="rad",
+        x_title=r"$\phi(H_1^{HH})$",
+    )
+    add_variable(
+        config,
+        name="higgs_reco_cos_theta_cms_h_2_tau_vis1",
+        expression="pdf_input_vars_reco_higgs.cos_theta_cms_h2_tau_vis1",
+        binning=(50, -1, 1),
+        x_title=r"$cos(\theta(\tau_{vis,1}^{H_2})$",
+    )
+    add_variable(
+        config,
+        name="higgs_reco_phi_cms_h_2_tau_vis1",
+        expression="pdf_input_vars_reco_higgs.phi_cms_h2_tau_vis1",
+        binning=(50, -3.14, 3.14),
+        unit="rad",
+        x_title=r"$\phi(\tau_{vis,1}^{H_2})$",
+    )
+    add_variable(
+        config,
+        name="higgs_reco_cos_theta_cms_h1_b1",
+        expression="pdf_input_vars_reco_higgs.cos_theta_cms_h1_b1",  # CHANGE
+        binning=(50, -1, 1),
+        x_title=r"$cos(\theta(b_1^{H_1}))$",
+    )
+    add_variable(
+        config,
+        name="higgs_reco_phi_cms_h_1_b_1",
+        expression="pdf_input_vars_reco_higgs.phi_cms_h1_b1",
+        binning=(50, -3.14, 3.14),
+        unit="rad",
+        x_title=r"$\phi(b_1^{H_1})$",
+    )
+    add_variable(
+        config, aux={"overflow": False, "underflow": False},
+        name="sl_ch_id_truth",
+        expression="channel_truth.sl_ch_id_truth",
+        binning=(3, 0.5, 3.5),
+        x_title="ch_id 1,2 are: 1: dl, 2: sl, 3: fh",
+    )
+    add_variable(
+        config, aux={"overflow": False, "underflow": False},
+        name="fh_ch_id_truth",
+        expression="channel_truth.fh_ch_id_truth",
+        binning=(3, 0.5, 3.5),
+        x_title="ch_id 3 is: 1: dl, 2: sl, 3: fh",
+    )
+
+    # add_variable
+    #     config, aux={"overflow": False, "underflow": False},
+    #     name="sl_ch_id_is_dilep",
+    #     expression="channel_truth.sl_ch_id_is_dilep",
+    #     binning=(2, -0.5, 1.5),
+    #     x_title="Channels 1 and 2 are dileptonic",
+    # )
+    # add_variable(
+    #     config, aux={"overflow": False, "underflow": False},
+    #     name="sl_ch_id_is_semilep",
+    #     expression="channel_truth.sl_ch_id_is_semilep",
+    #     binning=(2, -0.5, 1.5),
+    #     x_title="Channels 1 and 2 are semileptonic",
+    # )
+    # add_variable(
+    #     config, aux={"overflow": False, "underflow": False},
+    #     name="sl_ch_id_is_full_hadr",
+    #     expression="channel_truth.sl_ch_id_is_full_hadr",
+    #     binning=(2, -0.5, 1.5),
+    #     x_title="Channels 1 and 2 are full hadronic",
+    # )
+    # add_variable(
+    #     config, aux={"overflow": False, "underflow": False},
+    #     name="fh_ch_id_is_dilep",
+    #     expression="channel_truth.fh_ch_id_is_dilep",
+    #     binning=(2, -0.5, 1.5),
+    #     x_title="Channel 3 is dileptonic",
+    # )
+    # add_variable(
+    #     config, aux={"overflow": False, "underflow": False},
+    #     name="fh_ch_id_is_semilep",
+    #     expression="channel_truth.fh_ch_id_is_semilep",
+    #     binning=(2, -0.5, 1.5),
+    #     x_title="Channel 3 is semileptonic",
+    # )
+    # add_variable(
+    #     config, aux={"overflow": False, "underflow": False},
+    #     name="fh_ch_id_is_full_hadr",
+    #     expression="channel_truth.fh_ch_id_is_full_hadr",
+    #     binning=(2, -0.5, 1.5),
+    #     x_title="Channel 3 is full hadronic",
+    # )
+
     # add_variable(
     #     config,
     #     name="higgs_fam_h_bb_pt",
