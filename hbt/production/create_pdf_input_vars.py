@@ -216,9 +216,9 @@ def create_pdf_input_vars_top_ditau(self: Producer, events: ak.Array, **kwargs) 
     # Build inputs
     # s_hat_system
     M_2tau_vis_2b = tbar_vis.add(t_vis).mass
-    pt_2tau_vis_2b = tbar_vis.add(t_vis).pt
-    pz_2tau_vis_2b = tbar_vis.add(t_vis).pz
-    phi_2tau_vis_2b = tbar_vis.add(t_vis).phi
+    # pt_2tau_vis_2b = tbar_vis.add(t_vis).pt
+    # pz_2tau_vis_2b = tbar_vis.add(t_vis).pz
+    # phi_2tau_vis_2b = tbar_vis.add(t_vis).phi
 
     # t_vis system
     # boost t_vis and tbar_vis in cms of s_hat_system
@@ -234,8 +234,8 @@ def create_pdf_input_vars_top_ditau(self: Producer, events: ak.Array, **kwargs) 
     y_t_vis_cms_s_hat = np.nan_to_num(y_t_vis_cms_s_hat)
     # y_t_vis_cms_s_hat = ak.firsts(np.nan_to_num(y_t_vis_cms_s_hat))
     # rapidity difference and phi
-    y_diff_ttbar = y_t_vis_cms_s_hat - y_tbar_vis_cms_s_hat
-    phi_t_vis_cms_s_hat = t_vis_cms_s_hat.phi
+    # y_diff_ttbar = y_t_vis_cms_s_hat - y_tbar_vis_cms_s_hat
+    # phi_t_vis_cms_s_hat = t_vis_cms_s_hat.phi
 
     # b and tau_vis system
     cos_theta_star = 2 * t_vis.mass**2 / (175**2 - 80.3**2 - 1.7**2) - 1

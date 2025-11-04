@@ -8,11 +8,13 @@ ak = maybe_import("awkward")
 
 @producer(
     uses={"gen_top.*", "channel_id"},
-    produces={"channel_truth.*"},
+    produces={"channel_truth.*", "channel_truth_sums.*"},
 )
 def channel_truth(self: Producer, events: ak.Array, **kwargs) -> ak.Array:
     """Information on how the different decay channels(1-3) defined by channel_id on gen are composed on gen_lvl
     """
+    # from IPython import embed
+    # embed(header="channel_truth")
     gen_top = events.gen_top
     # pi_zero = tau_minus_children[tau_minus_children.pdgId == 111]
     # pi_plus = tau_minus_children[tau_minus_children.pdgId == 211]
@@ -22,117 +24,121 @@ def channel_truth(self: Producer, events: ak.Array, **kwargs) -> ak.Array:
     # K_minus = tau_minus_children[tau_minus_children.pdgId == -321]
 
     # Define decay channel maks from gen data
-    tau_h_mask = abs(gen_top.w_tau_children.pdgId == 111)
-    dilep_mask = ak.all(abs(gen_top.w_children.pdgId[:, :, 0]) >= 11, axis=1)
+    print(set(ak.sort(ak.ravel(gen_top.w_tau_children.pdgId))))
+    # tau_mask = ak.any(ak.any(abs(gen_top.w_children.pdgId) == 15, axis=2), axis=1)
+    tau_h_mask = ak.any(ak.any(ak.any(abs(gen_top.w_tau_children.pdgId) >= 111, axis=3), axis=2), axis=1)
+    tau_h_mask = tau_h_mask
+    tau_l_mask = ak.any(ak.any(ak.any(abs(gen_top.w_tau_children.pdgId) < 16, axis=3), axis=2), axis=1)
+    tau_l_mask = tau_l_mask
+    e_mask = ak.any(ak.any(abs(gen_top.w_children.pdgId) == 11, axis=2), axis=1)
+    e_mask = e_mask
+    mu_mask = ak.any(ak.any(abs(gen_top.w_children.pdgId) == 13, axis=2), axis=1)
+    mu_mask = mu_mask
+    qq_mask = ak.any(ak.any(abs(gen_top.w_children.pdgId) <= 6, axis=2), axis=1)
+    qq_mask = qq_mask
 
-    semilep_mask = ak.all(ak.concatenate([
-        ak.any(abs(gen_top.w_children.pdgId[:, :, 0]) >= 11, axis=1)[:, None],
-        ak.any(abs(gen_top.w_children.pdgId[:, :, 0]) < 11, axis=1)[:, None],
-    ], axis=1), axis=1)
-    semilep_e_mask = ak.all(ak.concatenate([
-        ak.any(abs(gen_top.w_children.pdgId[:, :, 0]) == 11, axis=1)[:, None],
-        ak.any(abs(gen_top.w_children.pdgId[:, :, 0]) < 11, axis=1)[:, None],
-    ], axis=1), axis=1)
-    semilep_mu_mask = ak.all(ak.concatenate([
-        ak.any(abs(gen_top.w_children.pdgId[:, :, 0]) == 13, axis=1)[:, None],
-        ak.any(abs(gen_top.w_children.pdgId[:, :, 0]) < 11, axis=1)[:, None],
-    ], axis=1), axis=1)
-    semilep_tau_mask = ak.all(ak.concatenate([
-        ak.any(abs(gen_top.w_children.pdgId[:, :, 0]) == 15, axis=1)[:, None],
-        ak.any(abs(gen_top.w_children.pdgId[:, :, 0]) < 11, axis=1)[:, None],
-    ], axis=1), axis=1)
+    mask_dict = {}
+    idx = 0
+    part_list = ["e", "mu", "qq", "tau_l", "tau_h"]
+    part_list2 = part_list
 
-    full_hadr_mask = ak.all(abs(gen_top.w_children.pdgId[:, :, 0]) < 11, axis=1)
+    for part1 in part_list:
+        if idx == 0:
+            for part2 in part_list:
+                if part1 == part2:
+                    continue
+                mask_dict[f"{part1}_{part2}_mask"] = ak.all(ak.concatenate([eval(part1 + "_mask")[:, None],
+                eval(part2 + "_mask")[:, None]], axis=1), axis=1)
+            idx += 1
+        else:
+            part_list2 = part_list[idx:]
+            for part2 in part_list2:
+                if part1 == part2:
+                    continue
+                mask_dict[f"{part1}_{part2}_mask"] = ak.all(ak.concatenate([eval(part1 + "_mask")[:, None],
+                eval(part2 + "_mask")[:, None]], axis=1), axis=1)
+            idx += 1
 
+    # mask_dict["gen_ch1_mask"] = gen_ch1_mask
+    # mask_dict["gen_ch2_mask"] = gen_ch2_mask
+    # mask_dict["gen_ch3_mask"] = gen_ch3_mask
+    mask_dict["e_e_mask"] = ak.all(ak.concatenate([
+        ak.any(ak.any(gen_top.w_children.pdgId == 11, axis=2), axis=1)[:, None],
+        ak.any(ak.any(gen_top.w_children.pdgId == -11, axis=2), axis=1)[:, None],
+    ], axis=1), axis=1)
+    mask_dict["mu_mu_mask"] = ak.all(ak.concatenate([
+        ak.any(ak.any(gen_top.w_children.pdgId == 13, axis=2), axis=1)[:, None],
+        ak.any(ak.any(gen_top.w_children.pdgId == -13, axis=2), axis=1)[:, None],
+    ], axis=1), axis=1)
+    mask_dict["tau_l_tau_l_mask"] = ak.all(
+        ak.any(ak.any(abs(gen_top.w_tau_children.pdgId) < 16, axis=3), axis=2), axis=1,
+    )
+    mask_dict["qq_qq_mask"] = ak.all(ak.any(abs(gen_top.w_children.pdgId) <= 6, axis=2), axis=1)
+    mask_dict["tau_h_tau_h_mask"] = ak.all(
+        ak.any(ak.any(abs(gen_top.w_tau_children.pdgId) >= 111, axis=3), axis=2), axis=1)
     # Get channel_id columns and check the gen channel distribution
     # channel_id 1: e tau_h
     # channel_id 2: mu tau_h
     # channel_id 3: full hadr
-    channel_id = events.channel_id
-    semileptonic_channel_id_mask = ak.any(ak.concatenate([
-        (channel_id == 1)[:, None], (channel_id == 2)[:, None],
-    ], axis=1), axis=1)
-    full_hadr_channel_id_mask = channel_id == 3
+    ch_id = events.channel_id
+    ch_id1_mask = ch_id == 1
+    ch_id2_mask = ch_id == 2
+    ch_id3_mask = ch_id == 3
+    ch_id456_mask = ch_id > 3
+    ch_id1_mask, ch_id2_mask, ch_id3_mask = ch_id1_mask, ch_id2_mask, ch_id3_mask
+    # if not ak.any(ak.any(ak.concatenate([
+    #         ch_id1_mask[:, None], ch_id2_mask[:, None], ch_id3_mask[:, None], ch_id456_mask[:, None]],
+    #         axis=1), axis=1), axis=0):
+    #     exit(1)
+    #     from IPython import embed
+    #     embed("no correct channel id definition")
 
-    # Final columns
-    # semilep channels
-    sl_ch_id_is_dilep = ak.all(ak.concatenate([
-        semileptonic_channel_id_mask[:, None], dilep_mask[:, None],
-    ], axis=1), axis=1)
-    sl_ch_id_is_dilep = ak.mask(ak.full_like(sl_ch_id_is_dilep, 1, dtype=int), sl_ch_id_is_dilep)
-    # sl_ch_id_is_dilep = ak.where(
-    #     sl_ch_id_is_dilep,
-    #     ak.full_like(sl_ch_id_is_dilep, 1, dtype=int),
-    #     ak.full_like(sl_ch_id_is_dilep, 0, dtype=int),
-    # )
-    sl_ch_id_is_semilep = ak.all(ak.concatenate([
-        semileptonic_channel_id_mask[:, None], semilep_mask[:, None],
-    ], axis=1), axis=1)
-    sl_ch_id_is_semilep = ak.mask(ak.full_like(sl_ch_id_is_semilep, 2, dtype=int), sl_ch_id_is_semilep)
-    # sl_ch_id_is_semilep = ak.where(
-    #     sl_ch_id_is_semilep,
-    #     ak.full_like(sl_ch_id_is_semilep, 1, dtype=int),
-    #     ak.full_like(sl_ch_id_is_semilep, 0, dtype=int),
-    # )
-    sl_ch_id_is_full_hadr = ak.all(ak.concatenate([
-        semileptonic_channel_id_mask[:, None], full_hadr_mask[:, None],
-    ], axis=1), axis=1)
-    sl_ch_id_is_full_hadr = ak.mask(ak.full_like(sl_ch_id_is_full_hadr, 3, dtype=int), sl_ch_id_is_full_hadr)
-    # sl_ch_id_is_full_hadr = ak.where(
-    #     sl_ch_id_is_full_hadr,
-    #     ak.full_like(sl_ch_id_is_full_hadr, 1, dtype=int),
-    #     ak.full_like(sl_ch_id_is_full_hadr, 0, dtype=int),
-    # )
-    # Full hadr channel
-    fh_ch_id_is_dilep = ak.all(ak.concatenate([
-        full_hadr_channel_id_mask[:, None], dilep_mask[:, None],
-    ], axis=1), axis=1)
-    fh_ch_id_is_dilep = ak.mask(ak.full_like(fh_ch_id_is_dilep, 1, dtype=int), fh_ch_id_is_dilep)
-    # fh_ch_id_is_dilep = ak.where(
-    #     fh_ch_id_is_dilep,
-    #     ak.full_like(fh_ch_id_is_dilep, 1, dtype=int),
-    #     ak.full_like(fh_ch_id_is_dilep, 0, dtype=int),
-    # )
-    fh_ch_id_is_semilep = ak.all(ak.concatenate([
-        full_hadr_channel_id_mask[:, None], semilep_mask[:, None],
-    ], axis=1), axis=1)
-    fh_ch_id_is_semilep = ak.mask(ak.full_like(fh_ch_id_is_semilep, 2, dtype=int), fh_ch_id_is_semilep)
-    # fh_ch_id_is_semilep = ak.where(
-    #     fh_ch_id_is_semilep,
-    #     ak.full_like(fh_ch_id_is_semilep, 1, dtype=int),
-    #     ak.full_like(fh_ch_id_is_semilep, 0, dtype=int),
-    # )
-    fh_ch_id_is_full_hadr = ak.all(ak.concatenate([
-        full_hadr_channel_id_mask[:, None], full_hadr_mask[:, None],
-    ], axis=1), axis=1)
-    fh_ch_id_is_full_hadr = ak.mask(ak.full_like(fh_ch_id_is_full_hadr, 3, dtype=int), fh_ch_id_is_full_hadr)
-    # fh_ch_id_is_full_hadr = ak.where(
-    #     fh_ch_id_is_full_hadr,
-    #     ak.full_like(fh_ch_id_is_full_hadr, 1, dtype=int),
-    #     ak.full_like(fh_ch_id_is_full_hadr, 0, dtype=int),
-    # )
-    sl_ch_id_truth = ak.concatenate([sl_ch_id_is_dilep[:, None],
-                                     sl_ch_id_is_semilep[:, None],
-                                     sl_ch_id_is_full_hadr[:, None],
-                                     ], axis=1)
-    sl_ch_id_truth = ak.max(sl_ch_id_truth, axis=1)
-    fh_ch_id_truth = ak.concatenate([fh_ch_id_is_dilep[:, None],
-                                     fh_ch_id_is_semilep[:, None],
-                                     fh_ch_id_is_full_hadr[:, None],
-                                     ], axis=1)
-    fh_ch_id_truth = ak.max(fh_ch_id_truth, axis=1)
-    # sl_ch_id_truth = ak.fill_none(sl_ch_id_truth, 0, axis=1)
-    # fh_ch_id_truth = ak.fill_none(fh_ch_id_truth, 0, axis=1)
-    channel_truth = ak.zip({
-        # "sl_ch_id_is_dilep": sl_ch_id_is_dilep,
-        # "sl_ch_id_is_semilep": sl_ch_id_is_semilep,
-        # "sl_ch_id_is_full_hadr": sl_ch_id_is_full_hadr,
-        # "fh_ch_id_is_dilep": fh_ch_id_is_dilep,
-        # "fh_ch_id_is_semilep": fh_ch_id_is_semilep,
-        # "fh_ch_id_is_full_hadr": fh_ch_id_is_full_hadr,
-        "sl_ch_id_truth": sl_ch_id_truth,
-        "fh_ch_id_truth": fh_ch_id_truth,
-    }, with_name="channel_truth")
-
+    channel_truth_dict = {}
+    for id in ["ch_id1", "ch_id2", "ch_id3"]:
+        for key in mask_dict.keys():
+            channel_truth_dict[f"{id}_{key}"] = ak.all(ak.concatenate([eval(f"{id}_mask")[:, None],
+            mask_dict[key][:, None]], axis=1), axis=1)
+        channel_truth_dict[f"{id}_mask"] = eval(f"{id}_mask")
+    channel_truth_dict["ch_id456_mask"] = ch_id456_mask
+    channel_truth_sums = {}
+    # idx = 0
+    # for key in channel_truth_dict.keys():
+    #     if idx == 0:
+    #         any_true = ak.Array(channel_truth_dict[key])
+    #         idx += 1
+    #     if idx == 1:
+    #         any_true = ak.concatenate([any_true[:, None], channel_truth_dict[key][:, None]], axis=1)
+    #         idx += 1
+    #     else:
+    #         any_true = ak.concatenate([any_true, channel_truth_dict[key][:, None]], axis=1)
+    # any_true = ak.any(any_true, axis=1)
+    # if not ak.all(any_true, axis=0):
+    #     exit(2)
+    #     from IPython import embed
+    #     embed("nothing is true")
+    # sum = 0
+    for key in channel_truth_dict.keys():
+        channel_truth_sums[key] = ak.sum(channel_truth_dict[key])
+    channel_truth_sums["ch_id456_mask"] = ak.sum(ch_id456_mask)
+    # Debugging / Validation
+    #     if (key != "ch_id1_mask" and key != "ch_id2_mask" and key != "ch_id3_mask"):
+    #         sum += ak.sum(channel_truth_dict[key])
+    # print(sum)
+    # none_true = np.array([])
+    # for idx in range(len(events)):
+    #     if idx % 1000 == 0:
+    #         print(idx)
+    #     true_list = []
+    #     for key in channel_truth_dict.keys():
+    #         if (key != "ch_id1_mask" and key != "ch_id2_mask" and key != "ch_id3_mask"):
+    #             true_list.append(channel_truth_dict[key][idx])
+    #     if not ak.any(true_list, axis=0):
+    #         none_true = np.append(none_true, idx)
+    # wrong_ch_id_list = []
+    # for idx in none_true:
+    #     wrong_ch_id_list.append(events[int(idx)].channel_id)
+    channel_truth = ak.zip(channel_truth_dict, with_name="channel_truth")
+    channel_truth_sums = ak.zip(channel_truth_sums, with_name="channel_truth_sums")
     events = set_ak_column(events, "channel_truth", channel_truth)
+    events = set_ak_column(events, "channel_truth_sums", channel_truth_sums)
     return events
