@@ -7,15 +7,13 @@ Column production methods related to higher-level features.
 import functools
 import operator
 
-import law
-
 from columnflow.production import Producer, producer
 from columnflow.production.categories import category_ids
 from columnflow.production.cms.mc_weight import mc_weight
 from columnflow.production.cms.gen_particles import transform_gen_part
 from columnflow.production.util import lv_mass
 from columnflow.columnar_util import (
-    EMPTY_FLOAT, Route, set_ak_column, attach_coffea_behavior, default_coffea_collections,
+    EMPTY_FLOAT, Route, set_ak_column, attach_coffea_behavior, default_coffea_collections, ak_concatenate_safe,
 )
 from columnflow.util import maybe_import
 
@@ -32,11 +30,9 @@ set_ak_column_i32 = functools.partial(set_ak_column, value_type=np.int32)
 
 @producer(
     uses={
-        # nano columns
         "Electron.pt", "Muon.pt", "Jet.pt", "HHBJet.pt",
     },
     produces={
-        # new columns
         "n_electron", "ht", "n_jet", "n_hhbtag", "n_electron", "n_muon",
     },
 )
@@ -49,18 +45,19 @@ def features(self: Producer, events: ak.Array, **kwargs) -> ak.Array:
     return events
 
 
+cutflow_category_ids = category_ids.derive("cutflow_category_ids", cls_dict={
+    "skip_category": (lambda self, category_inst: category_inst.has_tag("skip_cutflow")),
+})
+
+
 @producer(
     uses={
-        mc_weight, category_ids,
-        # nano columns
-        "Jet.pt", "Jet.eta", "Jet.phi", "Electron.pt",
+        mc_weight, cutflow_category_ids,
+        "Jet.{pt,eta,phi}", "Electron.pt",
     },
     produces={
-        mc_weight, category_ids,
-        # new columns
-        "cutflow.n_jet", "cutflow.n_jet_selected", "cutflow.ht", "cutflow.jet1_pt",
-        "cutflow.jet1_eta", "cutflow.jet1_phi", "cutflow.jet2_pt", "cutflow.n_ele",
-        "cutflow.n_ele_selected",
+        mc_weight, cutflow_category_ids,
+        "cutflow.{n_jet,n_jet_selected,ht,jet1_pt,jet1_eta,jet1_phi,jet2_pt,n_ele,n_ele_selected}",
     },
 )
 def cutflow_features(
@@ -70,7 +67,7 @@ def cutflow_features(
     **kwargs,
 ) -> ak.Array:
     # columns required for cutflow plots
-    events = self[category_ids](events, **kwargs)
+    events = self[cutflow_category_ids](events, **kwargs)
     if self.dataset_inst.is_mc:
         events = self[mc_weight](events, **kwargs)
 
@@ -104,6 +101,7 @@ def cutflow_features(
         IF_MC("event_weight"),
         IF_DATASET_IS_DY("gen_ll_{pt,pdgid}"),
     },
+    require_producers=["default"],
 )
 def dy_dnn_features(self: Producer, events: ak.Array, **kwargs) -> ak.Array:
     events = attach_coffea_behavior(events, {"HHBJet": default_coffea_collections["Jet"]})
@@ -144,7 +142,7 @@ def dy_dnn_features(self: Producer, events: ak.Array, **kwargs) -> ak.Array:
     events = set_ak_column_i32(events, "n_btag_pnet_hhb", nb_hbb)
 
     # dilepton system variables
-    dilep = ak.concatenate([events.Electron * 1, events.Muon * 1], axis=1)[:, :2].sum(axis=1)
+    dilep = ak_concatenate_safe([events.Electron * 1, events.Muon * 1], axis=1)[:, :2].sum(axis=1)
     events = set_ak_column_f32(events, "ll_pt", dilep.pt)
     events = set_ak_column_f32(events, "ll_eta", dilep.eta)
     events = set_ak_column_f32(events, "ll_phi", dilep.phi)
@@ -158,14 +156,14 @@ def dy_dnn_features(self: Producer, events: ak.Array, **kwargs) -> ak.Array:
     events = set_ak_column_f32(events, "bb_mass", dibjet.mass)
 
     # ll+bb system
-    llbb = ak.concatenate([dilep[:, None] * 1, dibjet[:, None] * 1], axis=1).sum(axis=1)
+    llbb = ak_concatenate_safe([dilep[:, None] * 1, dibjet[:, None] * 1], axis=1).sum(axis=1)
     events = set_ak_column_f32(events, "llbb_pt", llbb.pt)
     events = set_ak_column_f32(events, "llbb_eta", llbb.eta)
     events = set_ak_column_f32(events, "llbb_phi", llbb.phi)
     events = set_ak_column_f32(events, "llbb_mass", llbb.mass)
 
     # leading lepton
-    lep = ak.concatenate([events.Electron * 1, events.Muon * 1], axis=1)[:, :1].sum(axis=1)
+    lep = ak_concatenate_safe([events.Electron * 1, events.Muon * 1], axis=1)[:, :1].sum(axis=1)
     events = set_ak_column_f32(events, "lep1_pt", lep.pt)
     events = set_ak_column_f32(events, "lep1_eta", lep.eta)
     events = set_ak_column_f32(events, "lep1_phi", lep.phi)
@@ -189,8 +187,10 @@ def dy_dnn_features_init(self: Producer, **kwargs) -> None:
             "normalized_isr_weight",
             "normalized_fsr_weight",
             "normalized_njet_btag_weight_pnet",
-            "electron_weight",
-            "muon_weight",
+            "electron_id_weight",
+            "electron_reco_weight",
+            "muon_id_weight",
+            "muon_iso_weight",
             "tau_weight",
             "trigger_weight",
         ]
@@ -203,27 +203,9 @@ def dy_dnn_features_init(self: Producer, **kwargs) -> None:
         self.uses.update(self.weight_names)
 
 
-@dy_dnn_features.requires
-def dy_dnn_features_requires(self: Producer, task: law.Task, reqs: dict, **kwargs) -> None:
-    from columnflow.tasks.production import ProduceColumns
-    reqs["default_prod"] = ProduceColumns.req_other_producer(task, producer="default")
-
-
-@dy_dnn_features.setup
-def dy_dnn_features_setup(
-    self: Producer,
-    task: law.Task,
-    reqs: dict,
-    inputs: dict,
-    reader_targets: law.util.InsertableDict,
-    **kwargs,
-) -> None:
-    reader_targets["default_prod"] = inputs["default_prod"]["columns"]
-
-
 @producer(
     uses={"gen_higgs.*"},
-    produces={"nu_truth.{nu,tau_vis}.{pt,eta,phi,mass}"},
+    produces={"nu_truth.nu.{pt,eta,phi,mass,pdgId}", "nu_truth.tau_vis.{pt,eta,phi,mass}"},
 )
 def nu_truth_htt(self: Producer, events: ak.Array, **kwargs) -> ak.Array:
     # for single higgs -> tautau datasets, there is just one higgs decay in gen_higgs
@@ -239,7 +221,7 @@ def nu_truth_htt(self: Producer, events: ak.Array, **kwargs) -> ak.Array:
     # get the neutrino on these cases
     nu_lep = events.gen_higgs.tau_w_children[:, HTT, :][ak.mask(tau_lep_mask, tau_lep_mask)][:, :, 1]
     # concatenate them to get one _or_ two neutrinos per tau decay
-    nu = ak.drop_none(ak.concatenate([nu_tau[:, :, None], nu_lep[:, :, None]], axis=2))
+    nu = ak.drop_none(ak_concatenate_safe([nu_tau[:, :, None], nu_lep[:, :, None]], axis=2))
 
     # also define the visible tau component from all non-neutrino w children
     w_children = events.gen_higgs.tau_w_children[:, HTT]

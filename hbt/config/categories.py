@@ -45,18 +45,18 @@ def add_categories(config: od.Config) -> None:
 
     # kinematic categories
     _add_category(config, name="incl", id="+", selection="cat_incl", label="inclusive")
-    _add_category(config, name="ge0j", id="+", selection="cat_ge0j", label="")
     _add_category(config, name="eq0j", id="+", selection="cat_eq0j", label="0 jets")
     _add_category(config, name="eq1j", id="+", selection="cat_eq1j", label="1 jet")
     _add_category(config, name="eq2j", id="+", selection="cat_eq2j", label="2 jets")
+    _add_category(config, name="ge2j", id="+", selection="cat_ge2j", label=r"$\geq$2 jets")
     _add_category(config, name="eq3j", id="+", selection="cat_eq3j", label="3 jets")
     _add_category(config, name="eq4j", id="+", selection="cat_eq4j", label="4 jets")
-    _add_category(config, name="eq5j", id="+", selection="cat_eq5j", label="5 jets")
     _add_category(config, name="ge4j", id="+", selection="cat_ge4j", label=r"$\geq$4 jets")
+    _add_category(config, name="eq5j", id="+", selection="cat_eq5j", label="5 jets")
     _add_category(config, name="ge5j", id="+", selection="cat_ge5j", label=r"$\geq$5 jets")
     _add_category(config, name="ge6j", id="+", selection="cat_ge6j", label=r"$\geq$6 jets")
-    _add_category(config, name="ge0b", id="+", selection="cat_ge0b", label="")
     _add_category(config, name="eq0b", id="+", selection="cat_eq0b", label="0 b-tags")
+    _add_category(config, name="ge0b", id="+", selection="cat_ge0b", label="")
     _add_category(config, name="eq1b", id="+", selection="cat_eq1b", label="1 b-tag")
     _add_category(config, name="eq2b", id="+", selection="cat_eq2b", label="2 b-tags")
     _add_category(config, name="ge2b", id="+", selection="cat_ge2b", label=r"$\geq$2 b-tags")
@@ -69,6 +69,9 @@ def add_categories(config: od.Config) -> None:
     _add_category(config, name="res1b", id="+", selection="cat_res1b", label="res1b")
     _add_category(config, name="res2b", id="+", selection="cat_res2b", label="res2b")
     _add_category(config, name="boosted", id="+", selection="cat_boosted", label="boosted")
+    _add_category(config, name="res1b_novbf", id="+", selection="cat_res1b_novbf", label="res1b (vbf < 0.5)", tags={"skip_cutflow"})  # noqa: E501
+    _add_category(config, name="res2b_novbf", id="+", selection="cat_res2b_novbf", label="res2b (vbf < 0.5)", tags={"skip_cutflow"})  # noqa: E501
+    _add_category(config, name="boosted_novbf", id="+", selection="cat_boosted_novbf", label="boosted (vbf < 0.5)", tags={"skip_cutflow"})  # noqa: E501
 
     #
     # build groups
@@ -107,7 +110,7 @@ def add_categories(config: od.Config) -> None:
         # channels first
         "channel": CategoryGroup(["etau", "mutau", "tautau"], is_complete=False, has_overlap=False),
         # kinematic regions in the middle (to be extended)
-        "kin": CategoryGroup(["incl", "res1b", "res2b", "boosted"], is_complete=True, has_overlap=True),
+        "kin": CategoryGroup(["incl", "res1b", "res2b", "boosted", "res1b_novbf", "res2b_novbf", "boosted_novbf"], is_complete=True, has_overlap=True),  # noqa: E501
         # qcd regions last
         "sign": CategoryGroup(["os", "ss"], is_complete=True, has_overlap=False),
         "tau2": CategoryGroup(["iso", "noniso"], is_complete=True, has_overlap=False),
@@ -128,8 +131,8 @@ def add_categories(config: od.Config) -> None:
         "channel": CategoryGroup(["ee", "mumu", "emu"], is_complete=False, has_overlap=False),
         # kinematic regions
         "kin": CategoryGroup(["incl", "dy", "dyc", "tt", "dy_st", "mll40"], is_complete=True, has_overlap=True),
-        "jets": CategoryGroup(["ge0j", "eq2j", "eq3j", "eq4j", "ge4j", "eq5j", "ge6j"], is_complete=True, has_overlap=True),  # noqa: E501
-        "tags": CategoryGroup(["ge0b", "eq0b", "eq1b", "eq2b", "ge2b"], is_complete=True, has_overlap=True),
+        "jets": CategoryGroup(["eq2j", "eq3j", "eq4j", "ge2j", "ge4j", "eq5j", "ge6j"], is_complete=True, has_overlap=True),  # noqa: E501
+        "tags": CategoryGroup(["eq0b", "eq1b", "eq2b", "ge0b", "ge2b"], is_complete=True, has_overlap=True),
         # relative sign
         "sign": CategoryGroup(["os"], is_complete=False, has_overlap=False),
     }

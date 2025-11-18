@@ -2,14 +2,17 @@
 
 """
 Producers for the VBFjTag score.
-See https://github.com/elviramartinv/VBFjtag/
+For more info, see https://github.com/elviramartinv/VBFjtag and
+https://indico.cern.ch/event/1590750/contributions/6784135/attachments/3169657/5634394/Jet_taggers_0711.pdf.
 """
 
 import law
 
 from columnflow.production import Producer, producer
 from columnflow.util import maybe_import, dev_sandbox, DotDict
-from columnflow.columnar_util import EMPTY_FLOAT, layout_ak_array, set_ak_column, full_like, flat_np_view
+from columnflow.columnar_util import (
+    EMPTY_FLOAT, layout_ak_array, set_ak_column, full_like, flat_np_view, ak_concatenate_safe,
+)
 from columnflow.types import Any
 
 from hbt.util import MET_COLUMN
@@ -76,8 +79,19 @@ def vbfjtag(
     n_jets_capped = ak.num(jets, axis=1)
     is_hhbjet = ak.values_astype(is_hhbjet_mask[jet_sorting_indices][vbfjet_mask_sorted][event_mask][..., :n_jets_max], np.float32)  # noqa: E501
 
+    # additional features for v2 network
+    if self.vbfjtag_version == "v2":
+        # centrality
+        eta_min, eta_max = ak.min(jets.eta, axis=1), ak.max(jets.eta, axis=1)
+        eta_c = (eta_min + eta_max) * 0.5
+        centrality = 1.0 - 2 * abs(jets.eta - eta_c) / (eta_max - eta_min)
+
+        # isolation
+        dr = jets.metric_table(jets)
+        isolation = ak.min(dr[dr > 0], axis=2)
+
     # get input features
-    input_features = [
+    input_features = list(filter(lambda f: f is not None, [
         jet_shape * 1,
         jets.pt,
         jets.eta,
@@ -87,6 +101,8 @@ def vbfjtag(
         jets.btagPNetB,
         jets.delta_phi(htt),
         is_hhbjet,
+        centrality if self.vbfjtag_version == "v2" else None,
+        isolation if self.vbfjtag_version == "v2" else None,
         jet_shape * (self.vbfjtag_campaign),
         jet_shape * self.vbfjtag_channel_map[events[event_mask].channel_id],
         jet_shape * htt.pt,
@@ -94,12 +110,12 @@ def vbfjtag(
         jet_shape * htt.delta_phi(met),
         jet_shape * (met.pt / htt.pt),
         jet_shape * ak.sum(leps.pt, axis=1),
-    ]
+    ]))
 
     # helper to split events, cast to float32, concatenate across new axis,
     # then pad with zeros for up to n_jets_max jets
     def split(where, input_features=input_features):
-        features = ak.concatenate(
+        features = ak_concatenate_safe(
             [
                 ak.values_astype(f[where][..., None], np.float32)
                 for f in input_features
@@ -142,7 +158,7 @@ def vbfjtag(
         scores_ext = layout_ext
     else:
         scores_ext = layout_ak_array(np.zeros(len(ak.flatten(layout_ext)), dtype=np.int32), layout_ext)
-    scores = ak.concatenate([scores, scores_ext], axis=1)
+    scores = ak_concatenate_safe([scores, scores_ext], axis=1)
 
     # remove scores for vbfjets matching the fatjet with highest particleNet_XbbVsQCD score
     metric_table_fatjet = (events.Jet[jet_sorting_indices][vbfjet_mask_sorted][event_mask].metric_table(selected_fatjets[event_mask]) > 0.8)  # noqa: E501
@@ -152,27 +168,28 @@ def vbfjtag(
     cross_cleaned_fatjet_mask = ak.fill_none(ak.firsts(metric_table_fatjet, axis=-1), True, axis=1)
 
     # bring mask back to full array to merge it with the vbfjet_mask once reordered
-    full_cross_cleaned_fatjet_mask = full_like(events.Jet.pt, True, dtype=bool)
-    flat_np_view(full_cross_cleaned_fatjet_mask)[ak.flatten(vbfjet_mask_sorted & event_mask)] = flat_np_view(cross_cleaned_fatjet_mask)  # noqa: E501
+    flat_mask = flat_np_view(ak.fill_none(full_like(events.Jet.pt, True, dtype=bool), True, axis=-1))
+    flat_mask[ak.flatten(vbfjet_mask_sorted & event_mask)] = flat_np_view(cross_cleaned_fatjet_mask)
+    full_cross_cleaned_fatjet_mask = layout_ak_array(flat_mask, events.Jet)
 
     # prevent Memory Corruption Error
     vbfjet_mask = ak.fill_none(vbfjet_mask, False, axis=-1)
     vbfjet_mask_sorted = ak.fill_none(vbfjet_mask_sorted, False, axis=-1)
 
     # insert scores into an array with same shape as input jets (without vbfjet_mask and event_mask)
-    all_scores = ak.fill_none(full_like(events.Jet.pt, EMPTY_FLOAT, dtype=np.float32), EMPTY_FLOAT, axis=-1)
-    flat_np_view(all_scores, axis=1)[ak.flatten(vbfjet_mask_sorted & event_mask, axis=1)] = flat_np_view(scores)
+    flat_scores = flat_np_view(ak.fill_none(full_like(events.Jet.pt, EMPTY_FLOAT), EMPTY_FLOAT, axis=-1))
+    flat_scores[flat_np_view(vbfjet_mask_sorted & event_mask, axis=1)] = flat_np_view(scores)
 
-    # bring the scores and the fatjet cleaned mask back to the original ordering
-    all_scores = all_scores[jet_unsorting_indices]
+    # bring the scores and the fatjet cleaned mask back to the original order
+    flat_scores = flat_scores[flat_np_view(jet_unsorting_indices)]
     full_cross_cleaned_fatjet_mask = full_cross_cleaned_fatjet_mask[jet_unsorting_indices]
 
     # remove scores where the cross cleaning reveals "wrong" vbf jet (either a fatjet or a hhbjet)
     cross_cleaned_fatjet_hhbjet_mask = vbfjet_mask & full_cross_cleaned_fatjet_mask & ~is_hhbjet_mask
     empty_mask = full_like(events.Jet.pt[~cross_cleaned_fatjet_hhbjet_mask], EMPTY_FLOAT, dtype=np.float32)
-    flat_np_view(all_scores)[ak.flatten(~cross_cleaned_fatjet_hhbjet_mask)] = flat_np_view(empty_mask)
+    flat_scores[flat_np_view(~cross_cleaned_fatjet_hhbjet_mask)] = flat_np_view(empty_mask)
 
-    events = set_ak_column(events, "vbfjtag_score", all_scores)
+    events = set_ak_column(events, "vbfjtag_score", layout_ak_array(flat_scores, events.Jet), value_type=np.float32)
 
     if self.config_inst.x.sync:
         # for sync save input variables as additional columns in the sync collection
@@ -193,7 +210,7 @@ def vbfjtag(
             value_placeholder = ak.fill_none(
                 ak.full_like(events.Jet.pt, EMPTY_FLOAT, dtype=np.float32), EMPTY_FLOAT, axis=-1,
             )
-            values = ak.concatenate([values, scores_ext], axis=1)[jet_unsorting_indices]
+            values = ak_concatenate_safe([values, scores_ext], axis=1)[jet_unsorting_indices]
 
             # fill placeholder
             np.asarray(ak.flatten(value_placeholder))[ak.flatten(vbfjet_mask & event_mask, axis=1)] = (
@@ -246,6 +263,7 @@ def vbfjtag_setup(
 
     # get the model version (coincides with the external file version)
     self.vbfjtag_version = self.config_inst.x.external_files.vbf_jtag_repo.version
+    assert self.vbfjtag_version in {"v1", "v2"}
 
     # prepare mappings for the VBFjTag model (see links above for mapping information)
     channel_map = {
