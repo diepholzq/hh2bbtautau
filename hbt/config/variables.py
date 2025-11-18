@@ -749,6 +749,79 @@ def add_variables(config: od.Config) -> None:
         x_title=r"$\phi(b_1^{H_1})$",
     )
     add_variable(
+        config, aux={"overflow": True, "underflow": False},
+        name="higgs_reco_constr_term_b",
+        expression="pdf_input_vars_reco_higgs.constr_term_b",
+        binning=(200, 0, 4),
+        x_title=r"constraint term $b\bar{b}$",
+    )
+    add_variable(
+        config, aux={"overflow": True, "underflow": False},
+        name="higgs_reco_constr_term_tau",
+        expression="pdf_input_vars_reco_higgs.constr_term_tau",
+        binning=(200, 0, 4),
+        x_title=r"constraint term $tau\bar{tau}$",
+    )
+    add_variable(
+        config,
+        name="top_reco_tt_vis_system_mass",
+        expression="pdf_input_vars_reco_top.tt_vis_system_mass",
+        binning=(100, 60, 1600),
+        x_title=r"$m_{t_{vis}\bar{t}_{vis}}$",
+    )
+    add_variable(
+        config,
+        name="top_reco_tt_vis_system_pt",
+        expression="pdf_input_vars_reco_top.tt_vis_system_pt",
+        binning=(100, 0, 680),
+        x_title=r"$p_T_{t_{vis}\bar{t}_{vis}}$",
+    )
+    add_variable(
+        config,
+        name="top_reco_tt_vis_system_pz",
+        expression="pdf_input_vars_reco_top.tt_vis_system_pz",
+        binning=(100, -2000, 1500),
+        x_title=r"$p_z_{t_{vis}\bar{t}_{vis}}$",
+    )
+    add_variable(
+        config,
+        name="top_reco_tt_vis_system_phi",
+        expression="pdf_input_vars_reco_top.tt_vis_system_phi",
+        binning=(100, -np.pi, np.pi),
+        unit="rad",
+        x_title=r"$\phi_{t_{vis}\bar{t}_{vis}}$",
+    )
+    add_variable(
+        config,
+        name="top_reco_t_vis_y_diff",
+        expression="pdf_input_vars_reco_top.t_vis_y_diff",
+        binning=(100, -2.5, 2.7),
+        x_title=r"$\delta \ y(t_{vis}\bar{t}_{vis})$",
+    )
+    add_variable(
+        config,
+        name="top_reco_t1_vis_phi",
+        expression="pdf_input_vars_reco_top.t1_vis_phi",
+        binning=(100, -np.pi, np.pi),
+        x_title=r"$\phi_{\bar{t}_{vis}}$",
+    )
+    add_variable(
+        config, aux={"overflow": True, "underflow": False},
+        name="top_reco_cos_theta_star",
+        expression="pdf_input_vars_reco_top.cos_theta_star",
+        binning=(100, -1, 10),
+        x_title=r"$cos(\theta^{*})$",
+    )
+    add_variable(
+        config,
+        name="top_reco_y_lb",
+        expression="pdf_input_vars_reco_top.lb_y",
+        binning=(100, -1.75, 1.75),
+        x_title=r"$y_{lb}$",
+    )
+
+    # channel truth variables
+    add_variable(
         config, aux={"overflow": False, "underflow": False},
         name="sl_ch_id_truth",
         expression="channel_truth.sl_ch_id_truth",

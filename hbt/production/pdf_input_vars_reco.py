@@ -2,12 +2,37 @@ from columnflow.production import Producer, producer
 from columnflow.util import maybe_import
 from columnflow.columnar_util import set_ak_column
 from columnflow.production.util import attach_coffea_behavior
-from columnflow.columnar_util import attach_coffea_behavior as attach_coffea_behavior_fn, EMPTY_FLOAT
+from columnflow.columnar_util import attach_coffea_behavior as attach_coffea_behavior_fn
 from hbt.production.create_pdf_input_vars import signed_cos_deltaangle
 import vector
 
 np = maybe_import("numpy")
 ak = maybe_import("awkward")
+
+
+def calculate_rapidity(particle):
+    particle_y = 1 / 2 * np.log(
+        (particle.energy + particle.pz) / (particle.energy - particle.pz))
+    particle_y = np.nan_to_num(particle_y)
+    return particle_y
+
+
+def calculate_constraint_term(
+        corrected_distr1: ak.Array,
+        corrected_distr2: ak.Array,
+        uncorr_distr1: ak.Array,
+        uncorr_distr2: ak.Array,
+        ch_id_mask: ak.Array,
+) -> np.array:
+    """Calculates log of Likelihood that indicates the probability of a measurement agreeing with the correction
+    """
+    mean_correction1 = np.mean(corrected_distr1[ch_id_mask] - uncorr_distr1[ch_id_mask])
+    mean_correction2 = np.mean(corrected_distr2[ch_id_mask] - uncorr_distr2[ch_id_mask])
+    sigma_correction1 = np.std(corrected_distr1[ch_id_mask] - uncorr_distr1[ch_id_mask])
+    sigma_correction2 = np.std(corrected_distr2[ch_id_mask] - uncorr_distr2[ch_id_mask])
+    constr_term = 1 / 2 * (((corrected_distr1 - uncorr_distr1 - mean_correction1) / (sigma_correction1))**2 +
+                        ((corrected_distr2 - uncorr_distr2 - mean_correction2) / (sigma_correction2))**2)
+    return constr_term
 
 
 @producer(
@@ -48,8 +73,10 @@ def create_pdf_input_vars_reco_higgs(
         "py": b_jets.py * m_bb / m_bb_rec,
         "pz": b_jets.pz * m_bb / m_bb_rec,
     })
-    constr_term_b = ((b_corrected[:, 0].pt - b_jets[:, 0].pt) / (0.1 * b_jets[:, 0].pt))**2 + (
-        (b_corrected[:, 1].pt - b_jets[:, 1].pt) / (0.1 * b_jets[:, 1].pt))**2
+    constr_term_b = calculate_constraint_term(b_corrected[:, 0].pt,
+                                              b_corrected[:, 1].pt,
+                                              b_jets[:, 0].pt,
+                                              b_jets[:, 1].pt, ch_id_mask)
     # h1 = b_jets[:, 0].add(b_jets[:, 1])
     h1 = b_corrected[:, 0].add(b_corrected[:, 1])
     # h1 = ak.where(ch_id_mask, h1, dummy_vec)
@@ -104,10 +131,13 @@ def create_pdf_input_vars_reco_higgs(
     # Calculate tau inputs
     tau_charge_mask = ak.argsort(taus_corr.charge, axis=1, ascending=False)
     taus_corr_sorted = taus_corr[tau_charge_mask]
-    constr_term_tau = ((taus_corr[:, 0].pt - taus_uncorr[tau_charge_mask][:, 0].pt) /
-        (0.1 * taus_uncorr[tau_charge_mask][:, 0].pt))**2 + (
-        (taus_corr[:, 1].pt - taus_uncorr[tau_charge_mask][:, 1].pt) /
-        (0.1 * taus_uncorr[tau_charge_mask][:, 1].pt))**2
+    constr_term_tau = calculate_constraint_term(
+        taus_corr[:, 0].pt,
+        taus_corr[:, 1].pt,
+        taus_uncorr[tau_charge_mask][:, 0].pt,
+        taus_uncorr[tau_charge_mask][:, 1].pt,
+        ch_id_mask,
+    )
     tau_vis1 = taus_corr_sorted[:, 0]
     tau_vis1_cms_h2 = tau_vis1.boostCM_of(h2)
     cos_theta_cms_h2_tau_vis1 = signed_cos_deltaangle(tau_vis1_cms_h2, h2)
@@ -149,420 +179,7 @@ def create_pdf_input_vars_reco_higgs(
 
 
 @producer(
-    uses={"higgs_family.*", "HHBJet", "reg_dnn_nu*", attach_coffea_behavior},
-    produces={"pdf_input_vars_reco_higgs.*"},
-)
-def create_pdf_input_vars_reco_higgs_old(
-    self: Producer,
-    events: ak.Array,
-    **kwargs,
-) -> ak.Array:
-    """
-    Creates a new column "pdf_input_vars_reco_higgs" that contains the inputs for the signal likelihood. Only fully
-    matched events are stored.
-    """
-    # select the correct channels: 1,2,3
-    ch_id_mask = events.channel_id < 4
-    higgs_family = ak.mask(events, ch_id_mask)
-
-    # Get relevant columns and attach coffea_behavior
-    higgs_family = attach_coffea_behavior_fn(
-        events.higgs_family,
-        collections={
-            "bottoms": {
-                "type_name": "GenParticle",
-                "check_attr": "metric_table",
-                "skip_fields": "*Idx*G",
-            },
-            "taus": {
-                "type_name": "GenParticle",
-                "check_attr": "metric_table",
-                "skip_fields": "*Idx*G",
-            },
-            "higgs": {
-                "type_name": "GenParticle",
-                "check_attr": "metric_table",
-                "skip_fields": "*Idx*G",
-            },
-            "tau_leptonic_decay_products": {
-                "type_name": "GenParticle",
-                "check_attr": "metric_table",
-                "skip_fields": "*Idx*G",
-            },
-        },
-    )
-    events = attach_coffea_behavior_fn(
-        events,
-        collections={
-            "HHBJet": {
-                "type_name": "LorentzVector",
-            },
-            "Tau": {
-                "type_name": "LorentzVector",
-            },
-        },
-    )
-
-    # Get tau neutrino momenta and construct vectors
-    nu_dict = {}
-    for idx in range(2):
-        for direction in ("px", "py", "pz"):
-            nu_dict[f"nu_{idx}_{direction}"] = eval(
-                f"events.reg_dnn_nu{idx + 1}_{direction}")
-        nu_dict[f"energy_nu_{idx}"] = np.sqrt(
-            nu_dict[f"nu_{idx}_px"]**2 + nu_dict[f"nu_{idx}_py"]**2 +
-            nu_dict[f"nu_{idx}_pz"]**2)
-        nu_dict[f"nu_{idx}"] = vector.zip(
-            {
-                "px": nu_dict[f"nu_{idx}_px"],
-                "py": nu_dict[f"nu_{idx}_py"],
-                "pz": nu_dict[f"nu_{idx}_pz"],
-                "energy": nu_dict[f"energy_nu_{idx}"],
-            })
-    tau_neutrinos = ak.concatenate(
-        [nu_dict["nu_0"][:, None], nu_dict["nu_1"][:, None]],
-        axis=1,
-    )
-
-    # Get leptonic tau decay products and match them, then create leptonic taus from them
-    gen_tau_neutrinos = higgs_family.tau_leptonic_decay_products[:, 0]
-    for idx_1 in range(2):
-        for idx_2 in range(2):
-            nu_dict[f"nu_tau_{idx_1}_mask_{idx_2}"] = nu_dict[
-                f"nu_{idx_1}"].deltaR(gen_tau_neutrinos[:, idx_2]) < 0.4
-            # print(len(ak.ravel(ak.drop_none(ak.mask(nu_dict[f"nu_tau_{idx_1}_mask_{idx_2}"],
-            # nu_dict[f"nu_tau_{idx_1}_mask_{idx_2}"] == True)))))
-    for idx in range(2):
-        nu_dict[f"tau_{idx}_mask"] = ak.concatenate(
-            [
-                nu_dict[f"nu_tau_0_mask_{idx}"][:, None],
-                nu_dict[f"nu_tau_1_mask_{idx}"][:, None],
-            ],
-            axis=1,
-        )
-        nu_dict[f"matched_tau_{idx}"] = ak.mask(tau_neutrinos,
-                                                nu_dict[f"tau_{idx}_mask"])
-        # ak.any(nu_dict["tau_1_mask"], axis=1)[:, None]], axis=1), axis=1)
-    del nu_dict
-
-    # Create mask for tau and tau neutrino matching
-    gen_taus = higgs_family.taus
-    # Get leptonic tau decay products
-    muons = events.Muon
-    muons = ak.mask(muons, ch_id_mask)  # for linting :|
-    electrons = events.Electron
-    electrons = ak.mask(electrons, ch_id_mask)
-    gen_muons = higgs_family.tau_leptonic_decay_products[:, 1]
-    gen_muons = gen_muons
-    gen_electrons = higgs_family.tau_leptonic_decay_products[:, 2]
-    gen_electrons = gen_electrons
-    lep_decay_dict = {}
-    gen_tau_neutrinos["charge"] = 0
-    for lep in ["muons", "electrons"]:
-        for idx in range(2):
-            lep_decay_dict[f"{lep}_{idx}_mask"] = eval(lep).deltaR(
-                eval(f"gen_{lep}[:, {idx}]")) < 0.4
-            lep_decay_dict[f"{lep}_{idx}"] = ak.mask(
-                eval(lep), lep_decay_dict[f"{lep}_{idx}_mask"])
-            # remove events where more than 1 lep is matched
-            lep_decay_dict[f"{lep}_{idx}"] = ak.drop_none(
-                lep_decay_dict[f"{lep}_{idx}"], axis=1)
-            lep_decay_dict[f"{lep}_{idx}_mask"] = ak.num(
-                lep_decay_dict[f"{lep}_{idx}"], axis=1) > 1
-            lep_decay_dict[f"{lep}_{idx}"] = ak.mask(
-                lep_decay_dict[f"{lep}_{idx}"],
-                lep_decay_dict[f"{lep}_{idx}_mask"],
-                valid_when=False,
-            )
-            lep_decay_dict[f"{lep}_{idx}"] = ak.pad_none(
-                lep_decay_dict[f"{lep}_{idx}"], 1, axis=1)
-            # lep_decay_dict[f"{lep}_{idx}"] = lep_decay_dict[f"{lep}_{idx}"].add(gen_tau_neutrinos[:, idx])
-    # Create awkward object to be able to attach_coffea_behavior
-    tau_lept = ak.zip(
-        {
-            "tau_lept_0":
-            ak.pad_none(ak.concatenate(
-                [lep_decay_dict["muons_0"], lep_decay_dict["electrons_0"]], axis=1), 2, axis=1),
-            "tau_lept_1":
-            ak.pad_none(ak.concatenate(
-                [lep_decay_dict["muons_1"], lep_decay_dict["electrons_1"]],
-                axis=1), 2, axis=1),
-        },
-        with_name="tau_lept",
-        depth_limit=1)
-    tau_lept = attach_coffea_behavior_fn(tau_lept,
-                                         collections={
-                                             "tau_lept_0": {
-                                                 "type_name": "LorentzVector",
-                                             },
-                                             "tau_lept_1": {
-                                                 "type_name": "LorentzVector",
-                                             },
-                                         })
-    if ak.sort(ak.num(ak.drop_none(tau_lept.tau_lept_0.x)),
-               axis=-1,
-               ascending=False)[0] | ak.sort(ak.num(
-                   ak.drop_none(tau_lept.tau_lept_1.x)), axis=-1, ascending=False)[0] > 1:
-        raise ValueError("2 tau_0 or tau_1 leps")
-    # shape arrays to remove empty entries
-    tau_lept = ak.with_field(
-        tau_lept,
-        tau_lept.tau_lept_0[ak.argsort(ak.fill_none(tau_lept.tau_lept_0.x,
-                                                    EMPTY_FLOAT),
-                                       ascending=False)][:, 0],
-        "tau_lept_0",
-    )
-    tau_lept = ak.with_field(
-        tau_lept,
-        tau_lept.tau_lept_1[ak.argsort(ak.fill_none(tau_lept.tau_lept_1.x,
-                                                    EMPTY_FLOAT),
-                                       ascending=False)][:, 0],
-        "tau_lept_1",
-    )
-    tau_lept = attach_coffea_behavior_fn(tau_lept,
-                                         collections={
-                                             "tau_lept_0": {
-                                                 "type_name": "LorentzVector",
-                                             },
-                                             "tau_lept_1": {
-                                                 "type_name": "LorentzVector",
-                                             },
-                                         })
-    # add dummy vectors for later sync with hadr taus
-    dummy_tau = ak.zip(
-        {
-            "charge": EMPTY_FLOAT,
-            "eta": EMPTY_FLOAT,
-            "mass": EMPTY_FLOAT,
-            "phi": EMPTY_FLOAT,
-            "pt": EMPTY_FLOAT,
-        })
-    tau_lept = ak.with_field(
-        tau_lept,
-        ak.fill_none(
-            ak.mask(
-                tau_lept.tau_lept_0,
-                ak.fill_none(tau_lept.tau_lept_0.x,
-                             EMPTY_FLOAT) == EMPTY_FLOAT,
-                valid_when=False,
-            ),
-            dummy_tau,
-        ),
-        "tau_lept_0",
-    )
-    tau_lept = ak.with_field(
-        tau_lept,
-        ak.fill_none(
-            ak.mask(
-                tau_lept.tau_lept_1,
-                ak.fill_none(tau_lept.tau_lept_1.x,
-                             EMPTY_FLOAT) == EMPTY_FLOAT,
-                valid_when=False,
-            ),
-            dummy_tau,
-        ),
-        "tau_lept_1",
-    )
-    # attach coffea behavior
-    tau_lept = attach_coffea_behavior_fn(tau_lept,
-                                         collections={
-                                             "tau_lept_0": {
-                                                 "type_name": "LorentzVector",
-                                             },
-                                             "tau_lept_1": {
-                                                 "type_name": "LorentzVector",
-                                             },
-                                         })
-
-    # free up some memory (maybe?)
-    del lep_decay_dict
-
-    # Maybe something like this would be easier if I could get it to work :s
-    # tau_lept_0_mask = ak.fill_none(tau_lept.tau_lept_0.x, EMPTY_FLOAT) != EMPTY_FLOAT
-    # tau_0 = ak.where(tau_lept_0_mask, tau_lept.tau_lept_0, tau_hadr_0)
-    # tau_hadr_0_mask = ak.fill_none(tau_hadr_0.rho, EMPTY_FLOAT) != EMPTY_FLOAT
-
-    # get hadronic taus and match them
-    tau_jets = events.Tau
-    tau_jets = ak.mask(tau_jets, ch_id_mask)
-    tau_hadr_0_mask = tau_jets.deltaR(gen_taus[:, 0]) < 0.4
-    tau_hadr_1_mask = tau_jets.deltaR(gen_taus[:, 1]) < 0.4
-    tau_hadr_0 = ak.mask(tau_jets, tau_hadr_0_mask)
-    tau_hadr_1 = ak.mask(tau_jets, tau_hadr_1_mask)
-    # skip events where one tau jet is matched to two gen taus:
-    tau_hadr_0 = ak.mask(tau_hadr_0,
-                         ak.num(ak.drop_none(tau_hadr_0.charge, axis=1),
-                                axis=1) == 2,
-                         valid_when=False)
-    tau_hadr_1 = ak.mask(tau_hadr_1,
-                         ak.num(ak.drop_none(tau_hadr_1.charge, axis=1),
-                                axis=1) == 2,
-                         valid_when=False)
-    if ak.sort(ak.num(ak.drop_none(tau_hadr_0.charge), axis=-1),
-               ascending=False)[0] | ak.sort(ak.num(ak.drop_none(tau_hadr_1.charge), axis=-1),
-                                             ascending=False)[0] > 1:
-        raise ValueError("too many tau_hadr_0 or tau_hadr_1")
-        # from IPython import embed
-        # embed(header="too many taus in pdf_input_vars_reco_higgs")
-
-    # shape arrays
-    tau_hadr_0 = tau_hadr_0[ak.argsort(ak.fill_none(tau_hadr_0.charge,
-                                                    EMPTY_FLOAT),
-                                       ascending=False)][:, 0]
-    tau_hadr_1 = tau_hadr_1[ak.argsort(ak.fill_none(tau_hadr_1.charge,
-                                                    EMPTY_FLOAT),
-                                       ascending=False)][:, 0]
-
-    # tau_hadr_0 = tau_hadr_0.add(gen_tau_neutrinos[:, 0])
-    # tau_hadr_1 = tau_hadr_1.add(gen_tau_neutrinos[:, 1])
-    # add dummy vectors, steps below for concatenation with leptonic taus
-    tau_hadr_0 = ak.mask(tau_hadr_0,
-                         ak.fill_none(tau_hadr_0.x,
-                                      EMPTY_FLOAT) == EMPTY_FLOAT,
-                         valid_when=False)
-    tau_hadr_1 = ak.mask(tau_hadr_1,
-                         ak.fill_none(tau_hadr_1.x,
-                                      EMPTY_FLOAT) == EMPTY_FLOAT,
-                         valid_when=False)
-    tau_hadr_0 = ak.fill_none(tau_hadr_0, dummy_tau)
-    tau_hadr_1 = ak.fill_none(tau_hadr_1, dummy_tau)
-    tau_hadr = ak.zip({
-        "tau_hadr_0": tau_hadr_0,
-        "tau_hadr_1": tau_hadr_1,
-    },
-        depth_limit=1)
-    tau_hadr = attach_coffea_behavior_fn(tau_hadr,
-                                         collections={
-                                             "tau_hadr_0": {
-                                                 "type_name": "LorentzVector",
-                                             },
-                                             "tau_hadr_1": {
-                                                 "type_name": "LorentzVector",
-                                             },
-                                         })
-
-    # concatenate leptonic and hadronic taus
-    tau_0 = ak.concatenate(
-        [tau_lept.tau_lept_0[:, None], tau_hadr.tau_hadr_0[:, None]], axis=1)
-    tau_1 = ak.concatenate(
-        [tau_lept.tau_lept_1[:, None], tau_hadr.tau_hadr_1[:, None]], axis=1)
-    # remove dummy objects
-    # 1e4 results from transformation of dummy_vec_rho to pxpypzenergy coordinates
-    # all in all very ugly TODO: is it physically ok to remove values below 1e4?
-    tau_0 = ak.mask(tau_0, abs(tau_0.x) < 1e4)
-    tau_1 = ak.mask(tau_1, abs(tau_1.x) < 1e4)
-    tau_0 = tau_0[ak.argsort(ak.fill_none(tau_0.x, EMPTY_FLOAT),
-                             ascending=False)][:, 0]
-    tau_1 = tau_1[ak.argsort(ak.fill_none(tau_1.x, EMPTY_FLOAT),
-                             ascending=False)][:, 0]
-    del tau_hadr
-    del tau_lept
-    taus = ak.concatenate([tau_0[:, None], tau_1[:, None]], axis=1)
-    del tau_0
-    del tau_1
-
-    matched_event_mask = ak.all(ak.fill_none(taus.x, EMPTY_FLOAT) != EMPTY_FLOAT, axis=1)
-
-    # matched_hadr_taus = ak.concatenate([tau_hadr_0[:, None], tau_hadr_1[:, None]], axis=1)
-    # matched_hadr_taus = ak.pad_none(matched_hadr_taus, 2, axis=1, clip=True)
-
-    # Create tau array
-    # matched_event_mask = ak.all(ak.concatenate([matched_nu_tau_event_mask[:, None], ak.all(ak.fill_none(
-    #     matched_taus.eta, EMPTY_FLOAT) != EMPTY_FLOAT, axis=1)[:, None]], axis=1), axis=1)
-    # print(ak.num(matched_event_mask[matched_event_mask == True], axis=0))
-    # for ak.mask to work correctly, change shape of matched_event_mask:
-    # matched_event_mask = ak.concatenate([matched_event_mask[:, None], matched_event_mask[:, None]], axis=1)
-
-    # Match reco bjets to gen b's: Only fully matched events atm
-    b_jets = events.HHBJet
-    gen_bs = higgs_family.bottoms
-    b_jet_0_mask = b_jets.deltaR(gen_bs[:, 0]) < 0.4
-    b_jet_1_mask = b_jets.deltaR(gen_bs[:, 1]) < 0.4
-    b_jet_0 = b_jets[b_jet_0_mask]
-    b_jet_1 = b_jets[b_jet_1_mask]
-    matched_b_jets = ak.concatenate([b_jet_0, b_jet_1], axis=1)
-    matched_b_jets = ak.pad_none(matched_b_jets, 2, axis=1, clip=True)
-    # Take only fully matched b events
-    fully_matched_events_mask = ak.num(matched_b_jets, axis=1) == 2
-    # Add to that the requirement of fully matched tau events
-    fully_matched_events_mask = ak.all(
-        ak.concatenate(
-            [matched_event_mask[:, None], fully_matched_events_mask[:, None]],
-            axis=1,
-        ),
-        axis=1,
-    )
-    # for ak.mask as above
-    fully_matched_events_mask = ak.concatenate(
-        [
-            fully_matched_events_mask[:, None], fully_matched_events_mask[:, None],
-        ],
-        axis=1,
-    )
-    matched_b_jets = ak.mask(matched_b_jets, fully_matched_events_mask)
-
-    # Match taus and tau neutrinos with fully_matched_events_mask
-    # add neutrinos (gen for now)
-
-    # Build objects relevant to create input variables
-    # #TODO: change neutrinos to reco
-    # Build H_tautau: Add tau neutrinos to taus and then sum them event-wise
-    taus = ak.mask(taus, fully_matched_events_mask)
-    H_tautau = taus[:, 0].add(gen_tau_neutrinos[:, 0]).add(taus[:, 1].add(
-        gen_tau_neutrinos[:, 1]))
-    H_bb = matched_b_jets.sum(axis=1)
-    h1 = H_bb
-    b1 = matched_b_jets[:, 0]
-    h2 = H_tautau
-    tau1 = taus[:, 0]
-
-    # Compute the pdf inputs
-    dihiggs_system = H_bb.add(H_tautau)
-    dihiggs_mass = dihiggs_system.mass
-    dihiggs_system_pt = dihiggs_system.pt
-    dihiggs_system_pz = dihiggs_system.pz
-    dihiggs_system_phi = dihiggs_system.phi
-
-    h1_cms_dihiggs = h1.boostCM_of(dihiggs_system)
-    b1_cms_h1 = b1.boostCM_of(h1_cms_dihiggs.boostvec)
-    # angle between b1 in cms of h1 and h1 in lab system
-    cos_theta_cms_h1_b1 = signed_cos_deltaangle(b1_cms_h1, h1_cms_dihiggs)
-    phi_cms_h1_b1 = b1_cms_h1.phi  # phi of b1 in h1's cms
-    # boost h1 into cms of dihiggs system
-    # angle between h1 in dihiggs cms and dihiggs in lab system
-    cos_theta_h1 = signed_cos_deltaangle(h1_cms_dihiggs, dihiggs_system)
-    phi_h1 = h1_cms_dihiggs.phi
-
-    # boost tau into cms of htautau
-    h2 = h2.boostCM_of(dihiggs_system)
-    tau1_cms_h2 = tau1.boostCM_of(h2.boostvec)
-    # theta_cms_h2_tau1 = h2.deltaangle(tau1_cms_h2)   # angle between tau1 in cms of h2 and h2 in lab system
-    cos_theta_cms_h2_tau1 = signed_cos_deltaangle(tau1_cms_h2, h2)
-    phi_cms_h2_tau1 = tau1_cms_h2.phi  # phi of tau1 in h2's cms
-
-    pdf_input_vars = ak.zip(
-        {
-            "dihiggs_mass": dihiggs_mass,
-            "dihiggs_system_pt": dihiggs_system_pt,
-            "dihiggs_system_pz": dihiggs_system_pz,
-            "dihiggs_system_phi": dihiggs_system_phi,
-            "cos_theta_h1": cos_theta_h1,
-            "phi_h1": phi_h1,
-            "cos_theta_cms_h2_tau1": cos_theta_cms_h2_tau1,
-            "phi_cms_h2_tau1": phi_cms_h2_tau1,
-            "cos_theta_cms_h1_b1": cos_theta_cms_h1_b1,
-            "phi_cms_h1_b1": phi_cms_h1_b1,
-        },
-        with_name="pdf_input_vars",
-    )
-
-    events = set_ak_column(events, "pdf_input_vars_reco_higgs", pdf_input_vars)
-
-    return events
-
-
-@producer(
-    uses={"top_family.*", "HHBJet", attach_coffea_behavior},
+    uses={"Tau", "HHBJet", attach_coffea_behavior},
     produces={"pdf_input_vars_reco_top.*"},
 )
 def create_pdf_input_vars_reco_top(
@@ -591,9 +208,67 @@ def create_pdf_input_vars_reco_top(
     )
 
     # Invariant mass of visible taus and bs
-    full_hadr_mask = ak.num(events.Tau, axis=1) == 2
-    mtauvtauvbb = events.HHBJet[full_hadr_mask].sum(axis=1).add(
-        events.Tau[full_hadr_mask].sum(axis=1))
-    mtauvtauvbb = mtauvtauvbb.absolute()
+    # full_hadr_mask = ak.num(events.Tau, axis=1) == 2
 
-    # Rapidity y of tau_vis and b system for both tops
+    # tau_vis tau_vis b b system (t_vis tbar_vis)
+    # tt_vis_system = events.HHBJet[full_hadr_mask].sum(axis=1).add(
+    #     events.Tau[full_hadr_mask].sum(axis=1))
+    tt_vis_system = events.HHBJet.sum(axis=1).add(
+        events.Tau.sum(axis=1))
+
+    tt_vis_system_mass = tt_vis_system.absolute()
+    tt_vis_system_pt = tt_vis_system.pt
+    tt_vis_system_pz = tt_vis_system.pz
+    tt_vis_system_phi = tt_vis_system.phi
+
+    # t_1_vis system
+    tau_charge_mask = ak.argsort(events.Tau.charge, axis=1, ascending=False)
+    taus_sorted = events.Tau[tau_charge_mask]
+    # taus_sorted = taus_sorted[full_hadr_mask]
+    rng = np.random.default_rng()
+    which_b = rng.integers(0, 1, endpoint=True, size=len(events))
+    b1_random = ak.where(which_b == 0, events.HHBJet[:, 0], events.HHBJet[:, 1])
+    # b1_random = b1_random[full_hadr_mask]
+    b2_random = ak.where(which_b == 0, events.HHBJet[:, 1], events.HHBJet[:, 0])
+    # b2_random = b2_random[full_hadr_mask]
+    taus_sorted = ak.pad_none(taus_sorted, 2, axis=1, clip=True)
+    t1_vis = taus_sorted[:, 0].add(b1_random)
+    t1_vis = t1_vis.boostCM_of(tt_vis_system)
+    t2_vis = taus_sorted[:, 0].add(b2_random)
+    t2_vis = t2_vis.boostCM_of(tt_vis_system)
+    t_vis_y_diff = calculate_rapidity(t1_vis) - calculate_rapidity(t2_vis)
+    t1_vis_phi = t1_vis.phi
+
+    # tau_vis b system (the same as t_1_vis ??)
+    M_lb = t1_vis.absolute()
+    cos_theta_star = 2 * M_lb**2 / (175**2 - 80.3**2 - 1.7**2) - 1
+    lb_y = calculate_rapidity(t1_vis)
+
+    pdf_input_vars_reco_top = ak.zip({
+        "tt_vis_system_mass": tt_vis_system_mass,
+        "tt_vis_system_pt": tt_vis_system_pt,
+        "tt_vis_system_pz": tt_vis_system_pz,
+        "tt_vis_system_phi": tt_vis_system_phi,
+        "t_vis_y_diff": t_vis_y_diff,
+        "t1_vis_phi": t1_vis_phi,
+        "cos_theta_star": cos_theta_star,
+        "lb_y": lb_y,
+    }, with_name="pdf_input_vars_reco_top")
+    pdf_input_vars_reco_top = ak.mask(pdf_input_vars_reco_top, events.channel_id == 3)
+    events = set_ak_column(events, "pdf_input_vars_reco_top", pdf_input_vars_reco_top)
+
+    return events
+
+
+@producer(
+    uses={
+        create_pdf_input_vars_reco_top, create_pdf_input_vars_reco_higgs,
+    },
+    produces={
+        create_pdf_input_vars_reco_top, create_pdf_input_vars_reco_higgs,
+    },
+)
+def pdf_inputs(self: Producer, events: ak.Array, **kwargs) -> ak.Array:
+    events = self[create_pdf_input_vars_reco_top](events, **kwargs)
+    events = self[create_pdf_input_vars_reco_higgs](events, **kwargs)
+    return events
