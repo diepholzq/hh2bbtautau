@@ -61,7 +61,8 @@ def create_pdf_input_vars_reco_higgs(
             },
         },
     )
-
+    # from IPython import embed
+    # embed(header="create_pdf_input_vars_reco_higgs")
     # Build h1 by adding the b jets
     b_jets = behaving_columns.HHBJet
     m_bb_rec = b_jets[:, 0].add(b_jets[:, 1]).mass
@@ -213,13 +214,13 @@ def create_pdf_input_vars_reco_top(
     # tau_vis tau_vis b b system (t_vis tbar_vis)
     # tt_vis_system = events.HHBJet[full_hadr_mask].sum(axis=1).add(
     #     events.Tau[full_hadr_mask].sum(axis=1))
-    tt_vis_system = events.HHBJet.sum(axis=1).add(
-        events.Tau.sum(axis=1))
-
-    tt_vis_system_mass = tt_vis_system.absolute()
-    tt_vis_system_pt = tt_vis_system.pt
-    tt_vis_system_pz = tt_vis_system.pz
-    tt_vis_system_phi = tt_vis_system.phi
+    # tt_vis_system = events.HHBJet.sum(axis=1).add(
+    #     events.Tau.sum(axis=1))
+    #
+    # tt_vis_system_mass = tt_vis_system.absolute()
+    # tt_vis_system_pt = tt_vis_system.pt
+    # tt_vis_system_pz = tt_vis_system.pz
+    # tt_vis_system_phi = tt_vis_system.phi
 
     # t_1_vis system
     tau_charge_mask = ak.argsort(events.Tau.charge, axis=1, ascending=False)
@@ -233,8 +234,15 @@ def create_pdf_input_vars_reco_top(
     # b2_random = b2_random[full_hadr_mask]
     taus_sorted = ak.pad_none(taus_sorted, 2, axis=1, clip=True)
     t1_vis = taus_sorted[:, 0].add(b1_random)
-    t1_vis = t1_vis.boostCM_of(tt_vis_system)
     t2_vis = taus_sorted[:, 0].add(b2_random)
+
+    tt_vis_system = t1_vis.add(t2_vis)
+    tt_vis_system_mass = tt_vis_system.absolute()
+    tt_vis_system_pt = tt_vis_system.pt
+    tt_vis_system_pz = tt_vis_system.pz
+    tt_vis_system_phi = tt_vis_system.phi
+
+    t1_vis = t1_vis.boostCM_of(tt_vis_system)
     t2_vis = t2_vis.boostCM_of(tt_vis_system)
     t_vis_y_diff = calculate_rapidity(t1_vis) - calculate_rapidity(t2_vis)
     t1_vis_phi = t1_vis.phi
@@ -269,6 +277,6 @@ def create_pdf_input_vars_reco_top(
     },
 )
 def pdf_inputs(self: Producer, events: ak.Array, **kwargs) -> ak.Array:
-    events = self[create_pdf_input_vars_reco_top](events, **kwargs)
     events = self[create_pdf_input_vars_reco_higgs](events, **kwargs)
+    events = self[create_pdf_input_vars_reco_top](events, **kwargs)
     return events

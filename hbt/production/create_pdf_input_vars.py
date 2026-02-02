@@ -173,7 +173,7 @@ def create_pdf_input_vars_top(self: Producer, events: ak.Array, **kwargs) -> ak.
 
 
 @producer(
-    uses={"top_family.*", "gen_top.*", attach_coffea_behavior},
+    uses={"gen_top.*", attach_coffea_behavior},
     produces={"pdf_input_vars_top_ditau.*"},
 )
 def create_pdf_input_vars_top_ditau(self: Producer, events: ak.Array, **kwargs) -> ak.Array:
@@ -196,7 +196,6 @@ def create_pdf_input_vars_top_ditau(self: Producer, events: ak.Array, **kwargs) 
             "type_name": "GenParticle", "check_attr": "metric_table", "skip_fields": "*Idx*G",
         },
     })
-
     # Extract relevant particles
     ditau_mask = ak.all(ak.any(abs(gen_top.w_children.pdgId) == 15, axis=2), axis=1)
     # ditau_decays = ak.mask(top_family, ditau_mask)

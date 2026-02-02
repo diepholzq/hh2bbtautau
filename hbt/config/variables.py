@@ -782,7 +782,7 @@ def add_variables(config: od.Config) -> None:
         name="higgs_reco_constr_term_tau",
         expression="pdf_input_vars_reco_higgs.constr_term_tau",
         binning=(200, 0, 4),
-        x_title=r"constraint term $tau\bar{tau}$",
+        x_title=r"constraint term $\tau\bar{\tau}$",
     )
     add_variable(
         config,
@@ -796,14 +796,14 @@ def add_variables(config: od.Config) -> None:
         name="top_reco_tt_vis_system_pt",
         expression="pdf_input_vars_reco_top.tt_vis_system_pt",
         binning=(100, 0, 680),
-        x_title=r"$p_T_{t_{vis}\bar{t}_{vis}}$",
+        x_title=r"$p_{T_{t_{vis}\bar{t}_{vis}}}$",
     )
     add_variable(
         config,
         name="top_reco_tt_vis_system_pz",
         expression="pdf_input_vars_reco_top.tt_vis_system_pz",
         binning=(100, -2000, 1500),
-        x_title=r"$p_z_{t_{vis}\bar{t}_{vis}}$",
+        x_title=r"$p_{z_{ t_{vis} \bar{t}_{vis} }}$",
     )
     add_variable(
         config,
