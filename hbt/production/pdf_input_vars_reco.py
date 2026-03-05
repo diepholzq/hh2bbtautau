@@ -61,11 +61,10 @@ def create_pdf_input_vars_reco_higgs(
             },
         },
     )
-    # from IPython import embed
-    # embed(header="create_pdf_input_vars_reco_higgs")
     # Build h1 by adding the b jets
     b_jets = behaving_columns.HHBJet
     m_bb_rec = b_jets[:, 0].add(b_jets[:, 1]).mass
+
     m_bb = 125
     vector.register_awkward()
     b_corrected = vector.zip({

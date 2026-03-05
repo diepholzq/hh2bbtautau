@@ -96,7 +96,7 @@ def create_pdf_input_vars_higgs(self: Producer, events: ak.Array, **kwargs) -> a
     cos_theta_cms_h1_b1 = signed_cos_deltaangle(b1_cms_h1, h1)
     cos_theta_cms_h1_b2 = signed_cos_deltaangle(b2_cms_h1, h1)
     phi_cms_h1_b1 = b1_cms_h1.phi   # phi of b1 in h1's cms
-    assorted_channels = ak.where(full_hadr_mask, events.channel_id, EMPTY_FLOAT)
+    # assorted_channels = ak.where(full_hadr_mask, events.channel_id, EMPTY_FLOAT)
 
     pdf_input_vars = ak.zip({"dihiggs_mass": dihiggs_mass,
                              "dihiggs_system_pt": dihiggs_system_pt,
@@ -108,11 +108,96 @@ def create_pdf_input_vars_higgs(self: Producer, events: ak.Array, **kwargs) -> a
                              "phi_cms_h2_tau_vis1": phi_cms_h2_tau_vis1,
                              "cos_theta_cms_h1_b1": cos_theta_cms_h1_b1,
                              "cos_theta_cms_h1_b2": cos_theta_cms_h1_b2,
-                             "assorted_channels": assorted_channels,
+                             # "assorted_channels": assorted_channels,
                              "phi_cms_h1_b1": phi_cms_h1_b1}, with_name="pdf_input_vars")
     pdf_input_vars = ak.mask(pdf_input_vars, full_hadr_mask)
 
     events = set_ak_column(events, "pdf_input_vars", pdf_input_vars)
+
+    return events
+
+
+@producer(
+    uses={"gen_higgs.*", attach_coffea_behavior, "channel_id"},
+    produces={"pdf_input_vars_gen_higgs.*"},
+)
+def create_pdf_input_vars_higgs_gen(self: Producer, events: ak.Array, **kwargs) -> ak.Array:
+    """
+    Creates a new column "pdf_input_vars" that stores the PDF input variables for the Higgs decay products.
+    """
+    # Get higgs_family column and attach coffea behavior
+    # events = self[attach_coffea_behavior](events, collections={"higgs_family": {"type_name": "GenParticle",
+    #     "check_attr": "metric_table", "skip_fields": "*Idx*G"}}, **kwargs)
+    gen_higgs = attach_coffea_behavior_fn(events.gen_higgs, collections={
+        "h": {
+            "type_name": "GenParticle", "check_attr": "metric_table", "skip_fields": "*Idx*G",
+        },
+        "h_children": {
+            "type_name": "GenParticle", "check_attr": "metric_table", "skip_fields": "*Idx*G",
+        },
+        "tau_children": {
+            "type_name": "GenParticle", "check_attr": "metric_table", "skip_fields": "*Idx*G",
+        },
+        "tau_w_children": {
+            "type_name": "GenParticle", "check_attr": "metric_table", "skip_fields": "*Idx*G",
+        },
+    })
+    # Only use full hadronic tau decays for now:
+    # Mask is probably generator specific, may need to change that (no quarks present)
+    tau1 = gen_higgs.h_children[:, 1, 1]
+    tau_children = gen_higgs.tau_w_children[:, 1]
+    full_hadr_mask = ak.all(ak.all((abs(tau_children.pdgId) > 16), axis=2), axis=1)
+
+    # Define input vars
+    dihiggs_system = gen_higgs.h.sum(axis=1)
+    dihiggs_mass = dihiggs_system.mass
+    dihiggs_system_pt = dihiggs_system.pt
+    dihiggs_system_pz = dihiggs_system.pz
+    dihiggs_system_phi = dihiggs_system.phi
+    # boost h1 into cms of dihiggs system
+    h1 = gen_higgs.h[:, 0]
+    h1_cms_dihiggs = h1.boostCM_of(dihiggs_system)
+    # angle between h1 in dihiggs cms and dihiggs in lab system
+    cos_theta_h1 = signed_cos_deltaangle(h1_cms_dihiggs, dihiggs_system)
+    phi_h1 = h1_cms_dihiggs.phi
+
+    # Using direct boost ansatz
+    # boost tau into cms of htautau
+    h2 = gen_higgs.h[:, 1]
+    # Use only visible tau
+    tau_nu1 = gen_higgs.tau_children[:, 1, 1, 0]
+    tau_vis1 = tau1 - tau_nu1
+    tau_vis1_cms_h2 = tau_vis1.boostCM_of(h2.boostvec)
+    # theta_cms_h2_tau_vis1 = h2.deltaangle(tau_vis1_cms_h2)   # angle between tau_vis1 in cms of h2 and h2 in lab system
+    cos_theta_cms_h2_tau_vis1 = signed_cos_deltaangle(tau_vis1_cms_h2, h2)
+    phi_cms_h2_tau_vis1 = tau_vis1_cms_h2.phi   # phi of tau_vis1 in h2's cms
+
+    # boost b1 into cms of hbb
+    b1 = gen_higgs.h_children[:, 0, 1]
+    b1_cms_h1 = b1.boostCM_of(h1.boostvec)
+    b2 = gen_higgs.h_children[:, 0, 0]
+    b2_cms_h1 = b2.boostCM_of(h1.boostvec)
+
+    # angle between b1 in cms of h1 and h1 in lab system
+    cos_theta_cms_h1_b1 = signed_cos_deltaangle(b1_cms_h1, h1)
+    cos_theta_cms_h1_b2 = signed_cos_deltaangle(b2_cms_h1, h1)
+    phi_cms_h1_b1 = b1_cms_h1.phi   # phi of b1 in h1's cms
+    assorted_channels = ak.where(full_hadr_mask, events.channel_id, EMPTY_FLOAT)
+
+    pdf_input_vars_gen_higgs = ak.zip({"dihiggs_mass": dihiggs_mass,
+                             "dihiggs_system_pt": dihiggs_system_pt,
+                             "dihiggs_system_pz": dihiggs_system_pz,
+                             "dihiggs_system_phi": dihiggs_system_phi,
+                             "cos_theta_h1": cos_theta_h1,
+                             "phi_h1": phi_h1,
+                             "cos_theta_cms_h2_tau_vis1": cos_theta_cms_h2_tau_vis1,
+                             "phi_cms_h2_tau_vis1": phi_cms_h2_tau_vis1,
+                             "cos_theta_cms_h1_b1": cos_theta_cms_h1_b1,
+                             "cos_theta_cms_h1_b2": cos_theta_cms_h1_b2,
+                             "phi_cms_h1_b1": phi_cms_h1_b1}, with_name="pdf_input_vars")
+    pdf_input_vars_gen_higgs = ak.mask(pdf_input_vars_gen_higgs, full_hadr_mask)
+
+    events = set_ak_column(events, "pdf_input_vars_gen_higgs", pdf_input_vars_gen_higgs)
 
     return events
 

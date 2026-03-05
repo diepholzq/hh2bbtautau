@@ -20,7 +20,6 @@ from hbt.production.weights import (
 from hbt.production.tau import tau_weights
 from hbt.production.trigger_sf import trigger_weight
 from hbt.util import IF_DATASET_HAS_LHE_WEIGHTS, IF_RUN_3
-from hbt.production.pdf_input_vars_reco import create_pdf_input_vars_reco_higgs, create_pdf_input_vars_reco_top
 
 ak = maybe_import("awkward")
 
@@ -85,7 +84,6 @@ muon_weights_lowpt = muon_weights.derive(
         normalized_btag_weights_deepjet, IF_RUN_3(normalized_btag_weights_pnet),
         IF_DATASET_HAS_LHE_WEIGHTS(normalized_pdf_weight, normalized_murmuf_weight),
         # weight producers added dynamically if produce_weights is set
-        create_pdf_input_vars_reco_top, create_pdf_input_vars_reco_higgs,
 
     },
     produces={
@@ -93,7 +91,6 @@ muon_weights_lowpt = muon_weights.derive(
         normalized_btag_weights_deepjet, IF_RUN_3(normalized_btag_weights_pnet),
         IF_DATASET_HAS_LHE_WEIGHTS(normalized_pdf_weight, normalized_murmuf_weight),
         # weight producers added dynamically if produce_weights is set
-        create_pdf_input_vars_reco_top, create_pdf_input_vars_reco_higgs,
 
     },
     shifts={
@@ -109,8 +106,6 @@ def default(self: Producer, events: ak.Array, **kwargs) -> ak.Array:
         collections={"HHBJet": default_coffea_collections["Jet"]},
     )
     events = self[hbt_category_ids](events, **kwargs)
-    events = self[create_pdf_input_vars_reco_top](events, **kwargs)
-    events = self[create_pdf_input_vars_reco_higgs](events, **kwargs)
 
     # mc-only weights
     if self.dataset_inst.is_mc:
