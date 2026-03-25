@@ -182,7 +182,7 @@ def create_pdf_input_vars_higgs_gen(self: Producer, events: ak.Array, **kwargs) 
     cos_theta_cms_h1_b1 = signed_cos_deltaangle(b1_cms_h1, h1)
     cos_theta_cms_h1_b2 = signed_cos_deltaangle(b2_cms_h1, h1)
     phi_cms_h1_b1 = b1_cms_h1.phi   # phi of b1 in h1's cms
-    assorted_channels = ak.where(full_hadr_mask, events.channel_id, EMPTY_FLOAT)
+    # assorted_channels = ak.where(full_hadr_mask, events.channel_id, EMPTY_FLOAT)
 
     pdf_input_vars_gen_higgs = ak.zip({"dihiggs_mass": dihiggs_mass,
                              "dihiggs_system_pt": dihiggs_system_pt,
