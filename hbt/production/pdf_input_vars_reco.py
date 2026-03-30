@@ -274,15 +274,6 @@ def create_pdf_input_vars_reco_higgs(
     b_eta = ak.to_numpy(sorted_bs.eta, allow_missing=False)
     b_phi = ak.to_numpy(sorted_bs.phi, allow_missing=False)
     b_mass = ak.to_numpy(sorted_bs.mass, allow_missing=False)
-    b1_inputs = jax.numpy.stack([
-        b_pt[:, 0], b_eta[:, 0], b_phi[:, 0], b_mass[:, 0],
-    ], axis=0)
-    b2_inputs = jax.numpy.stack([
-        b_pt[:, 1], b_eta[:, 1], b_phi[:, 1], b_mass[:, 1],
-    ], axis=0)
-    b1 = det_coords_to_fourmomentum(b1_inputs)
-    b2 = det_coords_to_fourmomentum(b2_inputs)
-
     tau_charge_mask = ak.argsort(events.Tau.charge, axis=1, ascending=False)
     sorted_taus = events.Tau[tau_charge_mask]
     tau_pt = ak.to_numpy(
@@ -297,35 +288,34 @@ def create_pdf_input_vars_reco_higgs(
     tau_mass = ak.to_numpy(
         ak.fill_none(ak.pad_none(sorted_taus.mass, 2, axis=1, clip=True), -99999.0), allow_missing=False,
     )
-    tau_charge = ak.to_numpy(
-        ak.fill_none(ak.pad_none(sorted_taus.charge, 2, axis=1, clip=True), -9), allow_missing=False,
-    )
+
+    # Inputs for higgs input function
+    b1_inputs = jax.numpy.stack([
+        b_pt[:, 0], b_eta[:, 0], b_phi[:, 0], b_mass[:, 0],
+    ], axis=0)
+    b2_inputs = jax.numpy.stack([
+        b_pt[:, 1], b_eta[:, 1], b_phi[:, 1], b_mass[:, 1],
+    ], axis=0)
     tau1_inputs = jax.numpy.stack([
         tau_pt[:, 0], tau_eta[:, 0], tau_phi[:, 0], tau_mass[:, 0],
     ], axis=0)
     tau2_inputs = jax.numpy.stack([
         tau_pt[:, 1], tau_eta[:, 1], tau_phi[:, 1], tau_mass[:, 1],
     ], axis=0)
+
+    # --------------------------------------------- Ab hier: part. Ableitungen relevant -----------------------
+    b1 = det_coords_to_fourmomentum(b1_inputs)
+    b2 = det_coords_to_fourmomentum(b2_inputs)
     tau1 = det_coords_to_fourmomentum(tau1_inputs)
     tau2 = det_coords_to_fourmomentum(tau2_inputs)
+
     # Calculate invariant mass of bb system for correction term
     # shape: 8,batch_size
     m_bb_rec = calculate_invariant_mass(
         jax.numpy.concatenate([b1, b2], axis=1).T)
 
-    # Build h1 by adding the b jets
-    b_jets = behaving_columns.HHBJet
-    m_vec_bb_rec = b_jets[:, 0].add(b_jets[:, 1]).mass
-
     # Calculate correction terms: b
     m_bb = 125
-    vector.register_awkward()
-    b_corrected_vec = vector.zip({
-        "energy": b_jets.energy * m_bb / m_vec_bb_rec,
-        "px": b_jets.px * m_bb / m_vec_bb_rec,
-        "py": b_jets.py * m_bb / m_vec_bb_rec,
-        "pz": b_jets.pz * m_bb / m_vec_bb_rec,
-    })
     b1_corrected = jax.numpy.stack([
         b1[:, 0] * m_bb / m_bb_rec,
         b1[:, 1] * m_bb / m_bb_rec,
@@ -349,17 +339,12 @@ def create_pdf_input_vars_reco_higgs(
         b_pt[:, 1],
         ch_id_mask,
     )
-    constr_term_b_vec = calculate_constraint_term(b_corrected_vec[:, 0].pt,
-                                                  b_corrected_vec[:, 1].pt,
-                                                  b_jets[:, 0].pt,
-                                                  b_jets[:, 1].pt, ch_id_mask)
 
     # Calculate constraint terms: taus
     m_tautau = 125
     m_tautau_rec = calculate_invariant_mass(
         jax.numpy.concatenate([tau1, tau2], axis=1).T)
     m_tautau_rec = jax.numpy.nan_to_num(m_tautau_rec, nan=-99999.)
-    corr_factor_tau = 125 / m_tautau_rec
     tau1_corrected = jax.numpy.stack([
         tau1[:, 0] * m_tautau / m_tautau_rec,
         tau1[:, 1] * m_tautau / m_tautau_rec,
@@ -384,87 +369,26 @@ def create_pdf_input_vars_reco_higgs(
         ch_id_mask,
     )
 
-    taus = behaving_columns.Tau
-    taus = ak.mask(taus, ch_id_mask)
-    dummy_tau = ak.drop_none(ak.firsts(events.Tau))[0]
-    taus = ak.fill_none(taus, [dummy_tau, dummy_tau], axis=0)
-    taus = ak.zip({"taus": taus})
-    taus = attach_coffea_behavior_fn(
-        taus,
-        collections={
-            "taus": {
-                "type_name": "LorentzVector",
-            },
-        },
-    )
-    m_tautau_rec_vec = taus.taus[:, 0].add(taus.taus[:, 1]).mass
-    corr_factor_tau_vec = 125 / m_tautau_rec_vec
-    taus_corr = vector.zip({
-        "energy": taus.taus.energy * corr_factor_tau_vec,
-        "px": taus.taus.px * corr_factor_tau_vec,
-        "py": taus.taus.py * corr_factor_tau_vec,
-        "pz": taus.taus.pz * corr_factor_tau_vec,
-        "charge": taus.taus.charge,
-    })
-    taus_uncorr = vector.zip({
-        "energy": taus.taus.energy,
-        "px": taus.taus.px,
-        "py": taus.taus.py,
-        "pz": taus.taus.pz,
-        "charge": taus.taus.charge,
-    })
-    tau_charge_mask_vec = ak.argsort(taus_corr.charge, axis=1, ascending=False)
-    taus_corr_sorted = taus_corr[tau_charge_mask_vec]
-    constr_term_tau = calculate_constraint_term(
-        tau1_corrected_detspace[:, 0],
-        tau2_corrected_detspace[:, 0],
-        tau_pt[:, 0],
-        tau_pt[:, 1],
-        ch_id_mask,
-    )
-    constr_term_tau_vec = calculate_constraint_term(
-        taus_corr_sorted[:, 0].pt,
-        taus_corr_sorted[:, 1].pt,
-        taus_uncorr[tau_charge_mask_vec][:, 0].pt,
-        taus_uncorr[tau_charge_mask_vec][:, 1].pt,
-        ch_id_mask,
-    )
-
     # Build H_bb
     h1 = four_vec_sum(jax.numpy.concatenate([b1_corrected, b2_corrected], axis=1).T)
     h1_detspace = fourmomentum_to_det_coord(h1.T)
-    h1_vec = b_corrected_vec[:, 0].add(b_corrected_vec[:, 1])
 
     # Build H_tautau
     h2 = four_vec_sum(jax.numpy.concatenate([tau1_corrected, tau2_corrected], axis=1).T)
     h2_detspace = fourmomentum_to_det_coord(h2.T)
-    h2_vec = taus_corr[:, 0].add(taus_corr[:, 1])
 
-    # Choose random b for each event
-    b_cms_h1_opt1 = b_corrected_vec[:, 0].boostCM_of(h1_vec)
-    b_cms_h1_opt2 = b_corrected_vec[:, 1].boostCM_of(h1_vec)
-    cos_theta_cms_h1_b_opt1 = signed_cos_deltaangle(b_cms_h1_opt1, h1_vec)
-    cos_theta_cms_h1_b_opt2 = signed_cos_deltaangle(b_cms_h1_opt2, h1_vec)
-    phi_cms_h1_b_opt1 = b_cms_h1_opt1.phi
-    phi_cms_h1_b_opt2 = b_cms_h1_opt2.phi
-    cos_theta_cms_h1_b1 = ak.where(which_b1 == 0, cos_theta_cms_h1_b_opt1,
-                                   cos_theta_cms_h1_b_opt2)
-    phi_cms_h1_b1 = ak.where(which_b1 == 0, phi_cms_h1_b_opt1,
-                             phi_cms_h1_b_opt2)
-
-    from IPython import embed
-    embed()
     # Calculate b inputs
     b_cms_h1 = boost_a_cm_of_b(jax.numpy.concatenate([b1_corrected, h1], axis=1).T, h1_detspace[:, 3])
     b_cms_h1_detspace = fourmomentum_to_det_coord(b_cms_h1.T)
     cos_theta_cms_h1_b1 = signed_cos_deltaangle_for_jax(jax.numpy.concatenate([b_cms_h1[:, :3], h1[:, :3]], axis=1).T)
     phi_cms_h1_b1 = b_cms_h1_detspace[:, 2]
+
     # Calculate tau inputs
-    tau_vis1 = taus_corr_sorted[:, 0]
     tau_cms_h2 = boost_a_cm_of_b(jax.numpy.concatenate([tau1_corrected, h2], axis=1).T, h2_detspace[:, 3])
     tau_cms_h2_detspace = fourmomentum_to_det_coord(tau_cms_h2.T)
     cos_theta_cms_h2_tau_vis1 = signed_cos_deltaangle_for_jax(jax.numpy.concatenate([tau_cms_h2[:, :3], h2[:, :3]], axis=1).T)
     phi_cms_h2_tau_vis1 = tau_cms_h2_detspace[:, 2]
+
     # Calculate dihiggs inputs
     dihiggs_system = four_vec_sum(jax.numpy.concatenate([h1, h2], axis=1).T)
     dihiggs_system_detspace = fourmomentum_to_det_coord(dihiggs_system.T)
@@ -472,12 +396,12 @@ def create_pdf_input_vars_reco_higgs(
     dihiggs_system_pt = dihiggs_system_detspace[:, 0]
     dihiggs_system_pz = dihiggs_system[:, 2]
     dihiggs_system_phi = dihiggs_system_detspace[:, 2]
+
     # Calculate h1 inputs
     h1_cms_dihiggs = boost_a_cm_of_b(jax.numpy.concatenate([h1, dihiggs_system], axis=1).T, dihiggs_mass)
     h1_cms_dihiggs_detspace = fourmomentum_to_det_coord(h1_cms_dihiggs.T)
     cos_theta_h1 = signed_cos_deltaangle_for_jax(jax.numpy.concatenate([h1_cms_dihiggs[:, :3], dihiggs_system[:, :3]], axis=1).T)
     phi_h1 = h1_cms_dihiggs_detspace[:, 2]
-
 
     # grad_func = jax.grad(calculate_invariant_mass)
     # batched_grad = jax.vmap(grad_func)
@@ -502,7 +426,6 @@ def create_pdf_input_vars_reco_higgs(
     #     ], axis=1
     # )
     # grads = batched_grad(batch_inputs)
-    tau_vis1_cms_h2 = tau_vis1.boostCM_of(h2_vec)
     # test_inputs = jax.numpy.stack([
     #     ak.to_numpy(b_corrected_vec[0, 0].px),
     #     ak.to_numpy(b_corrected_vec[0, 0].py),
@@ -515,20 +438,6 @@ def create_pdf_input_vars_reco_higgs(
     #     ak.to_numpy(b_corrected_vec[0, 0].mass),
     #     ak.to_numpy(taus_corr[0, 0].mass),
     # ], axis=0)
-    cos_theta_cms_h2_tau_vis1 = signed_cos_deltaangle(tau_vis1_cms_h2, h2_vec)
-    phi_cms_h2_tau_vis1 = tau_vis1_cms_h2.phi
-
-    # Calculate dihiggs inputs
-    dihiggs_system = h1_vec.add(h2_vec)
-    dihiggs_mass = dihiggs_system.mass
-    dihiggs_system_pt = dihiggs_system.pt
-    dihiggs_system_pz = dihiggs_system.pz
-    dihiggs_system_phi = dihiggs_system.phi
-
-    # Calculate h1 inputs
-    h1_cms_dihiggs = h1_vec.boostCM_of(dihiggs_system)
-    cos_theta_h1 = signed_cos_deltaangle(h1_cms_dihiggs, dihiggs_system)
-    phi_h1 = h1_cms_dihiggs.phi
 
     # Create the column
     pdf_input_vars_reco_higgs = ak.zip(
