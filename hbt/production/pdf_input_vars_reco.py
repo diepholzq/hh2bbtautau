@@ -29,8 +29,8 @@ def signed_cos_deltaangle_for_jax(inputs):
     ax, ay, az = inputs[0], inputs[1], inputs[2]
     bx, by, bz = inputs[3], inputs[4], inputs[5]
     a_times_b = ax * bx + ay * by + az * bz
-    abs_a = np.sqrt(ax**2 + ay**2 + az**2)
-    abs_b = np.sqrt(bx**2 + by**2 + bz**2)
+    abs_a = jax.numpy.sqrt(ax**2 + ay**2 + az**2)
+    abs_b = jax.numpy.sqrt(bx**2 + by**2 + bz**2)
     return a_times_b / (abs_a * abs_b)
 
 
@@ -39,18 +39,13 @@ def calculate_constraint_term(
         corrected_distr2,
         uncorr_distr1,
         uncorr_distr2,
-        ch_id_mask,
-) -> np.array:
+        mean_sigma_correction_array,
+):
     """Calculates log of Likelihood that indicates the probability of a measurement agreeing with the correction
     """
-    mean_correction1 = np.mean(
-        corrected_distr1[ch_id_mask] - uncorr_distr1[ch_id_mask])
-    mean_correction2 = np.mean(
-        corrected_distr2[ch_id_mask] - uncorr_distr2[ch_id_mask])
-    sigma_correction1 = np.std(
-        corrected_distr1[ch_id_mask] - uncorr_distr1[ch_id_mask])
-    sigma_correction2 = np.std(
-        corrected_distr2[ch_id_mask] - uncorr_distr2[ch_id_mask])
+    mean_correction1, mean_correction2 = mean_sigma_correction_array[0], mean_sigma_correction_array[1]
+    sigma_correction1, sigma_correction2 = mean_sigma_correction_array[2], mean_sigma_correction_array[3]
+
     constr_term = 1 / 2 * (((corrected_distr1 - uncorr_distr1 - mean_correction1) / (sigma_correction1))**2 +
                            ((corrected_distr2 - uncorr_distr2 - mean_correction2) / (sigma_correction2))**2)
     return constr_term
@@ -97,7 +92,7 @@ def det_coords_to_fourmomentum(inputs):
     energy = jax.numpy.sqrt(m**2 + momentum**2)
     return jax.numpy.stack([
         px, py, pz, energy,
-    ], axis=1)
+    ], axis=0)
 
 
 def fourmomentum_to_det_coord(inputs):
@@ -114,7 +109,7 @@ def fourmomentum_to_det_coord(inputs):
     m = jax.numpy.sqrt(energy**2 - (pt * jax.numpy.cosh(eta))**2)
     return jax.numpy.stack([
         pt, eta, phi, m,
-    ], axis=1, dtype=np.float64)
+    ], axis=0)
 
 
 def four_vec_sum(inputs):
@@ -126,7 +121,7 @@ def four_vec_sum(inputs):
     e = e1 + e2
     return jax.numpy.stack([
         px, py, pz, e,
-    ], axis=0).T
+    ], axis=0)
 
 
 def dot_product(inputs):
@@ -185,7 +180,7 @@ def boost_a_cm_of_b(inputs, mass_b):
     # embed(header="boosting")
     return jax.numpy.stack([
         boosted_p[0], boosted_p[1], boosted_p[2], boosted_e,
-    ], axis=0).T
+    ], axis=0)
 
 
 def calculate_invariant_mass(inputs):
@@ -208,30 +203,249 @@ def calculate_invariant_mass(inputs):
     return inv_mass
 
 
+# ------------------ Helper functions to get the relevant particles ----------------------------
+def calculate_b_corrected(inputs, calculate_constr_term=False, mean_sigma_correction_array=jax.numpy.array([None])):
+    b1_pt, b1_eta, b1_phi, b1_mass = inputs[0], inputs[1], inputs[2], inputs[3]
+    b2_pt, b2_eta, b2_phi, b2_mass = inputs[4], inputs[5], inputs[6], inputs[7]
+    b1_inputs = jax.numpy.stack([
+        b1_pt, b1_eta, b1_phi, b1_mass,
+    ], axis=0)
+    b2_inputs = jax.numpy.stack([
+        b2_pt, b2_eta, b2_phi, b2_mass,
+    ], axis=0)
+
+    b1 = det_coords_to_fourmomentum(b1_inputs)
+    b2 = det_coords_to_fourmomentum(b2_inputs)
+
+    m_bb_rec = calculate_invariant_mass(
+        jax.numpy.concatenate([b1, b2], axis=0))
+
+    # Calculate correction terms: b
+    m_bb = 125
+    b1_corrected = jax.numpy.stack([
+        b1[0] * m_bb / m_bb_rec,
+        b1[1] * m_bb / m_bb_rec,
+        b1[2] * m_bb / m_bb_rec,
+        b1[3] * m_bb / m_bb_rec,
+
+    ], axis=0)
+    b2_corrected = jax.numpy.stack([
+        b2[0] * m_bb / m_bb_rec,
+        b2[1] * m_bb / m_bb_rec,
+        b2[2] * m_bb / m_bb_rec,
+        b2[3] * m_bb / m_bb_rec,
+
+    ], axis=0)
+
+    if not calculate_constr_term:
+        return jax.numpy.concatenate([b1_corrected, b2_corrected], axis=0)
+    else:
+        constr_term_b = calculate_constraint_term(
+            fourmomentum_to_det_coord(b1_corrected)[0],
+            fourmomentum_to_det_coord(b2_corrected)[0],
+            b1_pt,
+            b2_pt,
+            mean_sigma_correction_array,
+        )
+        return constr_term_b
+
+
+def calculate_tau_corrected(inputs, calculate_constr_term=False, mean_sigma_correction_array=jax.numpy.array([None])):
+    tau1_pt, tau1_eta, tau1_phi, tau1_mass = inputs[8], inputs[9], inputs[10], inputs[11]
+    tau2_pt, tau2_eta, tau2_phi, tau2_mass = inputs[12], inputs[13], inputs[14], inputs[15]
+    tau1_inputs = jax.numpy.stack([
+        tau1_pt, tau1_eta, tau1_phi, tau1_mass,
+    ], axis=0)
+    tau2_inputs = jax.numpy.stack([
+        tau2_pt, tau2_eta, tau2_phi, tau2_mass,
+    ], axis=0)
+    tau1 = det_coords_to_fourmomentum(tau1_inputs)
+    tau2 = det_coords_to_fourmomentum(tau2_inputs)
+
+    m_tautau = 125
+    m_tautau_rec = calculate_invariant_mass(
+        jax.numpy.concatenate([tau1, tau2], axis=0))
+    m_tautau_rec = jax.numpy.nan_to_num(m_tautau_rec, nan=-99999.)
+    tau1_corrected = jax.numpy.stack([
+        tau1[0] * m_tautau / m_tautau_rec,
+        tau1[1] * m_tautau / m_tautau_rec,
+        tau1[2] * m_tautau / m_tautau_rec,
+        tau1[3] * m_tautau / m_tautau_rec,
+
+    ], axis=0)
+    tau2_corrected = jax.numpy.stack([
+        tau2[0] * m_tautau / m_tautau_rec,
+        tau2[1] * m_tautau / m_tautau_rec,
+        tau2[2] * m_tautau / m_tautau_rec,
+        tau2[3] * m_tautau / m_tautau_rec,
+
+    ], axis=0)
+
+    if not calculate_constr_term:
+        return jax.numpy.concatenate([tau1_corrected, tau2_corrected], axis=0)
+    else:
+        constr_term_tau = calculate_constraint_term(
+            fourmomentum_to_det_coord(tau1_corrected)[0],
+            fourmomentum_to_det_coord(tau2_corrected)[0],
+            tau1_pt,
+            tau2_pt,
+            mean_sigma_correction_array,
+        )
+        return constr_term_tau
+
+
+def calculate_hbb(inputs):
+    b1_corrected_b2_corrected = calculate_b_corrected(inputs)
+    h1 = four_vec_sum(b1_corrected_b2_corrected)
+    return h1
+
+
+def calculate_htautau(inputs):
+    tau1_corrected_tau2_corrected = calculate_tau_corrected(inputs)
+    h2 = four_vec_sum(tau1_corrected_tau2_corrected)
+    return h2
+
+
+def calculate_dihiggs_system(inputs):
+    h1 = calculate_hbb(inputs)
+    h2 = calculate_htautau(inputs)
+    dihiggs_system = four_vec_sum(jax.numpy.concatenate([h1, h2], axis=0))
+    return dihiggs_system
+
+
+# ----------------------------- Scalar output functions to calculate the likelihood inputs ------------------------
+def calculate_cos_theta_cms_h1_b1(inputs):
+    b1_corrected = calculate_b_corrected(inputs)[:4]
+    h1 = calculate_hbb(inputs)
+    h1_detspace = fourmomentum_to_det_coord(h1)
+    b_cms_h1 = boost_a_cm_of_b(jax.numpy.concatenate([b1_corrected, h1], axis=0), h1_detspace[3])
+    cos_theta_cms_h1_b1 = signed_cos_deltaangle_for_jax(jax.numpy.concatenate([b_cms_h1[:3], h1[:3]], axis=0))
+    return cos_theta_cms_h1_b1
+
+
+def calculate_phi_cms_h1_b1(inputs):
+    b1_corrected = calculate_b_corrected(inputs)[:4]
+    h1 = calculate_hbb(inputs)
+    h1_detspace = fourmomentum_to_det_coord(h1)
+    b_cms_h1 = boost_a_cm_of_b(jax.numpy.concatenate([b1_corrected, h1], axis=0), h1_detspace[3])
+    b_cms_h1_detspace = fourmomentum_to_det_coord(b_cms_h1)
+    phi_cms_h1_b1 = b_cms_h1_detspace[2]
+    return phi_cms_h1_b1
+
+
+def calculate_cos_theta_cms_h2_tau_vis1(inputs):
+    tau1_corrected = calculate_tau_corrected(inputs)[:4]
+    h2 = calculate_htautau(inputs)
+    h2_detspace = fourmomentum_to_det_coord(h2)
+    tau_cms_h2 = boost_a_cm_of_b(jax.numpy.concatenate([tau1_corrected, h2], axis=0), h2_detspace[3])
+    cos_theta_cms_h2_tau_vis1 = signed_cos_deltaangle_for_jax(jax.numpy.concatenate([tau_cms_h2[:3], h2[:3]], axis=0))
+    return cos_theta_cms_h2_tau_vis1
+
+
+def calculate_phi_cms_h2_tau_vis1(inputs):
+    tau1_corrected = calculate_tau_corrected(inputs)[:4]
+    h2 = calculate_htautau(inputs)
+    h2_detspace = fourmomentum_to_det_coord(h2)
+    tau_cms_h2 = boost_a_cm_of_b(jax.numpy.concatenate([tau1_corrected, h2], axis=0), h2_detspace[3])
+    tau_cms_h2_detspace = fourmomentum_to_det_coord(tau_cms_h2)
+    phi_cms_h2_tau_vis1 = tau_cms_h2_detspace[2]
+    return phi_cms_h2_tau_vis1
+
+
 def calculate_dihiggs_mass(inputs):
-    # inputs: shape (16,)
-    b1_px, b1_py, b1_pz, b1_e = inputs[0], inputs[1], inputs[2], inputs[3]
-    b2_px, b2_py, b2_pz, b2_e = inputs[4], inputs[5], inputs[6], inputs[7]
-    tau1_px, tau1_py, tau1_pz, tau1_e = inputs[8], inputs[9], inputs[10], inputs[11]
-    tau2_px, tau2_py, tau2_pz, tau2_e = inputs[12], inputs[13], inputs[14], inputs[15]
+    dihiggs_system = calculate_dihiggs_system(inputs)
+    dihiggs_system_detspace = fourmomentum_to_det_coord(dihiggs_system)
+    return dihiggs_system_detspace[3]
 
-    h1_px = b1_px + b2_px
-    h1_py = b1_py + b2_py
-    h1_pz = b1_pz + b2_pz
-    h1_e = b1_e + b2_e
 
-    h2_px = tau1_px + tau2_px
-    h2_py = tau1_py + tau2_py
-    h2_pz = tau1_pz + tau2_pz
-    h2_e = tau1_e + tau2_e
+def calculate_dihiggs_system_pt(inputs):
+    dihiggs_system = calculate_dihiggs_system(inputs)
+    dihiggs_system_detspace = fourmomentum_to_det_coord(dihiggs_system)
+    return dihiggs_system_detspace[0]
 
-    dh_px = h1_px + h2_px
-    dh_py = h1_py + h2_py
-    dh_pz = h1_pz + h2_pz
-    dh_e = h1_e + h2_e
 
-    dh_mass = jax.numpy.sqrt(dh_e**2 - (dh_px**2 + dh_py**2 + dh_pz**2))
-    return dh_mass
+def calculate_dihiggs_system_pz(inputs):
+    dihiggs_system = calculate_dihiggs_system(inputs)
+    return dihiggs_system[2]
+
+
+def calculate_dihiggs_system_phi(inputs):
+    dihiggs_system = calculate_dihiggs_system(inputs)
+    dihiggs_system_detspace = fourmomentum_to_det_coord(dihiggs_system)
+    return dihiggs_system_detspace[2]
+
+
+def calculate_cos_theta_h1(inputs):
+    h1 = calculate_hbb(inputs)
+    dihiggs_system = calculate_dihiggs_system(inputs)
+    h1_cms_dihiggs = boost_a_cm_of_b(jax.numpy.concatenate([h1, dihiggs_system], axis=0), dihiggs_system[3])
+    cos_theta_h1 = signed_cos_deltaangle_for_jax(jax.numpy.concatenate([h1_cms_dihiggs[:3], dihiggs_system[:3]], axis=0))
+    return cos_theta_h1
+
+
+def calculate_phi_h1(inputs):
+    h1 = calculate_hbb(inputs)
+    dihiggs_system = calculate_dihiggs_system(inputs)
+    h1_cms_dihiggs = boost_a_cm_of_b(jax.numpy.concatenate([h1, dihiggs_system], axis=0), dihiggs_system[3])
+    h1_cms_dihiggs_detspace = fourmomentum_to_det_coord(h1_cms_dihiggs)
+    return h1_cms_dihiggs_detspace[2]
+
+
+def calculate_mean_correction(inputs, ch_id_mask):
+    """Calculates the mean correction and std dev of correction for all relevant events (e.g., ch_id_mask applied)
+    Can be done outside of gradient collection / batching per event, as all events need to be taken into account.
+    """
+    part1_pt, part1_eta, part1_phi, part1_mass = inputs[0], inputs[1], inputs[2], inputs[3]
+    part2_pt, part2_eta, part2_phi, part2_mass = inputs[4], inputs[5], inputs[6], inputs[7]
+    part1_inputs = jax.numpy.stack([
+        part1_pt, part1_eta, part1_phi, part1_mass,
+    ], axis=0)
+    part2_inputs = jax.numpy.stack([
+        part2_pt, part2_eta, part2_phi, part2_mass,
+    ], axis=0)
+
+    part1 = det_coords_to_fourmomentum(part1_inputs)
+    part2 = det_coords_to_fourmomentum(part2_inputs)
+
+    m_inv_rec = calculate_invariant_mass(
+        jax.numpy.concatenate([part1, part2], axis=0))
+
+    # Calculate correction terms: b
+    m_inv = 125
+    part1_corrected = jax.numpy.stack([
+        part1[0] * m_inv / m_inv_rec,
+        part1[1] * m_inv / m_inv_rec,
+        part1[2] * m_inv / m_inv_rec,
+        part1[3] * m_inv / m_inv_rec,
+
+    ], axis=0)
+    part2_corrected = jax.numpy.stack([
+        part2[0] * m_inv / m_inv_rec,
+        part2[1] * m_inv / m_inv_rec,
+        part2[2] * m_inv / m_inv_rec,
+        part2[3] * m_inv / m_inv_rec,
+
+    ], axis=0)
+    part1_corrected = fourmomentum_to_det_coord(part1_corrected)
+    part2_corrected = fourmomentum_to_det_coord(part2_corrected)
+
+    mean_correction1 = jax.numpy.mean(part1_corrected[0][ch_id_mask] - part1_pt[ch_id_mask])
+    mean_correction2 = jax.numpy.mean(part2_corrected[0][ch_id_mask] - part2_pt[ch_id_mask])
+    sigma_correction1 = jax.numpy.std(part1_corrected[0][ch_id_mask] - part1_pt[ch_id_mask])
+    sigma_correction2 = jax.numpy.std(part2_corrected[0][ch_id_mask] - part2_pt[ch_id_mask])
+    return jax.numpy.array([mean_correction1, mean_correction2, sigma_correction1, sigma_correction2])
+
+
+def calculate_constr_term_b(inputs, mean_sigma_correction_array):
+    return calculate_b_corrected(
+        inputs, calculate_constr_term=True, mean_sigma_correction_array=mean_sigma_correction_array,
+    )
+
+
+def calculate_constr_term_tau(inputs, mean_sigma_correction_array):
+    return calculate_tau_corrected(
+        inputs, calculate_constr_term=True, mean_sigma_correction_array=mean_sigma_correction_array,
+    )
 
 
 @producer(
@@ -249,18 +463,6 @@ def create_pdf_input_vars_reco_higgs(
     """
     ch_id_mask = events.channel_id == 3
     ch_id_mask = ak.to_numpy(ch_id_mask)
-
-    behaving_columns = attach_coffea_behavior_fn(
-        events,
-        collections={
-            "HHBJet": {
-                "type_name": "LorentzVector",
-            },
-            "Tau": {
-                "type_name": "LorentzVector",
-            },
-        },
-    )
 
     # get four-momenta of b's and taus
     # Select random b as b1, other as b2
@@ -292,171 +494,123 @@ def create_pdf_input_vars_reco_higgs(
     # Inputs for higgs input function
     b1_inputs = jax.numpy.stack([
         b_pt[:, 0], b_eta[:, 0], b_phi[:, 0], b_mass[:, 0],
-    ], axis=0)
+    ], axis=0, dtype=jax.numpy.float64)
     b2_inputs = jax.numpy.stack([
         b_pt[:, 1], b_eta[:, 1], b_phi[:, 1], b_mass[:, 1],
-    ], axis=0)
+    ], axis=0, dtype=jax.numpy.float64)
     tau1_inputs = jax.numpy.stack([
         tau_pt[:, 0], tau_eta[:, 0], tau_phi[:, 0], tau_mass[:, 0],
-    ], axis=0)
+    ], axis=0, dtype=jax.numpy.float64)
     tau2_inputs = jax.numpy.stack([
         tau_pt[:, 1], tau_eta[:, 1], tau_phi[:, 1], tau_mass[:, 1],
+    ], axis=0, dtype=jax.numpy.float64)
+
+    inputs = jax.numpy.concatenate([
+        b1_inputs, b2_inputs, tau1_inputs, tau2_inputs,
     ], axis=0)
 
-    # --------------------------------------------- Ab hier: part. Ableitungen relevant -----------------------
-    b1 = det_coords_to_fourmomentum(b1_inputs)
-    b2 = det_coords_to_fourmomentum(b2_inputs)
-    tau1 = det_coords_to_fourmomentum(tau1_inputs)
-    tau2 = det_coords_to_fourmomentum(tau2_inputs)
+    mean_sigma_correction_array_b = calculate_mean_correction(inputs[:8], ch_id_mask)
+    mean_sigma_correction_array_tau = calculate_mean_correction(inputs[8:], ch_id_mask)
 
-    # Calculate invariant mass of bb system for correction term
-    # shape: 8,batch_size
-    m_bb_rec = calculate_invariant_mass(
-        jax.numpy.concatenate([b1, b2], axis=1).T)
+    # ------------------------------- Batching ----------------------------------------------------
+    # Calculate inputs with helper functions from above, using jax.vmap, then calculate jacobians
+    batched_calculate_dihiggs_mass = jax.vmap(calculate_dihiggs_mass)
+    batched_calculate_dihiggs_system_pt = jax.vmap(calculate_dihiggs_system_pt)
+    batched_calculate_dihiggs_system_pz = jax.vmap(calculate_dihiggs_system_pz)
+    batched_calculate_dihiggs_system_phi = jax.vmap(calculate_dihiggs_system_phi)
+    batched_calculate_cos_theta_h1 = jax.vmap(calculate_cos_theta_h1)
+    batched_calculate_phi_h1 = jax.vmap(calculate_phi_h1)
+    batched_calculate_cos_theta_cms_h2_tau_vis1 = jax.vmap(calculate_cos_theta_cms_h2_tau_vis1)
+    batched_calculate_phi_cms_h2_tau_vis1 = jax.vmap(calculate_phi_cms_h2_tau_vis1)
+    batched_calculate_cos_theta_cms_h1_b1 = jax.vmap(calculate_cos_theta_cms_h1_b1)
+    batched_calculate_phi_cms_h1_b1 = jax.vmap(calculate_phi_cms_h1_b1)
+    batched_calculate_constr_term_b = jax.vmap(calculate_constr_term_b, in_axes=(0, None))
+    batched_calculate_constr_term_tau = jax.vmap(calculate_constr_term_tau, in_axes=(0, None))
 
-    # Calculate correction terms: b
-    m_bb = 125
-    b1_corrected = jax.numpy.stack([
-        b1[:, 0] * m_bb / m_bb_rec,
-        b1[:, 1] * m_bb / m_bb_rec,
-        b1[:, 2] * m_bb / m_bb_rec,
-        b1[:, 3] * m_bb / m_bb_rec,
+    # Gradient functions
+    batched_grad_calculate_dihiggs_mass = jax.vmap(jax.grad(calculate_dihiggs_mass))
+    batched_grad_calculate_dihiggs_system_pt = jax.vmap(jax.grad(calculate_dihiggs_system_pt))
+    batched_grad_calculate_dihiggs_system_pz = jax.vmap(jax.grad(calculate_dihiggs_system_pz))
+    # batched_grad_calculate_dihiggs_system_phi = jax.vmap(jax.grad(calculate_dihiggs_system_phi))
+    batched_grad_calculate_cos_theta_h1 = jax.vmap(jax.grad(calculate_cos_theta_h1))
+    # batched_grad_calculate_phi_h1 = jax.vmap(jax.grad(calculate_phi_h1))
+    batched_grad_calculate_cos_theta_cms_h2_tau_vis1 = jax.vmap(jax.grad(calculate_cos_theta_cms_h2_tau_vis1))
+    # batched_grad_calculate_phi_cms_h2_tau_vis1 = jax.vmap(jax.grad(calculate_phi_cms_h2_tau_vis1))
+    batched_grad_calculate_cos_theta_cms_h1_b1 = jax.vmap(jax.grad(calculate_cos_theta_cms_h1_b1))
+    # batched_grad_calculate_phi_cms_h1_b1 = jax.vmap(jax.grad(calculate_phi_cms_h1_b1))
+    batched_grad_calculate_constr_term_b = jax.vmap(jax.grad(calculate_constr_term_b, argnums=0), in_axes=(0, None))
+    batched_grad_calculate_constr_term_tau = jax.vmap(jax.grad(calculate_constr_term_tau, argnums=0), in_axes=(0, None))
 
-    ], axis=1)
-    b1_corrected_detspace = fourmomentum_to_det_coord(b1_corrected.T)
-    b2_corrected = jax.numpy.stack([
-        b2[:, 0] * m_bb / m_bb_rec,
-        b2[:, 1] * m_bb / m_bb_rec,
-        b2[:, 2] * m_bb / m_bb_rec,
-        b2[:, 3] * m_bb / m_bb_rec,
+    # Calculate likelihood inputs
+    dihiggs_mass = batched_calculate_dihiggs_mass(inputs.T)
+    dihiggs_system_pt = batched_calculate_dihiggs_system_pt(inputs.T)
+    dihiggs_system_pz = batched_calculate_dihiggs_system_pz(inputs.T)
+    dihiggs_system_phi = batched_calculate_dihiggs_system_phi(inputs.T)
+    cos_theta_h1 = batched_calculate_cos_theta_h1(inputs.T)
+    phi_h1 = batched_calculate_phi_h1(inputs.T)
+    cos_theta_cms_h2_tau_vis1 = batched_calculate_cos_theta_cms_h2_tau_vis1(inputs.T)
+    phi_cms_h2_tau_vis1 = batched_calculate_phi_cms_h2_tau_vis1(inputs.T)
+    cos_theta_cms_h1_b1 = batched_calculate_cos_theta_cms_h1_b1(inputs.T)
+    phi_cms_h1_b1 = batched_calculate_phi_cms_h1_b1(inputs.T)
+    constr_term_b = batched_calculate_constr_term_b(inputs.T, mean_sigma_correction_array_b)
+    constr_term_tau = batched_calculate_constr_term_tau(inputs.T, mean_sigma_correction_array_tau)
 
-    ], axis=1)
-    b2_corrected_detspace = fourmomentum_to_det_coord(b2_corrected.T)
-    constr_term_b = calculate_constraint_term(
-        b1_corrected_detspace[:, 0],
-        b2_corrected_detspace[:, 0],
-        b_pt[:, 0],
-        b_pt[:, 1],
-        ch_id_mask,
-    )
+    # Calculate Jacobians: Gradient calculation
+    # grad_... shape: (Batch_size, 16), because 16 inputs go into likelihood variable calculation (pt, eta, phi, m) * 4
+    grad_dihiggs_mass = batched_grad_calculate_dihiggs_mass(inputs.T)
+    grad_dihiggs_system_pt = batched_grad_calculate_dihiggs_system_pt(inputs.T)
+    grad_dihiggs_system_pz = batched_grad_calculate_dihiggs_system_pz(inputs.T)
+    # grad_dihiggs_system_phi = batched_grad_calculate_dihiggs_system_phi(inputs.T)
+    grad_cos_theta_h1 = batched_grad_calculate_cos_theta_h1(inputs.T)
+    # grad_phi_h1 = batched_grad_calculate_phi_h1(inputs.T)
+    grad_cos_theta_cms_h2_tau_vis1 = batched_grad_calculate_cos_theta_cms_h2_tau_vis1(inputs.T)
+    # grad_phi_cms_h2_tau_vis1 = batched_grad_calculate_phi_cms_h2_tau_vis1(inputs.T)
+    grad_cos_theta_cms_h1_b1 = batched_grad_calculate_cos_theta_cms_h1_b1(inputs.T)
+    # grad_phi_cms_h1_b1 = batched_grad_calculate_phi_cms_h1_b1(inputs.T)
+    grad_constr_term_b = batched_grad_calculate_constr_term_b(inputs.T, mean_sigma_correction_array_b)
+    grad_constr_term_tau = batched_grad_calculate_constr_term_tau(inputs.T, mean_sigma_correction_array_tau)
 
-    # Calculate constraint terms: taus
-    m_tautau = 125
-    m_tautau_rec = calculate_invariant_mass(
-        jax.numpy.concatenate([tau1, tau2], axis=1).T)
-    m_tautau_rec = jax.numpy.nan_to_num(m_tautau_rec, nan=-99999.)
-    tau1_corrected = jax.numpy.stack([
-        tau1[:, 0] * m_tautau / m_tautau_rec,
-        tau1[:, 1] * m_tautau / m_tautau_rec,
-        tau1[:, 2] * m_tautau / m_tautau_rec,
-        tau1[:, 3] * m_tautau / m_tautau_rec,
-
-    ], axis=1)
-    tau1_corrected_detspace = fourmomentum_to_det_coord(tau1_corrected.T)
-    tau2_corrected = jax.numpy.stack([
-        tau2[:, 0] * m_tautau / m_tautau_rec,
-        tau2[:, 1] * m_tautau / m_tautau_rec,
-        tau2[:, 2] * m_tautau / m_tautau_rec,
-        tau2[:, 3] * m_tautau / m_tautau_rec,
-
-    ], axis=1)
-    tau2_corrected_detspace = fourmomentum_to_det_coord(tau2_corrected.T)
-    constr_term_tau = calculate_constraint_term(
-        tau1_corrected_detspace[:, 0],
-        tau2_corrected_detspace[:, 0],
-        tau_pt[:, 0],
-        tau_pt[:, 1],
-        ch_id_mask,
-    )
-
-    # Build H_bb
-    h1 = four_vec_sum(jax.numpy.concatenate([b1_corrected, b2_corrected], axis=1).T)
-    h1_detspace = fourmomentum_to_det_coord(h1.T)
-
-    # Build H_tautau
-    h2 = four_vec_sum(jax.numpy.concatenate([tau1_corrected, tau2_corrected], axis=1).T)
-    h2_detspace = fourmomentum_to_det_coord(h2.T)
-
-    # Calculate b inputs
-    b_cms_h1 = boost_a_cm_of_b(jax.numpy.concatenate([b1_corrected, h1], axis=1).T, h1_detspace[:, 3])
-    b_cms_h1_detspace = fourmomentum_to_det_coord(b_cms_h1.T)
-    cos_theta_cms_h1_b1 = signed_cos_deltaangle_for_jax(jax.numpy.concatenate([b_cms_h1[:, :3], h1[:, :3]], axis=1).T)
-    phi_cms_h1_b1 = b_cms_h1_detspace[:, 2]
-
-    # Calculate tau inputs
-    tau_cms_h2 = boost_a_cm_of_b(jax.numpy.concatenate([tau1_corrected, h2], axis=1).T, h2_detspace[:, 3])
-    tau_cms_h2_detspace = fourmomentum_to_det_coord(tau_cms_h2.T)
-    cos_theta_cms_h2_tau_vis1 = signed_cos_deltaangle_for_jax(jax.numpy.concatenate([tau_cms_h2[:, :3], h2[:, :3]], axis=1).T)
-    phi_cms_h2_tau_vis1 = tau_cms_h2_detspace[:, 2]
-
-    # Calculate dihiggs inputs
-    dihiggs_system = four_vec_sum(jax.numpy.concatenate([h1, h2], axis=1).T)
-    dihiggs_system_detspace = fourmomentum_to_det_coord(dihiggs_system.T)
-    dihiggs_mass = dihiggs_system_detspace[:, 3]
-    dihiggs_system_pt = dihiggs_system_detspace[:, 0]
-    dihiggs_system_pz = dihiggs_system[:, 2]
-    dihiggs_system_phi = dihiggs_system_detspace[:, 2]
-
-    # Calculate h1 inputs
-    h1_cms_dihiggs = boost_a_cm_of_b(jax.numpy.concatenate([h1, dihiggs_system], axis=1).T, dihiggs_mass)
-    h1_cms_dihiggs_detspace = fourmomentum_to_det_coord(h1_cms_dihiggs.T)
-    cos_theta_h1 = signed_cos_deltaangle_for_jax(jax.numpy.concatenate([h1_cms_dihiggs[:, :3], dihiggs_system[:, :3]], axis=1).T)
-    phi_h1 = h1_cms_dihiggs_detspace[:, 2]
-
-    # grad_func = jax.grad(calculate_invariant_mass)
-    # batched_grad = jax.vmap(grad_func)
-    # batch_inputs = jax.numpy.stack(
-    #     [
-    #         ak.to_numpy(b_corrected_vec[:, 0].x).filled(),
-    #         ak.to_numpy(b_corrected_vec[:, 0].y).filled(),
-    #         ak.to_numpy(b_corrected_vec[:, 0].z).filled(),
-    #         ak.to_numpy(b_corrected_vec[:, 0].t).filled(),
-    #         ak.to_numpy(b_corrected_vec[:, 1].x).filled(),
-    #         ak.to_numpy(b_corrected_vec[:, 1].y).filled(),
-    #         ak.to_numpy(b_corrected_vec[:, 1].z).filled(),
-    #         ak.to_numpy(b_corrected_vec[:, 1].t).filled(),
-    #         ak.to_numpy(taus_corr[:, 0].x),
-    #         ak.to_numpy(taus_corr[:, 0].y),
-    #         ak.to_numpy(taus_corr[:, 0].z),
-    #         ak.to_numpy(taus_corr[:, 0].t),
-    #         ak.to_numpy(taus_corr[:, 1].x),
-    #         ak.to_numpy(taus_corr[:, 1].y),
-    #         ak.to_numpy(taus_corr[:, 1].z),
-    #         ak.to_numpy(taus_corr[:, 1].t),
-    #     ], axis=1
-    # )
-    # grads = batched_grad(batch_inputs)
-    # test_inputs = jax.numpy.stack([
-    #     ak.to_numpy(b_corrected_vec[0, 0].px),
-    #     ak.to_numpy(b_corrected_vec[0, 0].py),
-    #     ak.to_numpy(b_corrected_vec[0, 0].pz),
-    #     ak.to_numpy(b_corrected_vec[0, 0].e),
-    #     ak.to_numpy(taus_corr[0, 0].px),
-    #     ak.to_numpy(taus_corr[0, 0].y),
-    #     ak.to_numpy(taus_corr[0, 0].pz),
-    #     ak.to_numpy(taus_corr[0, 0].e),
-    #     ak.to_numpy(b_corrected_vec[0, 0].mass),
-    #     ak.to_numpy(taus_corr[0, 0].mass),
-    # ], axis=0)
+    # Calculate Jacobians: Building the matrices
+    # Matrix shape: (Batch_size, num_likelihood_inputs, 16)
+    jac_matrix = np.concatenate([
+        grad_dihiggs_mass[:, None],
+        grad_dihiggs_system_pt[:, None],
+        grad_dihiggs_system_pz[:, None],
+        # grad_dihiggs_system_phi[:, None],
+        grad_cos_theta_h1[:, None],
+        # grad_phi_h1[:, None],
+        grad_cos_theta_cms_h2_tau_vis1[:, None],
+        # grad_phi_cms_h2_tau_vis1[:, None],
+        grad_cos_theta_cms_h1_b1[:, None],
+        # grad_phi_cms_h1_b1[:, None],
+        grad_constr_term_b[:, None],
+        grad_constr_term_tau[:, None],
+    ], axis=1, dtype=np.float64)
+    jac_matrix_transposed = np.transpose(jac_matrix, axes=(0, 2, 1))
+    # squared_matrix = np.matmul(jac_matrix_transposed, jac_matrix)
+    squared_matrix = np.matmul(jac_matrix, jac_matrix_transposed)
+    jac_det = np.linalg.det(squared_matrix)
+    EMPTY_FLOAT = -99999.9
 
     # Create the column
     pdf_input_vars_reco_higgs = ak.zip(
         {
-            "dihiggs_mass": dihiggs_mass,
-            "dihiggs_system_pt": dihiggs_system_pt,
-            "dihiggs_system_pz": dihiggs_system_pz,
-            "dihiggs_system_phi": dihiggs_system_phi,
-            "cos_theta_h1": cos_theta_h1,
-            "phi_h1": phi_h1,
-            "cos_theta_cms_h2_tau_vis1": cos_theta_cms_h2_tau_vis1,
-            "phi_cms_h2_tau_vis1": phi_cms_h2_tau_vis1,
-            "cos_theta_cms_h1_b1": cos_theta_cms_h1_b1,
-            "phi_cms_h1_b1": phi_cms_h1_b1,
-            "constr_term_tau": constr_term_tau,
-            "constr_term_b": constr_term_b,
+            "dihiggs_mass": ak.from_numpy(np.nan_to_num(dihiggs_mass, nan=EMPTY_FLOAT)),
+            "dihiggs_system_pt": ak.from_numpy(np.nan_to_num(dihiggs_system_pt, nan=EMPTY_FLOAT)),
+            "dihiggs_system_pz": ak.from_numpy(np.nan_to_num(dihiggs_system_pz, nan=EMPTY_FLOAT)),
+            "dihiggs_system_phi": ak.from_numpy(np.nan_to_num(dihiggs_system_phi, nan=EMPTY_FLOAT)),
+            "cos_theta_h1": ak.from_numpy(np.nan_to_num(cos_theta_h1, nan=EMPTY_FLOAT)),
+            "phi_h1": ak.from_numpy(np.nan_to_num(phi_h1, nan=EMPTY_FLOAT)),
+            "cos_theta_cms_h2_tau_vis1": ak.from_numpy(np.nan_to_num(cos_theta_cms_h2_tau_vis1, nan=EMPTY_FLOAT)),
+            "phi_cms_h2_tau_vis1": ak.from_numpy(np.nan_to_num(phi_cms_h2_tau_vis1, nan=EMPTY_FLOAT)),
+            "cos_theta_cms_h1_b1": ak.from_numpy(np.nan_to_num(cos_theta_cms_h1_b1, nan=EMPTY_FLOAT)),
+            "phi_cms_h1_b1": ak.from_numpy(np.nan_to_num(phi_cms_h1_b1, nan=EMPTY_FLOAT)),
+            "constr_term_tau": ak.from_numpy(np.nan_to_num(constr_term_tau, nan=EMPTY_FLOAT)),
+            "constr_term_b": ak.from_numpy(np.nan_to_num(constr_term_b, nan=EMPTY_FLOAT)),
+            "jac_det": ak.from_numpy(np.nan_to_num(jac_det, nan=EMPTY_FLOAT)),
         },
         with_name="pdf_input_vars_reco_higgs")
-    pdf_input_vars_reco_higgs = ak.mask(pdf_input_vars_reco_higgs, ch_id_mask)
+    pdf_input_vars_reco_higgs = ak.mask(pdf_input_vars_reco_higgs, ak.from_numpy(np.array(ch_id_mask)))
     events = set_ak_column(
         events, "pdf_input_vars_reco_higgs", pdf_input_vars_reco_higgs)
 
