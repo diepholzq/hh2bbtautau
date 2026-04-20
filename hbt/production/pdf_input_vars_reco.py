@@ -189,8 +189,6 @@ def boost_a_cm_of_b(inputs, mass_b):
         p_vec_a + (gamma_b - 1) * (jax.numpy.linalg.vecdot(p_vec_a, normal_n, axis=0)) *
         normal_n - gamma_b * norm_v * a_energy * normal_n
     )
-    # from IPython import embed
-    # embed(header="boosting")
     return jax.numpy.stack([
         boosted_p[0], boosted_p[1], boosted_p[2], boosted_e,
     ], axis=0)
@@ -217,7 +215,7 @@ def calculate_invariant_mass(inputs):
 
 
 # ------------------ Helper functions to get the relevant particles ----------------------------
-def calculate_b_corrected(inputs, calculate_constr_term=False, mean_sigma_correction_array=jax.numpy.array([None])):
+def calculate_b_corrected(inputs, mean_sigma_correction_array, calculate_constr_term=False):
     b1_pt, b1_eta, b1_phi, b1_mass = inputs[0], inputs[1], inputs[2], inputs[3]
     b2_pt, b2_eta, b2_phi, b2_mass = inputs[4], inputs[5], inputs[6], inputs[7]
     b1_inputs = jax.numpy.stack([
@@ -249,8 +247,9 @@ def calculate_b_corrected(inputs, calculate_constr_term=False, mean_sigma_correc
         b2[3] * m_bb / m_bb_rec,
 
     ], axis=0)
-
     if not calculate_constr_term:
+        b1_corrected = fourmomentum_to_det_coord(b1_corrected)
+        b2_corrected = fourmomentum_to_det_coord(b2_corrected)
         return jax.numpy.concatenate([b1_corrected, b2_corrected], axis=0)
     else:
         constr_term_b = calculate_constraint_term(
@@ -263,7 +262,7 @@ def calculate_b_corrected(inputs, calculate_constr_term=False, mean_sigma_correc
         return constr_term_b
 
 
-def calculate_tau_corrected(inputs, calculate_constr_term=False, mean_sigma_correction_array=jax.numpy.array([None])):
+def calculate_tau_corrected(inputs, mean_sigma_correction_array, calculate_constr_term=False):
     tau1_pt, tau1_eta, tau1_phi, tau1_mass = inputs[8], inputs[9], inputs[10], inputs[11]
     tau2_pt, tau2_eta, tau2_phi, tau2_mass = inputs[12], inputs[13], inputs[14], inputs[15]
     tau1_inputs = jax.numpy.stack([
@@ -293,8 +292,9 @@ def calculate_tau_corrected(inputs, calculate_constr_term=False, mean_sigma_corr
         tau2[3] * m_tautau / m_tautau_rec,
 
     ], axis=0)
-
     if not calculate_constr_term:
+        tau1_corrected = fourmomentum_to_det_coord(tau1_corrected)
+        tau2_corrected = fourmomentum_to_det_coord(tau2_corrected)
         return jax.numpy.concatenate([tau1_corrected, tau2_corrected], axis=0)
     else:
         constr_term_tau = calculate_constraint_term(
@@ -308,14 +308,18 @@ def calculate_tau_corrected(inputs, calculate_constr_term=False, mean_sigma_corr
 
 
 def calculate_hbb(inputs):
-    b1_corrected_b2_corrected = calculate_b_corrected(inputs)
-    h1 = four_vec_sum(b1_corrected_b2_corrected)
+    b1 = det_coords_to_fourmomentum(inputs[:4])
+    b2 = det_coords_to_fourmomentum(inputs[4:8])
+    b1b2 = jax.numpy.concatenate([b1, b2], axis=0)
+    h1 = four_vec_sum(b1b2)
     return h1
 
 
 def calculate_htautau(inputs):
-    tau1_corrected_tau2_corrected = calculate_tau_corrected(inputs)
-    h2 = four_vec_sum(tau1_corrected_tau2_corrected)
+    tau1 = det_coords_to_fourmomentum(inputs[8:12])
+    tau2 = det_coords_to_fourmomentum(inputs[12:])
+    tau1tau2 = jax.numpy.concatenate([tau1, tau2], axis=0)
+    h2 = four_vec_sum(tau1tau2)
     return h2
 
 
@@ -359,8 +363,6 @@ def calculate_t_vis(inputs):
         jax.numpy.array([M_11_sq, M_21_sq]) > m_tw_sq,
         axis=0,
     )
-    # from IPython import embed
-    # embed(header="tvis")
 
     # Create operand dict
     operands = {
@@ -449,7 +451,7 @@ def calculate_tt_vis_system(inputs):
 # ----------------------------- Scalar output functions to calculate the likelihood inputs ------------------------
 # Inputs for Higgs likelihood
 def calculate_cos_theta_cms_h1_b1(inputs):
-    b1_corrected = calculate_b_corrected(inputs)[:4]
+    b1_corrected = det_coords_to_fourmomentum(inputs[:4])
     h1 = calculate_hbb(inputs)
     h1_detspace = fourmomentum_to_det_coord(h1)
     b_cms_h1 = boost_a_cm_of_b(jax.numpy.concatenate([b1_corrected, h1], axis=0), h1_detspace[3])
@@ -458,7 +460,7 @@ def calculate_cos_theta_cms_h1_b1(inputs):
 
 
 def calculate_phi_cms_h1_b1(inputs):
-    b1_corrected = calculate_b_corrected(inputs)[:4]
+    b1_corrected = det_coords_to_fourmomentum(inputs[:4])
     h1 = calculate_hbb(inputs)
     h1_detspace = fourmomentum_to_det_coord(h1)
     b_cms_h1 = boost_a_cm_of_b(jax.numpy.concatenate([b1_corrected, h1], axis=0), h1_detspace[3])
@@ -468,7 +470,7 @@ def calculate_phi_cms_h1_b1(inputs):
 
 
 def calculate_cos_theta_cms_h2_tau_vis1(inputs):
-    tau1_corrected = calculate_tau_corrected(inputs)[:4]
+    tau1_corrected = det_coords_to_fourmomentum(inputs[8:12])
     h2 = calculate_htautau(inputs)
     h2_detspace = fourmomentum_to_det_coord(h2)
     tau_cms_h2 = boost_a_cm_of_b(jax.numpy.concatenate([tau1_corrected, h2], axis=0), h2_detspace[3])
@@ -477,7 +479,7 @@ def calculate_cos_theta_cms_h2_tau_vis1(inputs):
 
 
 def calculate_phi_cms_h2_tau_vis1(inputs):
-    tau1_corrected = calculate_tau_corrected(inputs)[:4]
+    tau1_corrected = det_coords_to_fourmomentum(inputs[8:12])
     h2 = calculate_htautau(inputs)
     h2_detspace = fourmomentum_to_det_coord(h2)
     tau_cms_h2 = boost_a_cm_of_b(jax.numpy.concatenate([tau1_corrected, h2], axis=0), h2_detspace[3])
@@ -572,13 +574,13 @@ def calculate_mean_correction(inputs, ch_id_mask):
 
 def calculate_constr_term_b(inputs, mean_sigma_correction_array):
     return calculate_b_corrected(
-        inputs, calculate_constr_term=True, mean_sigma_correction_array=mean_sigma_correction_array,
+        inputs, mean_sigma_correction_array, calculate_constr_term=True,
     )
 
 
 def calculate_constr_term_tau(inputs, mean_sigma_correction_array):
     return calculate_tau_corrected(
-        inputs, calculate_constr_term=True, mean_sigma_correction_array=mean_sigma_correction_array,
+        inputs, mean_sigma_correction_array, calculate_constr_term=True,
     )
 
 
@@ -767,8 +769,28 @@ def create_pdf_input_vars_reco_higgs(
         b1_inputs, b2_inputs, tau1_inputs, tau2_inputs,
     ], axis=0)
 
+    # Apply constraints:
     mean_sigma_correction_array_b = calculate_mean_correction(inputs[:8], ch_id_mask)
     mean_sigma_correction_array_tau = calculate_mean_correction(inputs[8:], ch_id_mask)
+    batched_calculate_b_corrected = jax.vmap(calculate_b_corrected, in_axes=(0, None))
+    batched_calculate_tau_corrected = jax.vmap(calculate_tau_corrected, in_axes=(0, None))
+    b1_corrected = batched_calculate_b_corrected(inputs.T, mean_sigma_correction_array_b)[:, :4]
+    b2_corrected = batched_calculate_b_corrected(inputs.T, mean_sigma_correction_array_b)[:, 4:]
+    tau1_corrected = batched_calculate_tau_corrected(inputs.T, mean_sigma_correction_array_tau)[:, :4]
+    tau2_corrected = batched_calculate_tau_corrected(inputs.T, mean_sigma_correction_array_tau)[:, 4:]
+    # Calculate constraint terms
+    batched_calculate_constr_term_b = jax.vmap(calculate_constr_term_b, in_axes=(0, None))
+    batched_calculate_constr_term_tau = jax.vmap(calculate_constr_term_tau, in_axes=(0, None))
+    constr_term_b = batched_calculate_constr_term_b(inputs.T, mean_sigma_correction_array_b)
+    constr_term_tau = batched_calculate_constr_term_tau(inputs.T, mean_sigma_correction_array_tau)
+    # Set masses to fixed values: m_b = 4.183 GeV, m_tau = 1.777 Gev
+    b1_corrected = b1_corrected.at[:, 3].set(4.183)
+    b2_corrected = b2_corrected.at[:, 3].set(4.183)
+    tau1_corrected = tau1_corrected.at[:, 3].set(1.777)
+    tau2_corrected = tau2_corrected.at[:, 3].set(1.777)
+    inputs = jax.numpy.concatenate([
+        b1_corrected, b2_corrected, tau1_corrected, tau2_corrected,
+    ], axis=1).T
 
     # ------------------------------- Batching ----------------------------------------------------
     # Calculate inputs with helper functions from above, using jax.vmap, then calculate jacobians
@@ -782,8 +804,6 @@ def create_pdf_input_vars_reco_higgs(
     batched_calculate_phi_cms_h2_tau_vis1 = jax.vmap(calculate_phi_cms_h2_tau_vis1)
     batched_calculate_cos_theta_cms_h1_b1 = jax.vmap(calculate_cos_theta_cms_h1_b1)
     batched_calculate_phi_cms_h1_b1 = jax.vmap(calculate_phi_cms_h1_b1)
-    batched_calculate_constr_term_b = jax.vmap(calculate_constr_term_b, in_axes=(0, None))
-    batched_calculate_constr_term_tau = jax.vmap(calculate_constr_term_tau, in_axes=(0, None))
 
     # Gradient functions
     batched_grad_calculate_dihiggs_mass = jax.vmap(jax.grad(calculate_dihiggs_mass))
@@ -796,8 +816,8 @@ def create_pdf_input_vars_reco_higgs(
     batched_grad_calculate_phi_cms_h2_tau_vis1 = jax.vmap(jax.grad(calculate_phi_cms_h2_tau_vis1))
     batched_grad_calculate_cos_theta_cms_h1_b1 = jax.vmap(jax.grad(calculate_cos_theta_cms_h1_b1))
     batched_grad_calculate_phi_cms_h1_b1 = jax.vmap(jax.grad(calculate_phi_cms_h1_b1))
-    batched_grad_calculate_constr_term_b = jax.vmap(jax.grad(calculate_constr_term_b, argnums=0), in_axes=(0, None))
-    batched_grad_calculate_constr_term_tau = jax.vmap(jax.grad(calculate_constr_term_tau, argnums=0), in_axes=(0, None))
+    # batched_grad_calculate_constr_term_b = jax.vmap(jax.grad(calculate_constr_term_b, argnums=0), in_axes=(0, None))
+    # batched_grad_calculate_constr_term_tau = jax.vmap(jax.grad(calculate_constr_term_tau, argnums=0),in_axes=(0, None))
 
     # Calculate likelihood inputs
     dihiggs_mass = batched_calculate_dihiggs_mass(inputs.T)
@@ -810,11 +830,9 @@ def create_pdf_input_vars_reco_higgs(
     phi_cms_h2_tau_vis1 = batched_calculate_phi_cms_h2_tau_vis1(inputs.T)
     cos_theta_cms_h1_b1 = batched_calculate_cos_theta_cms_h1_b1(inputs.T)
     phi_cms_h1_b1 = batched_calculate_phi_cms_h1_b1(inputs.T)
-    constr_term_b = batched_calculate_constr_term_b(inputs.T, mean_sigma_correction_array_b)
-    constr_term_tau = batched_calculate_constr_term_tau(inputs.T, mean_sigma_correction_array_tau)
 
     # Calculate Jacobians: Gradient calculation
-    # grad_... shape: (Batch_size, 16), because 16 inputs go into likelihood variable calculation (pt, eta, phi, m) * 4
+    # grad_... shape: (Batch_size, 10), 10 is dim of scatt. obs. space and constrained reco space with fixed masses
     grad_dihiggs_mass = batched_grad_calculate_dihiggs_mass(inputs.T)
     grad_dihiggs_system_pt = batched_grad_calculate_dihiggs_system_pt(inputs.T)
     grad_dihiggs_system_pz = batched_grad_calculate_dihiggs_system_pz(inputs.T)
@@ -825,11 +843,11 @@ def create_pdf_input_vars_reco_higgs(
     grad_phi_cms_h2_tau_vis1 = batched_grad_calculate_phi_cms_h2_tau_vis1(inputs.T)
     grad_cos_theta_cms_h1_b1 = batched_grad_calculate_cos_theta_cms_h1_b1(inputs.T)
     grad_phi_cms_h1_b1 = batched_grad_calculate_phi_cms_h1_b1(inputs.T)
-    grad_constr_term_b = batched_grad_calculate_constr_term_b(inputs.T, mean_sigma_correction_array_b)
-    grad_constr_term_tau = batched_grad_calculate_constr_term_tau(inputs.T, mean_sigma_correction_array_tau)
+    # grad_constr_term_b = batched_grad_calculate_constr_term_b(inputs.T, mean_sigma_correction_array_b)
+    # grad_constr_term_tau = batched_grad_calculate_constr_term_tau(inputs.T, mean_sigma_correction_array_tau)
 
     # Calculate Jacobians: Building the matrices
-    # Matrix shape: (Batch_size, num_likelihood_inputs, 16)
+    # Matrix shape: (Batch_size, num_likelihood_inputs, 10) after removal of unneccesary columns
     jac_matrix = np.concatenate([
         grad_dihiggs_mass[:, None],
         grad_dihiggs_system_pt[:, None],
@@ -841,13 +859,12 @@ def create_pdf_input_vars_reco_higgs(
         grad_phi_cms_h2_tau_vis1[:, None],
         grad_cos_theta_cms_h1_b1[:, None],
         grad_phi_cms_h1_b1[:, None],
-        grad_constr_term_b[:, None],
-        grad_constr_term_tau[:, None],
     ], axis=1, dtype=np.float64)
-    jac_matrix_transposed = np.transpose(jac_matrix, axes=(0, 2, 1))
+    # remove mass columns and pt b2, tau2 columns:
+    jac_matrix_constrained_space = jac_matrix[:, :, np.array([0, 1, 2, 5, 6, 8, 9, 10, 13, 14])]
     # squared_matrix = np.matmul(jac_matrix_transposed, jac_matrix)
-    squared_matrix = np.matmul(jac_matrix, jac_matrix_transposed)
-    jac_det = np.linalg.det(squared_matrix)
+    # squared_matrix = np.matmul(jac_matrix, jac_matrix_transposed)
+    jac_det = np.linalg.det(jac_matrix_constrained_space)
     EMPTY_FLOAT = -99999.9
 
     # Create the column
@@ -905,7 +922,7 @@ def create_pdf_input_vars_reco_top(
     b_pt = ak.to_numpy(sorted_bs.pt, allow_missing=False)
     b_eta = ak.to_numpy(sorted_bs.eta, allow_missing=False)
     b_phi = ak.to_numpy(sorted_bs.phi, allow_missing=False)
-    b_mass = ak.to_numpy(sorted_bs.mass, allow_missing=False)
+    # b_mass = ak.to_numpy(sorted_bs.mass, allow_missing=False)
     tau_charge_mask = ak.argsort(events.Tau.charge, axis=1, ascending=False)
     sorted_taus = events.Tau[tau_charge_mask]
     tau_pt = ak.to_numpy(
@@ -917,9 +934,13 @@ def create_pdf_input_vars_reco_top(
     tau_phi = ak.to_numpy(
         ak.fill_none(ak.pad_none(sorted_taus.phi, 2, axis=1, clip=True), -99999.0), allow_missing=False,
     )
-    tau_mass = ak.to_numpy(
-        ak.fill_none(ak.pad_none(sorted_taus.mass, 2, axis=1, clip=True), -99999.0), allow_missing=False,
-    )
+    # tau_mass = ak.to_numpy(
+    #     ak.fill_none(ak.pad_none(sorted_taus.mass, 2, axis=1, clip=True), -99999.0), allow_missing=False,
+    # )
+
+    # set masses to fixed values as in higgs function above
+    b_mass = np.ones_like(b_phi) * 4.183
+    tau_mass = np.ones_like(tau_phi) * 1.777
 
     # Inputs for higgs input function
     b1_inputs = jax.numpy.stack([
@@ -1010,10 +1031,11 @@ def create_pdf_input_vars_reco_top(
         grad_tau1_cos_theta_star_cms_wplus[:, None],
         grad_tau2_cos_theta_star_cms_wminus[:, None],
     ], axis=1, dtype=np.float64)
-    jac_matrix_transposed = np.transpose(jac_matrix, axes=(0, 2, 1))
+    # jac_matrix_transposed = np.transpose(jac_matrix, axes=(0, 2, 1))
+    jac_matrix_constrained_space = jac_matrix[:, :, np.array([0, 1, 2, 4, 5, 6, 8, 9, 10, 12, 13, 14])]
     # squared_matrix = np.matmul(jac_matrix_transposed, jac_matrix)
-    squared_matrix = np.matmul(jac_matrix, jac_matrix_transposed)
-    jac_det = np.linalg.det(squared_matrix)
+    # squared_matrix = np.matmul(jac_matrix, jac_matrix_transposed)
+    jac_det = np.linalg.det(jac_matrix_constrained_space)
 
     EMPTY_FLOAT = -99999.9
     pdf_input_vars_reco_top = ak.zip({
