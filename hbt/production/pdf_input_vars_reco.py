@@ -2,9 +2,6 @@ from columnflow.production import Producer, producer
 from columnflow.util import maybe_import
 from columnflow.columnar_util import set_ak_column
 from columnflow.production.util import attach_coffea_behavior
-from columnflow.columnar_util import attach_coffea_behavior as attach_coffea_behavior_fn
-from hbt.production.create_pdf_input_vars import signed_cos_deltaangle
-import vector
 import jax
 
 np = maybe_import("numpy")
@@ -15,6 +12,21 @@ def calculate_rapidity(particle):
     particle_y = 1 / 2 * np.log(
         (particle.energy + particle.pz) / (particle.energy - particle.pz))
     particle_y = np.nan_to_num(particle_y)
+    return particle_y
+
+
+def calculate_rapidity_for_jax(inputs):
+    """Calculates rapidity for given object
+    Args:
+        inputs: Array with the four-momentum components of the objects, in order px, py, pz, energy
+    Returns:
+        rapidity: Rapidity of the object
+    """
+    pz = inputs[2]
+    energy = inputs[3]
+    y = 1 / 2 * jax.numpy.log(
+        (energy + pz) / (energy - pz))
+    particle_y = jax.numpy.nan_to_num(y, nan=-99999.0)
     return particle_y
 
 
@@ -174,7 +186,8 @@ def boost_a_cm_of_b(inputs, mass_b):
     # dot_normal_n_p_vec_a = dot_product(inputs_dot)
     boosted_e = gamma_b * (a_energy - norm_v * jax.numpy.linalg.vecdot(p_vec_a, normal_n, axis=0))
     boosted_p = (
-        p_vec_a + (gamma_b - 1) * (jax.numpy.linalg.vecdot(p_vec_a, normal_n, axis=0)) * normal_n - gamma_b * norm_v * a_energy * normal_n
+        p_vec_a + (gamma_b - 1) * (jax.numpy.linalg.vecdot(p_vec_a, normal_n, axis=0)) *
+        normal_n - gamma_b * norm_v * a_energy * normal_n
     )
     # from IPython import embed
     # embed(header="boosting")
@@ -313,7 +326,128 @@ def calculate_dihiggs_system(inputs):
     return dihiggs_system
 
 
+# Helper functions for ttbar likelihood
+def calculate_t_vis(inputs):
+    """Calculate t_vis / lb for both b assignment possibilities, choose the one with M_lb^2 <= M_t^2 - M_W^2
+    if possible, else choose the one where the deviation is smaller
+    Args:
+        inputs: Array with bbtautau pt, eta, phi, m
+    Returns:
+        tvis: Array with t1_vis, t2_vis px, py, pz, energy
+    """
+    m_tw_sq = 175**2 - 80.3**2
+
+    b1 = det_coords_to_fourmomentum(inputs[:4])
+    b2 = det_coords_to_fourmomentum(inputs[4:8])
+    tau1 = det_coords_to_fourmomentum(inputs[8:12])
+    tau2 = det_coords_to_fourmomentum(inputs[12:])
+
+    # Hypothesis 1
+    t1_vis1 = four_vec_sum(jax.numpy.concatenate([b1, tau1], axis=0))
+    t2_vis1 = four_vec_sum(jax.numpy.concatenate([b2, tau2], axis=0))
+    M_11_sq = calculate_invariant_mass(jax.numpy.concatenate([b1, tau1], axis=0))**2
+    M_21_sq = calculate_invariant_mass(jax.numpy.concatenate([b2, tau2], axis=0))**2
+
+    # Hypothesis 2
+    t1_vis2 = four_vec_sum(jax.numpy.concatenate([b2, tau1], axis=0))
+    t2_vis2 = four_vec_sum(jax.numpy.concatenate([b1, tau2], axis=0))
+    M_12_sq = calculate_invariant_mass(jax.numpy.concatenate([b2, tau1], axis=0))**2
+    M_22_sq = calculate_invariant_mass(jax.numpy.concatenate([b1, tau2], axis=0))**2
+
+    # hyp1_mask is True if hyp1 violates constraints, same for hyp2
+    hyp1_mask = jax.numpy.any(
+        jax.numpy.array([M_11_sq, M_21_sq]) > m_tw_sq,
+        axis=0,
+    )
+    # from IPython import embed
+    # embed(header="tvis")
+
+    # Create operand dict
+    operands = {
+        "M_11_sq": M_11_sq,
+        "M_21_sq": M_21_sq,
+        "M_12_sq": M_12_sq,
+        "M_22_sq": M_22_sq,
+        "t1_vis1": t1_vis1,
+        "t2_vis1": t2_vis1,
+        "t1_vis2": t1_vis2,
+        "t2_vis2": t2_vis2,
+    }
+    hyp1_mask = jax.numpy.any(
+        jax.numpy.array([M_11_sq, M_21_sq]) > m_tw_sq,
+        axis=0,
+    )
+
+    def take_hyp2(operands):
+        return operands["t1_vis2"], operands["t2_vis2"]
+
+    def take_hyp1(operands):
+        return operands["t1_vis1"], operands["t2_vis1"]
+
+    def true_fun_level2(operands):
+        M_12_sq = operands["M_12_sq"]
+        M_22_sq = operands["M_22_sq"]
+        M_21_sq = operands["M_21_sq"]
+        M_11_sq = operands["M_11_sq"]
+        diff_arr1 = jax.numpy.array([M_11_sq, M_21_sq]) - m_tw_sq
+        diff_arr1 = jax.numpy.nan_to_num(diff_arr1, nan=-99999.9)
+        # only look at deviations that violate the constraint, take hypothesis with smaller deviation
+        pos_deviations1 = jax.numpy.where(diff_arr1 > 0, diff_arr1, jax.numpy.zeros_like(diff_arr1))
+        mean_diff1 = jax.numpy.mean(pos_deviations1)
+        diff_arr2 = jax.numpy.array([M_12_sq, M_22_sq]) - m_tw_sq
+        diff_arr2 = jax.numpy.nan_to_num(diff_arr2, nan=-99999.9)
+        pos_deviations2 = jax.numpy.where(diff_arr2 > 0, diff_arr2, jax.numpy.zeros_like(diff_arr2))
+        mean_diff2 = jax.numpy.mean(pos_deviations2)
+        # True -> take hyp 1
+        mean_diff_mask = mean_diff1 < mean_diff2
+        t1_vis, t2_vis = jax.lax.cond(mean_diff_mask, take_hyp1, take_hyp2, operands)
+        return t1_vis, t2_vis
+
+    def true_fun_level1(operands):
+        M_12_sq = operands["M_12_sq"]
+        M_22_sq = operands["M_22_sq"]
+        m_tw_sq = 175**2 - 80.3**2
+        hyp2_mask = jax.numpy.any(
+            jax.numpy.array([M_12_sq, M_22_sq]) > m_tw_sq,
+            axis=0,
+        )
+
+        t1_vis, t2_vis = jax.lax.cond(hyp2_mask, true_fun_level2, take_hyp2, operands)
+        return t1_vis, t2_vis
+
+    t1_vis, t2_vis = jax.lax.cond(hyp1_mask, true_fun_level1, take_hyp1, operands)
+
+    # if hyp1_mask:
+    #     hyp2_mask = jax.numpy.any(
+    #         jax.numpy.array([M_12_sq, M_22_sq]) > m_tw_sq,
+    #         axis=0,
+    #     )
+    #     if hyp2_mask:
+    #         # choose hypothesis with less (positive) deviation from m_tw_sq
+    #         diff_arr1 = jax.numpy.array([M_11_sq, M_21_sq]) - m_tw_sq
+    #         mean_diff1 = jax.numpy.mean(diff_arr1[diff_arr1 > 0])
+    #         diff_arr2 = jax.numpy.array([M_12_sq, M_22_sq]) - m_tw_sq
+    #         mean_diff2 = jax.numpy.mean(diff_arr2[diff_arr2 > 0])
+    #         if mean_diff1 < mean_diff2:
+    #             t1_vis, t2_vis = t1_vis1, t2_vis1
+    #         else:
+    #             t1_vis, t2_vis = t1_vis2, t2_vis2
+    #     else:
+    #         t1_vis, t2_vis = t1_vis2, t2_vis2
+    # else:
+    #     t1_vis, t2_vis = t1_vis1, t2_vis1
+
+    return jax.numpy.concatenate([t1_vis, t2_vis], axis=0)
+
+
+def calculate_tt_vis_system(inputs):
+    tvis = calculate_t_vis(inputs)
+    tt_vis_system = four_vec_sum(tvis)
+    return tt_vis_system
+
+
 # ----------------------------- Scalar output functions to calculate the likelihood inputs ------------------------
+# Inputs for Higgs likelihood
 def calculate_cos_theta_cms_h1_b1(inputs):
     b1_corrected = calculate_b_corrected(inputs)[:4]
     h1 = calculate_hbb(inputs)
@@ -448,6 +582,130 @@ def calculate_constr_term_tau(inputs, mean_sigma_correction_array):
     )
 
 
+# Inputs for ttbar-likelihood
+def calculate_tt_vis_system_mass(inputs):
+    tt_vis_system = calculate_tt_vis_system(inputs)
+    tt_vis_system_mass = fourmomentum_to_det_coord(tt_vis_system)[3]
+    return tt_vis_system_mass
+
+
+def calculate_tt_vis_system_pt(inputs):
+    tt_vis_system = calculate_tt_vis_system(inputs)
+    tt_vis_system_pt = fourmomentum_to_det_coord(tt_vis_system)[0]
+    return tt_vis_system_pt
+
+
+def calculate_tt_vis_system_pz(inputs):
+    tt_vis_system = calculate_tt_vis_system(inputs)
+    return tt_vis_system[2]
+
+
+def calculate_tt_vis_system_phi(inputs):
+    tt_vis_system = calculate_tt_vis_system(inputs)
+    tt_vis_system_phi = fourmomentum_to_det_coord(tt_vis_system)[2]
+    return tt_vis_system_phi
+
+
+def calculate_t_vis_y_diff(inputs):
+    tvis = calculate_t_vis(inputs)
+    tt_vis_system = calculate_tt_vis_system(inputs)
+    tt_vis_system_mass = fourmomentum_to_det_coord(tt_vis_system)[3]
+    t1_vis = tvis[:4]
+    t2_vis = tvis[4:]
+    t1_vis_cms_tt_vis = boost_a_cm_of_b(
+        jax.numpy.concatenate([t1_vis, tt_vis_system]),
+        tt_vis_system_mass,
+    )
+    t2_vis_cms_tt_vis = boost_a_cm_of_b(
+        jax.numpy.concatenate([t2_vis, tt_vis_system]),
+        tt_vis_system_mass,
+    )
+    t_vis_y_diff = calculate_rapidity_for_jax(
+        t1_vis_cms_tt_vis) - calculate_rapidity_for_jax(t2_vis_cms_tt_vis)
+    return t_vis_y_diff
+
+
+def calculate_t1_vis_phi(inputs):
+    tvis = calculate_t_vis(inputs)
+    tt_vis_system = calculate_tt_vis_system(inputs)
+    tt_vis_system_mass = fourmomentum_to_det_coord(tt_vis_system)[3]
+    t1_vis = tvis[:4]
+    t1_vis_cms_tt_vis = boost_a_cm_of_b(
+        jax.numpy.concatenate([t1_vis, tt_vis_system]),
+        tt_vis_system_mass,
+    )
+    t1_vis_phi = fourmomentum_to_det_coord(t1_vis_cms_tt_vis)[2]
+    return t1_vis_phi
+
+
+def calculate_tau1_cos_theta_star_cms_t1_vis(inputs):
+    tau1 = det_coords_to_fourmomentum(inputs[8:12])
+    t1_vis = calculate_t_vis(inputs)[:4]
+    t1_vis_mass = fourmomentum_to_det_coord(t1_vis)[3]
+    tau1_cms_t1_vis = boost_a_cm_of_b(
+        jax.numpy.concatenate([tau1, t1_vis]),
+        t1_vis_mass,
+    )
+    tau1_cos_theta_star_cms_t1_vis = signed_cos_deltaangle_for_jax(
+        jax.numpy.concatenate([tau1_cms_t1_vis[:3], t1_vis[:3]], axis=0),
+    )
+    return tau1_cos_theta_star_cms_t1_vis
+
+
+def calculate_tau2_cos_theta_star_cms_t2_vis(inputs):
+    tau2 = det_coords_to_fourmomentum(inputs[12:])
+    t2_vis = calculate_t_vis(inputs)[4:]
+    t2_vis_mass = fourmomentum_to_det_coord(t2_vis)[3]
+    tau2_cms_t2_vis = boost_a_cm_of_b(
+        jax.numpy.concatenate([tau2, t2_vis]),
+        t2_vis_mass,
+    )
+    tau2_cos_theta_star_cms_t2_vis = signed_cos_deltaangle_for_jax(
+        jax.numpy.concatenate([tau2_cms_t2_vis[:3], t2_vis[:3]], axis=0),
+    )
+    return tau2_cos_theta_star_cms_t2_vis
+
+
+def calculate_tau1_phi(inputs):
+    tau1 = det_coords_to_fourmomentum(inputs[8:12])
+    t1_vis = calculate_t_vis(inputs)[:4]
+    t1_vis_mass = fourmomentum_to_det_coord(t1_vis)[3]
+    tau1_cms_t1_vis = boost_a_cm_of_b(
+        jax.numpy.concatenate([tau1, t1_vis]),
+        t1_vis_mass,
+    )
+    tau1_phi = fourmomentum_to_det_coord(tau1_cms_t1_vis)[2]
+    return tau1_phi
+
+
+def calculate_tau2_phi(inputs):
+    tau2 = det_coords_to_fourmomentum(inputs[12:])
+    t2_vis = calculate_t_vis(inputs)[4:]
+    t2_vis_mass = fourmomentum_to_det_coord(t2_vis)[3]
+    tau2_cms_t2_vis = boost_a_cm_of_b(
+        jax.numpy.concatenate([tau2, t2_vis]),
+        t2_vis_mass,
+    )
+    tau2_phi = fourmomentum_to_det_coord(tau2_cms_t2_vis)[2]
+    return tau2_phi
+
+
+def calculate_tau1_cos_theta_star_cms_wplus(inputs):
+    t1_vis = calculate_t_vis(inputs)[:4]
+    m_lb1 = fourmomentum_to_det_coord(t1_vis)[3]
+    tau1_cos_theta_star_cms_wplus = 2 * \
+        m_lb1**2 / (175**2 - 80.3**2 - 1.7**2) - 1
+    return tau1_cos_theta_star_cms_wplus
+
+
+def calculate_tau2_cos_theta_star_cms_wminus(inputs):
+    t2_vis = calculate_t_vis(inputs)[4:]
+    m_lb2 = fourmomentum_to_det_coord(t2_vis)[3]
+    tau2_cos_theta_star_cms_wminus = 2 * \
+        m_lb2**2 / (175**2 - 80.3**2 - 1.7**2) - 1
+    return tau2_cos_theta_star_cms_wminus
+
+
 @producer(
     uses={"HHBJet", "channel_id", "Tau.*", attach_coffea_behavior},
     produces={"pdf_input_vars_reco_higgs.*"},
@@ -531,13 +789,13 @@ def create_pdf_input_vars_reco_higgs(
     batched_grad_calculate_dihiggs_mass = jax.vmap(jax.grad(calculate_dihiggs_mass))
     batched_grad_calculate_dihiggs_system_pt = jax.vmap(jax.grad(calculate_dihiggs_system_pt))
     batched_grad_calculate_dihiggs_system_pz = jax.vmap(jax.grad(calculate_dihiggs_system_pz))
-    # batched_grad_calculate_dihiggs_system_phi = jax.vmap(jax.grad(calculate_dihiggs_system_phi))
+    batched_grad_calculate_dihiggs_system_phi = jax.vmap(jax.grad(calculate_dihiggs_system_phi))
     batched_grad_calculate_cos_theta_h1 = jax.vmap(jax.grad(calculate_cos_theta_h1))
-    # batched_grad_calculate_phi_h1 = jax.vmap(jax.grad(calculate_phi_h1))
+    batched_grad_calculate_phi_h1 = jax.vmap(jax.grad(calculate_phi_h1))
     batched_grad_calculate_cos_theta_cms_h2_tau_vis1 = jax.vmap(jax.grad(calculate_cos_theta_cms_h2_tau_vis1))
-    # batched_grad_calculate_phi_cms_h2_tau_vis1 = jax.vmap(jax.grad(calculate_phi_cms_h2_tau_vis1))
+    batched_grad_calculate_phi_cms_h2_tau_vis1 = jax.vmap(jax.grad(calculate_phi_cms_h2_tau_vis1))
     batched_grad_calculate_cos_theta_cms_h1_b1 = jax.vmap(jax.grad(calculate_cos_theta_cms_h1_b1))
-    # batched_grad_calculate_phi_cms_h1_b1 = jax.vmap(jax.grad(calculate_phi_cms_h1_b1))
+    batched_grad_calculate_phi_cms_h1_b1 = jax.vmap(jax.grad(calculate_phi_cms_h1_b1))
     batched_grad_calculate_constr_term_b = jax.vmap(jax.grad(calculate_constr_term_b, argnums=0), in_axes=(0, None))
     batched_grad_calculate_constr_term_tau = jax.vmap(jax.grad(calculate_constr_term_tau, argnums=0), in_axes=(0, None))
 
@@ -560,13 +818,13 @@ def create_pdf_input_vars_reco_higgs(
     grad_dihiggs_mass = batched_grad_calculate_dihiggs_mass(inputs.T)
     grad_dihiggs_system_pt = batched_grad_calculate_dihiggs_system_pt(inputs.T)
     grad_dihiggs_system_pz = batched_grad_calculate_dihiggs_system_pz(inputs.T)
-    # grad_dihiggs_system_phi = batched_grad_calculate_dihiggs_system_phi(inputs.T)
+    grad_dihiggs_system_phi = batched_grad_calculate_dihiggs_system_phi(inputs.T)
     grad_cos_theta_h1 = batched_grad_calculate_cos_theta_h1(inputs.T)
-    # grad_phi_h1 = batched_grad_calculate_phi_h1(inputs.T)
+    grad_phi_h1 = batched_grad_calculate_phi_h1(inputs.T)
     grad_cos_theta_cms_h2_tau_vis1 = batched_grad_calculate_cos_theta_cms_h2_tau_vis1(inputs.T)
-    # grad_phi_cms_h2_tau_vis1 = batched_grad_calculate_phi_cms_h2_tau_vis1(inputs.T)
+    grad_phi_cms_h2_tau_vis1 = batched_grad_calculate_phi_cms_h2_tau_vis1(inputs.T)
     grad_cos_theta_cms_h1_b1 = batched_grad_calculate_cos_theta_cms_h1_b1(inputs.T)
-    # grad_phi_cms_h1_b1 = batched_grad_calculate_phi_cms_h1_b1(inputs.T)
+    grad_phi_cms_h1_b1 = batched_grad_calculate_phi_cms_h1_b1(inputs.T)
     grad_constr_term_b = batched_grad_calculate_constr_term_b(inputs.T, mean_sigma_correction_array_b)
     grad_constr_term_tau = batched_grad_calculate_constr_term_tau(inputs.T, mean_sigma_correction_array_tau)
 
@@ -576,13 +834,13 @@ def create_pdf_input_vars_reco_higgs(
         grad_dihiggs_mass[:, None],
         grad_dihiggs_system_pt[:, None],
         grad_dihiggs_system_pz[:, None],
-        # grad_dihiggs_system_phi[:, None],
+        grad_dihiggs_system_phi[:, None],
         grad_cos_theta_h1[:, None],
-        # grad_phi_h1[:, None],
+        grad_phi_h1[:, None],
         grad_cos_theta_cms_h2_tau_vis1[:, None],
-        # grad_phi_cms_h2_tau_vis1[:, None],
+        grad_phi_cms_h2_tau_vis1[:, None],
         grad_cos_theta_cms_h1_b1[:, None],
-        # grad_phi_cms_h1_b1[:, None],
+        grad_phi_cms_h1_b1[:, None],
         grad_constr_term_b[:, None],
         grad_constr_term_tau[:, None],
     ], axis=1, dtype=np.float64)
@@ -613,7 +871,6 @@ def create_pdf_input_vars_reco_higgs(
     pdf_input_vars_reco_higgs = ak.mask(pdf_input_vars_reco_higgs, ak.from_numpy(np.array(ch_id_mask)))
     events = set_ak_column(
         events, "pdf_input_vars_reco_higgs", pdf_input_vars_reco_higgs)
-
     return events
 
 
@@ -634,128 +891,145 @@ def create_pdf_input_vars_reco_top(
     # We consider only the di-leptonic case in which both leptons are taus for now,
     # and of those only the full hadronic decays
 
-    events = attach_coffea_behavior_fn(
-        events,
-        collections={
-            "HHBJet": {
-                "type_name": "LorentzVector",
-            },
-            "Tau": {
-                "type_name": "LorentzVector",
-            },
-        },
-    )
-    tau_charge_mask = ak.argsort(events.Tau.charge, axis=1, ascending=False)
-    taus_sorted = events.Tau[tau_charge_mask]
-    taus_sorted = ak.pad_none(taus_sorted, 2, axis=1, clip=True)
+    ch_id_mask = events.channel_id == 3
+    ch_id_mask = ak.to_numpy(ch_id_mask)
 
-    # 6 Systems: Detector, t_vis t_vis, t_vis1, t_vis2, W+, W-
-    # t_vis = tau + b
-
-    # b-Assignment
-    # Try that M_lb^2 <= M_t^2 - M_W^2, assign b according to that
-    m_tw_sq = 175**2 - 80.3**2
+    # get four-momenta of b's and taus
+    # Select random b as b1, other as b2
     rng = np.random.default_rng()
-    which_b = rng.integers(0, 1, endpoint=True, size=len(events))
-    b1_random = ak.where(
-        which_b == 0, events.HHBJet[:, 0], events.HHBJet[:, 1])
-    b2_random = ak.where(
-        which_b == 0, events.HHBJet[:, 1], events.HHBJet[:, 0])
-    # Assignment one:
-    t11_vis = taus_sorted[:, 0].add(b1_random)
-    t22_vis = taus_sorted[:, 1].add(b2_random)
-    M_11_sq = t11_vis.mass**2
-    M_22_sq = t22_vis.mass**2
-    hyp1_mask = ak.concatenate([            # True if constraint not fulfilled
-        ak.Array(ak.fill_none(M_11_sq, False) > m_tw_sq)[:, None],
-        ak.Array(ak.fill_none(M_22_sq, False) > m_tw_sq)[:, None],
-    ], axis=1)
-    # True if at least one t_vis doesn't fulfill constraint
-    hyp1_mask = ak.any(hyp1_mask, axis=1)
-    # Assingment two:
-    t12_vis = taus_sorted[:, 0].add(b2_random)
-    t21_vis = taus_sorted[:, 1].add(b1_random)
-    M_12_sq = t12_vis.mass**2
-    M_21_sq = t21_vis.mass**2
-    hyp2_mask = ak.concatenate([
-        ak.Array(ak.fill_none(M_12_sq, False) > m_tw_sq)[:, None],
-        ak.Array(ak.fill_none(M_21_sq, False) > m_tw_sq)[:, None],
-    ], axis=1)
-    hyp2_mask = ak.any(hyp2_mask, axis=1)
-    # If the constraint is not fulfilled in one of the two assignments, but is fulfilled in the other, take that one
-    # If both are false, take the one with less deviation
-    # Make sure that deviation is only calculated if M_bl_squared is bigger than M_t^2 - M_W^2
-    both_false_mask = ak.all(ak.concatenate(
-        [hyp1_mask[:, None], hyp2_mask[:, None]], axis=1), axis=1)
-    deviations1 = return_deviations_where_necessary(
-        M_11_sq, M_22_sq, both_false_mask)
-    deviations2 = return_deviations_where_necessary(
-        M_12_sq, M_21_sq, both_false_mask)
-    choose_hyp1 = deviations1 < deviations2
-    # Take t1_vis from assignment 2 if assignment 1 does not fulfill constraint and if at least one of both does
-    # fulfill the constraint
-    t1_vis = ak.mask(ak.where(hyp1_mask, t12_vis, t11_vis),
-                     both_false_mask == bool(0))
-    # only meaningfull if both_false_mask is True
-    t1_vis_both_false = ak.where(choose_hyp1, t11_vis, t12_vis)
-    t1_vis = ak.where(both_false_mask, t1_vis_both_false, t1_vis)
-    # Take t2_vis from assignment 2 if assignment 1 does not fulfill constraint and if at least one of both does
-    # fulfill the constraint
-    t2_vis = ak.mask(ak.where(hyp1_mask, t21_vis, t22_vis),
-                     both_false_mask == bool(0))
-    # only meaningfull if both_false_mask is True
-    t2_vis_both_false = ak.where(choose_hyp1, t22_vis, t21_vis)
-    t2_vis = ak.where(both_false_mask, t2_vis_both_false, t2_vis)
-    # b assignment done
+    which_b1 = rng.integers(0, 1, endpoint=True, size=len(events))
+    which_b2 = np.where(which_b1 == 0, 1, 0)
+    b_mask = np.concatenate([which_b1[:, None], which_b2[:, None]], axis=1)
+    b_mask = ak.Array([b_mask])[0]
+    sorted_bs = events.HHBJet[b_mask]
+    b_pt = ak.to_numpy(sorted_bs.pt, allow_missing=False)
+    b_eta = ak.to_numpy(sorted_bs.eta, allow_missing=False)
+    b_phi = ak.to_numpy(sorted_bs.phi, allow_missing=False)
+    b_mass = ak.to_numpy(sorted_bs.mass, allow_missing=False)
+    tau_charge_mask = ak.argsort(events.Tau.charge, axis=1, ascending=False)
+    sorted_taus = events.Tau[tau_charge_mask]
+    tau_pt = ak.to_numpy(
+        ak.fill_none(ak.pad_none(sorted_taus.pt, 2, axis=1, clip=True), -99999.0), allow_missing=False,
+    )
+    tau_eta = ak.to_numpy(
+        ak.fill_none(ak.pad_none(sorted_taus.eta, 2, axis=1, clip=True), -99999.0), allow_missing=False,
+    )
+    tau_phi = ak.to_numpy(
+        ak.fill_none(ak.pad_none(sorted_taus.phi, 2, axis=1, clip=True), -99999.0), allow_missing=False,
+    )
+    tau_mass = ak.to_numpy(
+        ak.fill_none(ak.pad_none(sorted_taus.mass, 2, axis=1, clip=True), -99999.0), allow_missing=False,
+    )
 
-    # Detector System
-    tt_vis_system = t1_vis.add(t2_vis)
-    tt_vis_system_mass = tt_vis_system.absolute()
-    tt_vis_system_pt = tt_vis_system.pt
-    tt_vis_system_pz = tt_vis_system.pz
-    tt_vis_system_phi = tt_vis_system.phi
+    # Inputs for higgs input function
+    b1_inputs = jax.numpy.stack([
+        b_pt[:, 0], b_eta[:, 0], b_phi[:, 0], b_mass[:, 0],
+    ], axis=0, dtype=jax.numpy.float64)
+    b2_inputs = jax.numpy.stack([
+        b_pt[:, 1], b_eta[:, 1], b_phi[:, 1], b_mass[:, 1],
+    ], axis=0, dtype=jax.numpy.float64)
+    tau1_inputs = jax.numpy.stack([
+        tau_pt[:, 0], tau_eta[:, 0], tau_phi[:, 0], tau_mass[:, 0],
+    ], axis=0, dtype=jax.numpy.float64)
+    tau2_inputs = jax.numpy.stack([
+        tau_pt[:, 1], tau_eta[:, 1], tau_phi[:, 1], tau_mass[:, 1],
+    ], axis=0, dtype=jax.numpy.float64)
 
-    # tt_vis system
-    t1_vis_cms_tt_vis = t1_vis.boostCM_of(tt_vis_system)
-    t2_vis_cms_tt_vis = t2_vis.boostCM_of(tt_vis_system)
-    t_vis_y_diff = calculate_rapidity(
-        t1_vis_cms_tt_vis) - calculate_rapidity(t2_vis_cms_tt_vis)
-    t1_vis_phi = t1_vis_cms_tt_vis.phi
+    inputs = jax.numpy.concatenate([
+        b1_inputs, b2_inputs, tau1_inputs, tau2_inputs,
+    ], axis=0)
+    # ------------------------- batching -----------------------------------------
+    # Calculate inputs with helper functions from above, using jax.vmap, then calculate jacobians
+    batched_calculate_tt_vis_system_mass = jax.vmap(calculate_tt_vis_system_mass)
+    batched_calculate_tt_vis_system_pt = jax.vmap(calculate_tt_vis_system_pt)
+    batched_calculate_tt_vis_system_pz = jax.vmap(calculate_tt_vis_system_pz)
+    batched_calculate_tt_vis_system_phi = jax.vmap(calculate_tt_vis_system_phi)
+    batched_calculate_t_vis_y_diff = jax.vmap(calculate_t_vis_y_diff)
+    batched_calculate_t1_vis_phi = jax.vmap(calculate_t1_vis_phi)
+    batched_calculate_tau1_cos_theta_star_cms_t1_vis = jax.vmap(calculate_tau1_cos_theta_star_cms_t1_vis)
+    batched_calculate_tau1_phi = jax.vmap(calculate_tau1_phi)
+    batched_calculate_tau2_cos_theta_star_cms_t2_vis = jax.vmap(calculate_tau2_cos_theta_star_cms_t2_vis)
+    batched_calculate_tau2_phi = jax.vmap(calculate_tau2_phi)
+    batched_calculate_tau1_cos_theta_star_cms_wplus = jax.vmap(calculate_tau1_cos_theta_star_cms_wplus)
+    batched_calculate_tau2_cos_theta_star_cms_wminus = jax.vmap(calculate_tau2_cos_theta_star_cms_wminus)
 
-    # t1_vis system (tbar)
-    tau1_cms_t1_vis = taus_sorted[:, 0].boostCM_of(t1_vis)
-    tau1_cos_theta_star_cms_t1_vis = signed_cos_deltaangle(
-        tau1_cms_t1_vis, t1_vis)
-    tau1_phi = tau1_cms_t1_vis.phi
+    # Batched gradients
+    batched_grad_calculate_tt_vis_system_mass = jax.vmap(jax.grad(calculate_tt_vis_system_mass))
+    batched_grad_calculate_tt_vis_system_pt = jax.vmap(jax.grad(calculate_tt_vis_system_pt))
+    batched_grad_calculate_tt_vis_system_pz = jax.vmap(jax.grad(calculate_tt_vis_system_pz))
+    batched_grad_calculate_tt_vis_system_phi = jax.vmap(jax.grad(calculate_tt_vis_system_phi))
+    batched_grad_calculate_t_vis_y_diff = jax.vmap(jax.grad(calculate_t_vis_y_diff))
+    batched_grad_calculate_t1_vis_phi = jax.vmap(jax.grad(calculate_t1_vis_phi))
+    batched_grad_calculate_tau1_cos_theta_star_cms_t1_vis = jax.vmap(jax.grad(calculate_tau1_cos_theta_star_cms_t1_vis))
+    batched_grad_calculate_tau1_phi = jax.vmap(jax.grad(calculate_tau1_phi))
+    batched_grad_calculate_tau2_cos_theta_star_cms_t2_vis = jax.vmap(jax.grad(calculate_tau2_cos_theta_star_cms_t2_vis))
+    batched_grad_calculate_tau2_phi = jax.vmap(jax.grad(calculate_tau2_phi))
+    batched_grad_calculate_tau1_cos_theta_star_cms_wplus = jax.vmap(jax.grad(calculate_tau1_cos_theta_star_cms_wplus))
+    batched_grad_calculate_tau2_cos_theta_star_cms_wminus = jax.vmap(jax.grad(calculate_tau2_cos_theta_star_cms_wminus))
 
-    # t2_vis system (tbar)
-    tau2_cms_t2_vis = taus_sorted[:, 1].boostCM_of(t2_vis)
-    tau2_cos_theta_star_cms_t2_vis = signed_cos_deltaangle(
-        tau2_cms_t2_vis, t2_vis)
-    tau2_phi = tau2_cms_t2_vis.phi
+    # Calculate likelihood inputs
+    tt_vis_system_mass = batched_calculate_tt_vis_system_mass(inputs.T)
+    tt_vis_system_pt = batched_calculate_tt_vis_system_pt(inputs.T)
+    tt_vis_system_pz = batched_calculate_tt_vis_system_pz(inputs.T)
+    tt_vis_system_phi = batched_calculate_tt_vis_system_phi(inputs.T)
+    t_vis_y_diff = batched_calculate_t_vis_y_diff(inputs.T)
+    t1_vis_phi = batched_calculate_t1_vis_phi(inputs.T)
+    tau1_cos_theta_star_cms_t1_vis = batched_calculate_tau1_cos_theta_star_cms_t1_vis(inputs.T)
+    tau1_phi = batched_calculate_tau1_phi(inputs.T)
+    tau2_cos_theta_star_cms_t2_vis = batched_calculate_tau2_cos_theta_star_cms_t2_vis(inputs.T)
+    tau2_phi = batched_calculate_tau2_phi(inputs.T)
+    tau1_cos_theta_star_cms_wplus = batched_calculate_tau1_cos_theta_star_cms_wplus(inputs.T)
+    tau2_cos_theta_star_cms_wminus = batched_calculate_tau2_cos_theta_star_cms_wminus(inputs.T)
 
-    # W^+ system
-    M_lb1 = t1_vis.absolute()
-    tau1_cos_theta_star_cms_wplus = 2 * \
-        M_lb1**2 / (175**2 - 80.3**2 - 1.7**2) - 1
+    # Calculate Jacobians: Gradient calculation
+    # grad_... shape: (Batch_size, 16), because 16 inputs go into likelihood variable calculation (pt, eta, phi, m) * 4
+    grad_tt_vis_system_mass = batched_grad_calculate_tt_vis_system_mass(inputs.T)
+    grad_tt_vis_system_pt = batched_grad_calculate_tt_vis_system_pt(inputs.T)
+    grad_tt_vis_system_pz = batched_grad_calculate_tt_vis_system_pz(inputs.T)
+    grad_tt_vis_system_phi = batched_grad_calculate_tt_vis_system_phi(inputs.T)
+    grad_t_vis_y_diff = batched_grad_calculate_t_vis_y_diff(inputs.T)
+    grad_t1_vis_phi = batched_grad_calculate_t1_vis_phi(inputs.T)
+    grad_tau1_cos_theta_star_cms_t1_vis = batched_grad_calculate_tau1_cos_theta_star_cms_t1_vis(inputs.T)
+    grad_tau1_phi = batched_grad_calculate_tau1_phi(inputs.T)
+    grad_tau2_cos_theta_star_cms_t2_vis = batched_grad_calculate_tau2_cos_theta_star_cms_t2_vis(inputs.T)
+    grad_tau2_phi = batched_grad_calculate_tau2_phi(inputs.T)
+    grad_tau1_cos_theta_star_cms_wplus = batched_grad_calculate_tau1_cos_theta_star_cms_wplus(inputs.T)
+    grad_tau2_cos_theta_star_cms_wminus = batched_grad_calculate_tau2_cos_theta_star_cms_wminus(inputs.T)
 
-    # W^- system
-    M_lb2 = t2_vis.absolute()
-    tau2_cos_theta_star_cms_wminus = 2 * \
-        M_lb2**2 / (175**2 - 80.3**2 - 1.7**2) - 1
+    jac_matrix = np.concatenate([
+        grad_tt_vis_system_mass[:, None],
+        grad_tt_vis_system_pt[:, None],
+        grad_tt_vis_system_pz[:, None],
+        grad_tt_vis_system_phi[:, None],
+        grad_t_vis_y_diff[:, None],
+        grad_t1_vis_phi[:, None],
+        grad_tau1_cos_theta_star_cms_t1_vis[:, None],
+        grad_tau1_phi[:, None],
+        grad_tau2_cos_theta_star_cms_t2_vis[:, None],
+        grad_tau2_phi[:, None],
+        grad_tau1_cos_theta_star_cms_wplus[:, None],
+        grad_tau2_cos_theta_star_cms_wminus[:, None],
+    ], axis=1, dtype=np.float64)
+    jac_matrix_transposed = np.transpose(jac_matrix, axes=(0, 2, 1))
+    # squared_matrix = np.matmul(jac_matrix_transposed, jac_matrix)
+    squared_matrix = np.matmul(jac_matrix, jac_matrix_transposed)
+    jac_det = np.linalg.det(squared_matrix)
+
+    EMPTY_FLOAT = -99999.9
     pdf_input_vars_reco_top = ak.zip({
-        "tt_vis_system_mass": tt_vis_system_mass,
-        "tt_vis_system_pt": tt_vis_system_pt,
-        "tt_vis_system_pz": tt_vis_system_pz,
-        "tt_vis_system_phi": tt_vis_system_phi,
-        "t_vis_y_diff": t_vis_y_diff,
-        "t1_vis_phi": t1_vis_phi,
-        "tau1_cos_theta_star_cms_t1_vis": tau1_cos_theta_star_cms_t1_vis,
-        "tau1_phi": tau1_phi,
-        "tau2_cos_theta_star_cms_t2_vis": tau2_cos_theta_star_cms_t2_vis,
-        "tau2_phi": tau2_phi,
-        "tau1_cos_theta_star_cms_wplus": tau1_cos_theta_star_cms_wplus,
-        "tau2_cos_theta_star_cms_wminus": tau2_cos_theta_star_cms_wminus,
+        "tt_vis_system_mass": ak.from_numpy(np.nan_to_num(tt_vis_system_mass, nan=EMPTY_FLOAT)),
+        "tt_vis_system_pt": ak.from_numpy(np.nan_to_num(tt_vis_system_pt, nan=EMPTY_FLOAT)),
+        "tt_vis_system_pz": ak.from_numpy(np.nan_to_num(tt_vis_system_pz, nan=EMPTY_FLOAT)),
+        "tt_vis_system_phi": ak.from_numpy(np.nan_to_num(tt_vis_system_phi, nan=EMPTY_FLOAT)),
+        "t_vis_y_diff": ak.from_numpy(np.nan_to_num(t_vis_y_diff, nan=EMPTY_FLOAT)),
+        "t1_vis_phi": ak.from_numpy(np.nan_to_num(t1_vis_phi, nan=EMPTY_FLOAT)),
+        "tau1_cos_theta_star_cms_t1_vis": ak.from_numpy(np.nan_to_num(tau1_cos_theta_star_cms_t1_vis, nan=EMPTY_FLOAT)),
+        "tau1_phi": ak.from_numpy(np.nan_to_num(tau1_phi, nan=EMPTY_FLOAT)),
+        "tau2_cos_theta_star_cms_t2_vis": ak.from_numpy(np.nan_to_num(tau2_cos_theta_star_cms_t2_vis, nan=EMPTY_FLOAT)),
+        "tau2_phi": ak.from_numpy(np.nan_to_num(tau2_phi, nan=EMPTY_FLOAT)),
+        "tau1_cos_theta_star_cms_wplus": ak.from_numpy(np.nan_to_num(tau1_cos_theta_star_cms_wplus, nan=EMPTY_FLOAT)),
+        "tau2_cos_theta_star_cms_wminus": ak.from_numpy(np.nan_to_num(tau2_cos_theta_star_cms_wminus, nan=EMPTY_FLOAT)),
+        "jac_det": ak.from_numpy(np.nan_to_num(jac_det, nan=EMPTY_FLOAT)),
     }, with_name="pdf_input_vars_reco_top")
     pdf_input_vars_reco_top = ak.mask(
         pdf_input_vars_reco_top, events.channel_id == 3)
@@ -774,6 +1048,6 @@ def create_pdf_input_vars_reco_top(
     },
 )
 def pdf_inputs(self: Producer, events: ak.Array, **kwargs) -> ak.Array:
-    events = self[create_pdf_input_vars_reco_higgs](events, **kwargs)
     events = self[create_pdf_input_vars_reco_top](events, **kwargs)
+    events = self[create_pdf_input_vars_reco_higgs](events, **kwargs)
     return events
