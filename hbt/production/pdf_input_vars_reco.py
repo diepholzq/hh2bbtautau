@@ -861,10 +861,15 @@ def create_pdf_input_vars_reco_higgs(
         grad_phi_cms_h1_b1[:, None],
     ], axis=1, dtype=np.float64)
     # remove mass columns and pt b2, tau2 columns:
+    # b1_pt, b1_eta, b1_phi, b1_m, b2_pt, b2_eta, b2_phi, b2_m, tau1_pt, tau1_eta, tau1_phi, tau1_m, tau2_pt, ...
     jac_matrix_constrained_space = jac_matrix[:, :, np.array([0, 1, 2, 5, 6, 8, 9, 10, 13, 14])]
     # squared_matrix = np.matmul(jac_matrix_transposed, jac_matrix)
     # squared_matrix = np.matmul(jac_matrix, jac_matrix_transposed)
     jac_det = np.linalg.det(jac_matrix_constrained_space)
+    jac_matrix_transposed = np.transpose(jac_matrix, axes=(0, 2, 1))
+    squared_matrix = np.matmul(jac_matrix_transposed, jac_matrix)
+    squared_matrix = np.matmul(jac_matrix, jac_matrix_transposed)
+    gramsche = np.linalg.det(squared_matrix)
     EMPTY_FLOAT = -99999.9
 
     # Create the column
@@ -883,6 +888,7 @@ def create_pdf_input_vars_reco_higgs(
             "constr_term_tau": ak.from_numpy(np.nan_to_num(constr_term_tau, nan=EMPTY_FLOAT)),
             "constr_term_b": ak.from_numpy(np.nan_to_num(constr_term_b, nan=EMPTY_FLOAT)),
             "jac_det": ak.from_numpy(np.nan_to_num(jac_det, nan=EMPTY_FLOAT)),
+            "gramsche": ak.from_numpy(np.nan_to_num(gramsche, nan=EMPTY_FLOAT)),
         },
         with_name="pdf_input_vars_reco_higgs")
     pdf_input_vars_reco_higgs = ak.mask(pdf_input_vars_reco_higgs, ak.from_numpy(np.array(ch_id_mask)))
@@ -1031,11 +1037,12 @@ def create_pdf_input_vars_reco_top(
         grad_tau1_cos_theta_star_cms_wplus[:, None],
         grad_tau2_cos_theta_star_cms_wminus[:, None],
     ], axis=1, dtype=np.float64)
-    # jac_matrix_transposed = np.transpose(jac_matrix, axes=(0, 2, 1))
+    jac_matrix_transposed = np.transpose(jac_matrix, axes=(0, 2, 1))
     jac_matrix_constrained_space = jac_matrix[:, :, np.array([0, 1, 2, 4, 5, 6, 8, 9, 10, 12, 13, 14])]
-    # squared_matrix = np.matmul(jac_matrix_transposed, jac_matrix)
-    # squared_matrix = np.matmul(jac_matrix, jac_matrix_transposed)
+    squared_matrix = np.matmul(jac_matrix_transposed, jac_matrix)
+    squared_matrix = np.matmul(jac_matrix, jac_matrix_transposed)
     jac_det = np.linalg.det(jac_matrix_constrained_space)
+    gramsche = np.linalg.det(squared_matrix)
 
     EMPTY_FLOAT = -99999.9
     pdf_input_vars_reco_top = ak.zip({
@@ -1052,12 +1059,12 @@ def create_pdf_input_vars_reco_top(
         "tau1_cos_theta_star_cms_wplus": ak.from_numpy(np.nan_to_num(tau1_cos_theta_star_cms_wplus, nan=EMPTY_FLOAT)),
         "tau2_cos_theta_star_cms_wminus": ak.from_numpy(np.nan_to_num(tau2_cos_theta_star_cms_wminus, nan=EMPTY_FLOAT)),
         "jac_det": ak.from_numpy(np.nan_to_num(jac_det, nan=EMPTY_FLOAT)),
+        "gramsche": ak.from_numpy(np.nan_to_num(gramsche, nan=EMPTY_FLOAT)),
     }, with_name="pdf_input_vars_reco_top")
     pdf_input_vars_reco_top = ak.mask(
         pdf_input_vars_reco_top, events.channel_id == 3)
     events = set_ak_column(
         events, "pdf_input_vars_reco_top", pdf_input_vars_reco_top)
-
     return events
 
 
