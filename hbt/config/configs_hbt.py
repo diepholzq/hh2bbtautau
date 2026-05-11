@@ -280,7 +280,7 @@ def add_config(
 
         # tt + v
         "ttw_wlnu_amcatnlo",
-        *if_not_era(year=2024, values=[  # TODO: check status
+        *if_not_era(year=2024, values=[
             "ttz_zqq_amcatnlo",  # TODO: 2024: https://cms-pdmv-prod.web.cern.ch/grasp/samples?dataset_query=TTZ-ZtoQQ-1Jets_TuneCP5_13p6TeV_amcatnloFXFX-pythia8&campaign=*2024Summer24* # noqa
         ]),
         "ttz_zll_m4to50_amcatnlo",
@@ -296,40 +296,44 @@ def add_config(
         # dy, amcatnlo
         # "dy_m4to10_amcatnlo",  # affected by the pythia bug in 22+23, no replacement planned, also not for 2024
         # "dy_m10to50_amcatnlo",  # affected by the pythia bug in 22+23, no replacement planned, also not for 2024
-        *if_not_era(year=2024, values=[  # TODO: check status
-            "dy_m50toinf_amcatnlo",  # TODO: 2024: https://cms-pdmv-prod.web.cern.ch/grasp/samples?dataset_query=DYto2L-2Jets_Bin-MLL-50_TuneCP5_13p6TeV_amcatnloFXFX-pythia8&campaign=*2024Summer24* # noqa
+        *if_not_era(year=2024, values=[  # lepton inclusive samples were not produced for 2024
+            "dy_m50toinf_amcatnlo",
             "dy_m50toinf_0j_amcatnlo",
             "dy_m50toinf_1j_amcatnlo",
             "dy_m50toinf_2j_amcatnlo",
+            "dy_m50toinf_1j_pt40to100_amcatnlo",
+            "dy_m50toinf_1j_pt100to200_amcatnlo",
+            "dy_m50toinf_1j_pt200to400_amcatnlo",
+            "dy_m50toinf_1j_pt400to600_amcatnlo",
+            "dy_m50toinf_1j_pt600toinf_amcatnlo",
+            "dy_m50toinf_2j_pt40to100_amcatnlo",
+            "dy_m50toinf_2j_pt100to200_amcatnlo",
+            "dy_m50toinf_2j_pt200to400_amcatnlo",
+            "dy_m50toinf_2j_pt400to600_amcatnlo",
+            "dy_m50toinf_2j_pt600toinf_amcatnlo",
         ]),
-        "dy_m50toinf_1j_pt40to100_amcatnlo",
-        "dy_m50toinf_1j_pt100to200_amcatnlo",
-        "dy_m50toinf_1j_pt200to400_amcatnlo",
-        "dy_m50toinf_1j_pt400to600_amcatnlo",
-        "dy_m50toinf_1j_pt600toinf_amcatnlo",
-        "dy_m50toinf_2j_pt40to100_amcatnlo",
-        "dy_m50toinf_2j_pt100to200_amcatnlo",
-        "dy_m50toinf_2j_pt200to400_amcatnlo",
-        "dy_m50toinf_2j_pt400to600_amcatnlo",
-        "dy_m50toinf_2j_pt600toinf_amcatnlo",
-        # specific tautau datasets, with pythia bug fix for 2022/23
-        *if_era(year=2024, values=[
-            "dy_tautau_m50toinf_amcatnlo",  # was not produced for 2022/23
+        # specific lepton enriched datasets, with pythia bug fix
+        *if_era(year=2024, values=[  # were not produced for 2022/23
+            "dy_ee_m50toinf_amcatnlo",
+            "dy_ee_m50toinf_0j_amcatnlo",
+            "dy_ee_m50toinf_1j_amcatnlo",
+            "dy_ee_m50toinf_2j_amcatnlo",
+            "dy_mumu_m50toinf_amcatnlo",
+            "dy_mumu_m50toinf_0j_amcatnlo",
+            "dy_mumu_m50toinf_1j_amcatnlo",
+            "dy_mumu_m50toinf_2j_amcatnlo",
+            "dy_tautau_m50toinf_amcatnlo",
         ]),
         "dy_tautau_m50toinf_0j_amcatnlo",
-        *if_not_era(year=2024, values=[
-            "dy_tautau_m50toinf_1j_amcatnlo",  # TODO: 2024: https://cms-pdmv-prod.web.cern.ch/grasp/samples?dataset_query=DYto2Tau-2Jets*amc*&campaign=*2024Summer24* # noqa
-            "dy_tautau_m50toinf_2j_amcatnlo",  # TODO: 2024: https://cms-pdmv-prod.web.cern.ch/grasp/samples?dataset_query=DYto2Tau-2Jets*amc*&campaign=*2024Summer24* # noqa
-        ]),
+        "dy_tautau_m50toinf_1j_amcatnlo",
+        "dy_tautau_m50toinf_2j_amcatnlo",
+
         # additionally filtered datasets for 2022/2023 disabled for now
         # *if_not_era(year=2024, values=[
         #     "dy_tautau_m50toinf_0j_filtered_amcatnlo",
         #     "dy_tautau_m50toinf_1j_filtered_amcatnlo",
         #     "dy_tautau_m50toinf_2j_filtered_amcatnlo",
         # ]),
-        # TODO: 2024: stitching strategy changes:
-        #   - no lepton-inclusive datasets available (yet), need to add xsecs manually to cmsdb and disable stitching
-        #   - njet-inclusive, tautau filtered dataset available in 2024, need stitching there
 
         # dy, powheg
         # *if_era(year=2022, values=["dy_ee_m50toinf_powheg"]),  # 50toinf only available in 2022, requires stitching
@@ -365,7 +369,7 @@ def add_config(
         # "dy_tautau_m6000toinf_powheg",
 
         # w + jets
-        # inclusive samples not produced for 2024
+        # inclusive samples might not be produced for 2024
         *if_not_era(year=2024, values=[
             "w_lnu_amcatnlo",
             "w_lnu_0j_amcatnlo",
@@ -447,7 +451,7 @@ def add_config(
             f"data_{stream}_d{v}" for stream in ["e", "mu", "tau", "parking_vbf"] for v in "12"
         ]),
         *if_era(year=2024, values=[
-            f"data_{stream}_{period}" for stream in ["e", "mu", "tau"] for period in "cdefghi"
+            f"data_{stream}_{period}" for stream in ["e", "mu", "tau", "parking_vbf", "parking_hh"] for period in "cdefghi"  # noqa: E501
         ]),
     ]
     for dataset_name in dataset_names:
@@ -458,6 +462,7 @@ def add_config(
         # add the dataset
         dataset = cfg.add_dataset(campaign.get_dataset(dataset_name))
         # add tags to datasets
+        # real data
         if dataset.name.startswith("data_e_"):
             dataset.add_tag({"etau", "emu_from_e", "ee"})
         if dataset.name.startswith("data_mu_"):
@@ -466,10 +471,15 @@ def add_config(
             dataset.add_tag({"tautau"})
         if dataset.name.startswith("data_parking_vbf_"):
             dataset.add_tag({"parking_vbf"})
+        if dataset.name.startswith("data_parking_hh_"):
+            dataset.add_tag({"parking_hh"})
+        # tt
         if dataset.name.startswith("tt_"):
             dataset.add_tag({"has_top", "ttbar", "tt"})
+        # st
         if dataset.name.startswith("st_"):
             dataset.add_tag({"has_top", "single_top", "st"})
+        # dy
         if dataset.name.startswith("dy_"):
             dataset.add_tag("dy")
             if dataset.name.endswith("_madgraph"):
@@ -478,26 +488,45 @@ def add_config(
                 dataset.add_tag("dy_amcatnlo")
             elif dataset.name.endswith("_powheg"):
                 dataset.add_tag("dy_powheg")
-            # tags for advanced, lepton based stitching in amcatnlo
-            # (not adding the tags will result in the default selection and stitching behavior)
-            if dataset.name.endswith("_amcatnlo"):
-                dataset.add_tag("dy_lep_amcatnlo")  # trigges the lepton channel stitching in the default selector
-                if run == 3 and re.match(r"^dy_m50toinf_(|\dj_(|pt.+_))amcatnlo$", dataset.name):
-                    dataset.add_tag("dy_drop_tautau")  # drops tautau events in the default selector
-        if (
-            re.match(r"^dy_m50toinf_\dj_(|pt.+_)amcatnlo$", dataset.name) or
-            re.match(r"^dy_tautau_m50toinf_\dj_(|filtered_)amcatnlo$", dataset.name) or
-            (
-                "dy_ee_m50toinf_powheg" in cfg.datasets and
-                re.match(r"^dy_ee_m.*_powheg$", dataset.name) and
-                dataset.name not in {"dy_ee_m50toinf_powheg", "dy_ee_m10to50_powheg"}
-            )
-        ):
-            dataset.add_tag("dy_stitched")
+            # the following block assigns tags necessary for year-dependent stitiching
+            is_inclusive = False
+            if year in {2022, 2023}:
+                # tags for advanced, lepton based stitching in amcatnlo
+                # (not adding the tags will result in the default selection and stitching behavior)
+                if dataset.name.endswith("_amcatnlo"):
+                    # dataset.add_tag("dy_amcatnlo_2223")  TODO: check what this does
+                    dataset.add_tag("dy_lep_amcatnlo_2223")  # trigges the lepton channel stitching in the default selector  # noqa
+                    if run == 3 and re.match(r"^dy_m50toinf_(|\dj_(|pt.+_))amcatnlo$", dataset.name):
+                        dataset.add_tag("dy_drop_tautau")  # drops tautau events in the default selector
+                    # check if inclusive (there is just one)
+                    if dataset.name == "dy_m50toinf_amcatnlo":
+                        is_inclusive = True
+            elif year == 2024:
+                # check if inclusive
+                if re.match(r"^dy_(tautau|ee|mumu)_m50toinf_amcatnlo$", dataset.name):
+                    is_inclusive = True
+                # tags for njet based stitching in amcatnlo
+                if re.match(r"^dy_tautau_m50toinf_(|\dj_)amcatnlo$", dataset.name):
+                    dataset.add_tag("dy_tautau_amcatnlo_24")  # triggers the njet based stitching in the default selector  # noqa
+                if re.match(r"^dy_ee_m50toinf_(|\dj_)amcatnlo$", dataset.name):
+                    dataset.add_tag("dy_ee_amcatnlo_24")  # triggers the njet based stitching in the default selector  # noqa
+                if re.match(r"^dy_mumu_m50toinf_(|\dj_)amcatnlo$", dataset.name):
+                    dataset.add_tag("dy_mumu_amcatnlo_24")  # triggers the njet based stitching in the default selector  # noqa
+            # mark all datasets that could be dropped if not stitching
+            if not is_inclusive:
+                dataset.add_tag("dy_stitched")
+        # w_lnu
         if dataset.name.startswith("w_lnu_"):
             dataset.add_tag("w_lnu")
-        if re.match(r"^w_lnu_\dj_(|pt.+_)amcatnlo$", dataset.name):
-            dataset.add_tag("w_lnu_stitched")
+            # the following block assigns tags necessary for year-dependent stitiching
+            if year in {2022, 2023}:
+                dataset.add_tag("w_lnu_amcatnlo_2223")
+                if re.match(r"^w_lnu_\dj_(|pt.+_)amcatnlo$", dataset.name):
+                    dataset.add_tag("w_lnu_stitched")
+            elif year == 2024:
+                # no stitching needed, cmsdb has cross sections defined for nj - pt binning processes
+                # with BR information extracted from 2022pre
+                pass
         # datasets that are allowed to contain some events with missing lhe infos
         # (known to happen for amcatnlo)
         if dataset.name.endswith("_amcatnlo") or re.match(r"^z_vbf_.*madgraph$", dataset.name):
@@ -509,16 +538,20 @@ def add_config(
         ]):
             dataset.add_tag("no_lhe_weights")
             dataset.remove_tag("partial_lhe_weights")
+        # single higgs
         if dataset.name.startswith(("h_", "wph_", "wmh_", "zh_")):
             dataset.add_tag("has_higgs")
+        # ttH
         if dataset.name.startswith(("tth_",)):
             dataset.add_tag({"has_top", "has_higgs"})
+        # HH, non-res
         if dataset.name.startswith("hh_"):
             dataset.add_tag({"signal", "nonresonant_signal", "has_higgs"})
             if dataset.name.startswith("hh_ggf_"):
                 dataset.add_tag("ggf")
             elif dataset.name.startswith("hh_vbf_"):
                 dataset.add_tag("vbf")
+        # HH, res
         if dataset.name.startswith(("graviton_hh_", "radion_hh_")):
             dataset.add_tag({"signal", "resonant_signal", "has_higgs"})
             if dataset.name.startswith(("graviton_hh_ggf_", "radion_hh_ggf")):
@@ -548,6 +581,29 @@ def add_config(
             for info in dataset.info.values():
                 info.n_files = 1
 
+        # group datasets together for btag WP efficiency calculation in 2024
+        if year == 2024:
+            cfg.x.btag_wp_eff_groups = [
+                ["hh_*", "tt_*", "st_*", "ttw_*", "ttz_*", "ttww_*", "ttwz_*", "ttzz_*"],
+                ["dy_*"],
+                ["w_*", "z_*", "zz_*", "wz_*", "ww_*", "www_*", "wwz_*", "wzz_*", "zzz_*"],
+                ["h_*", "wmh_*", "wph_*", "zh_*", "tth_*"],
+            ]
+            group_matched = False
+            for i, dataset_pattern in enumerate(cfg.x.btag_wp_eff_groups):
+                if law.util.multi_match(dataset.name, dataset_pattern):
+                    if group_matched:
+                        raise ValueError(
+                            f"dataset '{dataset.name}' already has a btag WP group assigned! Cannot assign it to more "
+                            "than one group",
+                        )
+                    group_matched = True
+                    dataset.add_tag(f"btag_wp_eff_group_{i}")
+            if not group_matched and dataset.is_mc:
+                raise ValueError(f"no btag_wp_eff_group_* assigned to dataset '{dataset.name}'")
+            if group_matched and dataset.is_data:
+                raise ValueError(f"must not assign btag_wp_eff_group_* to dataset '{dataset.name}'")
+
     # verify that the root process of each dataset is part of any of the registered processes
     if not sync_mode:
         verify_config_processes(cfg, warn=True)
@@ -566,6 +622,12 @@ def add_config(
     cfg.x.default_categories = ("all",)
     cfg.x.default_variables = ("njet", "nbtag", "jet1_pt")
     cfg.x.default_hist_producer = "default"
+
+    # groups
+    cfg.x.producer_groups = {
+        "dnns": ["run3_dnn_moe", "reg_dnn_moe", "vbf_dnn_moe"],
+        "kinfits": ["h_kinfit", "h_kinfit_bb", "h_kinfit_ll", "h_kinfit_llvis", "h_kinfit_vis"],
+    }
 
     # process groups for conveniently looping over certain processes
     # (used in wrapper_factory and during plotting)
@@ -617,7 +679,7 @@ def add_config(
                     for ll in ["ee", "mumu", "tautau"]
                     for name in law.util.make_list(names)
                 ]
-                cfg.x.dy_lep_amcatnlo_stitching = {
+                cfg.x.dy_lep_amcatnlo_2223_stitching = {
                     "m50toinf": {
                         "inclusive_dataset": cfg.datasets.n.dy_m50toinf_amcatnlo,
                         "leaf_processes": [
@@ -649,13 +711,25 @@ def add_config(
                         ],
                     },
                 }
-        # drell-yan, amcatnlo, using tautau inclusive dataset for 2024
-        if year == 2024 and "dy_tautau_m50toinf_amcatnlo" in cfg.datasets:
-            # TODO: 2024: add stitching config, but somehow merge with the one above
-            pass
+        # drell-yan, amcatnlo, for lepton-based inclusive datasets in 2024
+        if year == 2024:
+            for channel in ["tautau", "ee", "mumu"]:
+                if f"dy_{channel}_m50toinf_amcatnlo" in cfg.datasets:
+                    cfg.set_aux(f"dy_{channel}_amcatnlo_24_stitching", {
+                        "m50toinf": {
+                            "inclusive_dataset": cfg.get_dataset(f"dy_{channel}_m50toinf_amcatnlo"),
+                            "leaf_processes": [
+                                # the following processes cover the full njet phasespace
+                                cfg.get_process(f"dy_{channel}_m50toinf_0j"),
+                                cfg.get_process(f"dy_{channel}_m50toinf_1j"),
+                                cfg.get_process(f"dy_{channel}_m50toinf_2j"),
+                                cfg.get_process(f"dy_{channel}_m50toinf_ge3j"),
+                            ],
+                        },
+                    })
         # drell-yan, powheg
         if year == 2022 and "dy_ee_m50toinf_powheg" in cfg.datasets:
-            cfg.x.dy_powheg_stitching = {
+            cfg.x.dy_powheg_2223_stitching = {
                 "ee_m50toinf": {
                     "inclusive_dataset": cfg.datasets.n.dy_ee_m50toinf_powheg,
                     "leaf_processes": [
@@ -671,22 +745,23 @@ def add_config(
                 },
             }
         # w + jets
-        if year in {2022, 2023} and "w_lnu_amcatnlo" in cfg.datasets:
-            cfg.x.w_lnu_stitching = {
-                "incl": {
-                    "inclusive_dataset": cfg.datasets.n.w_lnu_amcatnlo,
-                    "leaf_processes": [
-                        # the following processes cover the full njet and pt phasespace
-                        cfg.get_process("w_lnu_0j"),
-                        *(
-                            cfg.get_process(f"w_lnu_{nj}j_pt{pt}")
-                            for nj in [1, 2]
-                            for pt in ["0to40", "40to100", "100to200", "200to400", "400to600", "600toinf"]
-                        ),
-                        cfg.get_process("w_lnu_ge3j"),
-                    ],
-                },
-            }
+        if year in {2022, 2023}:
+            if "w_lnu_amcatnlo" in cfg.datasets:
+                cfg.x.w_lnu_amcatnlo_2223_stitching = {
+                    "incl": {
+                        "inclusive_dataset": cfg.datasets.n.w_lnu_amcatnlo,
+                        "leaf_processes": [
+                            # the following processes cover the full njet and pt phasespace
+                            cfg.get_process("w_lnu_0j"),
+                            *(
+                                cfg.get_process(f"w_lnu_{nj}j_pt{pt}")
+                                for nj in [1, 2]
+                                for pt in ["0to40", "40to100", "100to200", "200to400", "400to600", "600toinf"]
+                            ),
+                            cfg.get_process("w_lnu_ge3j"),
+                        ],
+                    },
+                }
 
     # dataset groups for conveniently looping over certain datasets
     # (used in wrapper_factory and during plotting)
@@ -720,17 +795,28 @@ def add_config(
         "sm_data": sm_group + data_group,
         "sm_data_unstitched": sm_group_unstitched + data_group,
         "bkg_data": backgrounds + data_group,
+        "bkg_data_unstitched": backgrounds_unstitched + data_group,
         "bkg_data_dy": backgrounds + [
             dataset.name for dataset in cfg.datasets
             if dataset.is_data and re.match(r"^data_(e|mu)_.+$", dataset.name)
         ],
         "dy": [dataset.name for dataset in cfg.datasets if dataset.has_tag("dy")],
         "w_lnu": [dataset.name for dataset in cfg.datasets if dataset.has_tag("w_lnu")],
+        "ggf_dnn": [
+            dataset.name for dataset in cfg.datasets
+            if re.match(r"^(hh_ggf_hbb_htt_.+|tt_(sl|dl|fh)_powheg|dy(_tautau)?_m50toinf_.*amcatnlo)$", dataset.name)
+        ],
     }
 
     # category groups for conveniently looping over certain categories
     # (used during plotting)
-    cfg.x.category_groups = {}
+    cfg.x.category_groups = {
+        "dy_sf": [r"{ee,mumu}__dyc__ge2j__ge0b__os"],
+        # standard cclub categories
+        "cc": [r"{e,mu,tau}tau__{res1b,res2b,vbf,boosted}_cc__os__iso"],
+        # cclub categories with vbf category removed and events included in res categories
+        "cc_novbf": [r"{e,mu,tau}tau__{res1b_inclvbf,res2b_inclvbf,boosted}_cc__os__iso"],
+    }
 
     # variable groups for conveniently looping over certain variables
     # (used during plotting)
@@ -744,6 +830,7 @@ def add_config(
             "e1_pt", "e1_eta", "e1_phi", "e2_pt", "e2_eta", "e2_phi",
             "tau1_pt", "tau1_eta", "tau1_phi", "tau2_pt", "tau2_eta", "tau2_phi",
         ],
+        "dy_sf": ["dilep_vis_pt", "njets", "nbjets_upart_overflow" if year == 2024 else "nbjets_pnet_overflow"],
     }
 
     # shift groups for conveniently looping over certain shifts
@@ -769,7 +856,7 @@ def add_config(
     ################################################################################################
 
     # lumi values in 1/pb (= 1000/fb)
-    # https://twiki.cern.ch/twiki/bin/view/CMS/LumiRecommendationsRun3?rev=27
+    # https://twiki.cern.ch/twiki/bin/view/CMS/LumiRecommendationsRun3?rev=36
     # https://twiki.cern.ch/twiki/bin/view/CMS/PdmVRun3Analysis
     # difference pre-post VFP: https://cds.cern.ch/record/2854610/files/DP2023_006.pdf
     # Lumis for Run3 within the Twiki are outdated as stated here:
@@ -801,22 +888,31 @@ def add_config(
     elif year == 2022 and campaign.has_tag("preEE"):
         cfg.x.luminosity = Number(7_980.4541, {
             "lumi_13p6TeV_2022": 0.014j,
+            "lumi_13p6TeV_1": 0.0138j,
         })
     elif year == 2022 and campaign.has_tag("postEE"):
         cfg.x.luminosity = Number(26_671.6097, {
             "lumi_13p6TeV_2022": 0.014j,
+            "lumi_13p6TeV_1": 0.0138j,
         })
     elif year == 2023 and campaign.has_tag("preBPix"):
         cfg.x.luminosity = Number(18_062.6591, {
             "lumi_13p6TeV_2023": 0.013j,
+            "lumi_13p6TeV_1": 0.0017j,
+            "lumi_13p6TeV_2": 0.0127j,
         })
     elif year == 2023 and campaign.has_tag("postBPix"):
         cfg.x.luminosity = Number(9_693.1301, {
             "lumi_13p6TeV_2023": 0.013j,
+            "lumi_13p6TeV_1": 0.0017j,
+            "lumi_13p6TeV_2": 0.0127j,
         })
     elif year == 2024:
-        cfg.x.luminosity = Number(108_952.7546, {
-            "lumi_13p6TeV_2024": 0.013j,  # TODO: 2024: update uncertainty once available
+        cfg.x.luminosity = Number(109_948.177486, {
+            "lumi_13p6TeV_2024": 0.016j,
+            "lumi_13p6TeV_1": 0.0020j,
+            "lumi_13p6TeV_2": 0.0068j,
+            "lumi_13p6TeV_3": 0.0144j,
         })
     else:
         assert False
@@ -894,14 +990,18 @@ def add_config(
         jec_version = {
             (2022, ""): "V3",
             (2022, "EE"): "V3",
-            (2023, ""): "V2",
+            (2023, ""): "V3",
             (2023, "BPix"): "V3",
-            (2024, ""): "V1",
+            (2024, ""): "V2",
         }[(year, campaign.x.postfix)]
         jer_campaign = f"Summer{year2}{campaign.x.postfix}{jerc_postfix}"
+        if year == 2024:
+            jer_campaign = "Summer23BPixPrompt23"  # https://cms-jerc.web.cern.ch/Recommendations/#2024_1
         # special "Run" fragment in 2023 jer campaign
         if year == 2023:
             jer_campaign += f"_Run{'Cv1234' if campaign.has_tag('preBPix') else 'D'}"
+        if year == 2024:
+            jer_campaign += "_RunD"
         jer_version = "JR" + {2022: "V1", 2023: "V1", 2024: "V1"}[year]
         jet_type = "AK4PFPuppi"
     else:
@@ -910,6 +1010,7 @@ def add_config(
     # full list of jec sources in a fixed order that is used to assign consistent ids across configs
     # (please add new sources at the bottom to preserve the order of existing ones)
     # the boolean flag decides whether to use them in the JEC config and if shifts should be created for them
+    # https://cms-jerc.web.cern.ch/Recommendations/#uncertainites-and-correlations
     jec_source_era = f"{year}{campaign.x.postfix}"
     all_jec_sources = {
         "AbsoluteFlavMap": False,
@@ -982,7 +1083,7 @@ def add_config(
         "Jet": {
             "campaign": jec_campaign,
             "version": jec_version,
-            "data_per_era": year == 2022,  # 2022 JEC has the era in the correction set name
+            "data_per_era": False,  # no more era-dependence in latest jec campaigns
             "jet_type": jet_type,
             "levels": ["L1FastJet", "L2Relative", "L2L3Residual", "L3Absolute"],
             "levels_for_type1_met": ["L1FastJet"],
@@ -1005,7 +1106,24 @@ def add_config(
     cfg.x.fatjet_id = JetIdConfig(corrections={"AK8PUPPI_Tight": 2, "AK8PUPPI_TightLeptonVeto": 3})
 
     # trigger sf corrector
-    cfg.x.jet_trigger_corrector = "jetlegSFs"
+    # ditau + jet trigger
+    cfg.x.jet_trigger_corrector = "jetleg60"
+
+    # vbf triggers
+    from hbt.production.jet import VBFjetSFConfig
+    cfg.x.vbfjet_ditau_trigger_config = VBFjetSFConfig(
+        correction="VBFtrigSF",
+        corr_type="sf",
+        lep_used=False,
+    )
+    cfg.x.vbfjet_e_trigger_config = VBFjetSFConfig(
+        correction="VBFtrigSF",
+        corr_type="sf",
+        lep_used=True,
+    )
+
+    # quadjet trigger
+    cfg.x.jet_quadjet_trigger_corrector = "QuadJet_btag"
 
     ################################################################################################
     # tau settings
@@ -1059,12 +1177,14 @@ def add_config(
         "vs_mu_cross": "VLoose",
         "vs_e_single": "VVLoose",
         "vs_e_cross": "VVLoose",
-        "trigger_corr": "VVLoose",
+        "trigger_corr": "Medium" if year == 2024 else "VVLoose",
     })
 
     # tau trigger correctors
     cfg.x.tau_trigger_corrector = "tau_trigger"
-    cfg.x.tau_trigger_corrector_cclub = "tauTriggerSF"
+
+    # quadjet tau trigger corrector
+    cfg.x.tau_quadjet_trigger_corrector = "L1HTTauLeg_QuadJetTriggerSF"
 
     ################################################################################################
     # electron settings
@@ -1105,10 +1225,9 @@ def add_config(
         elif year == 2023:
             e_postfix = {"": "PromptC", "BPix": "PromptD"}[campaign.x.postfix]
         elif year == 2024:
-            e_postfix = "FIXME"  # TODO: 2024: lookup!
+            e_postfix = "Prompt"
         else:
             assert False
-        # TODO: 2024: different files being used for id and reco sfs
         cfg.x.electron_id_sf = ElectronSFConfig(
             correction="Electron-ID-SF",
             campaign=f"{year}{e_postfix}",
@@ -1177,12 +1296,14 @@ def add_config(
         cfg.x.muon_trigger_sf_names = MuonSFConfig(
             correction="NUM_IsoMu24_DEN_CutBasedIdTight_and_PFIsoTight",
         )
+
         cfg.x.single_trigger_muon_data_effs_cfg = MuonSFConfig(
-            correction="NUM_IsoMu24_DEN_CutBasedIdTight_and_PFIsoTight_DATAeff",
+            correction="NUM_IsoMu24_DEN_CutBasedIdTight_and_PFIsoTight",
         )
         cfg.x.single_trigger_muon_mc_effs_cfg = MuonSFConfig(
-            correction="NUM_IsoMu24_DEN_CutBasedIdTight_and_PFIsoTight_MCeff",
+            correction="NUM_IsoMu24_DEN_CutBasedIdTight_and_PFIsoTight",
         )
+
         cfg.x.cross_trigger_muon_data_effs_cfg = MuonSFConfig(
             correction="NUM_IsoMu20_DEN_CutBasedIdTight_and_PFIsoTight_DATAeff",
         )
@@ -1227,6 +1348,14 @@ def add_config(
                 "lp": {"2016APV": 0.9088, "2016": 0.9137, "2017": 0.9105, "2018": 0.9172}[btag_key],
             },
         })
+
+        # btag columns and working point values for easy use throughout the code
+        cfg.x.btag_deepjet = DotDict(
+            jet_column="btagDeepFlavB",
+            wp=cfg.x.btag_working_points.deepjet.medium,
+            weight_column="normalized_njet_btag_weight_deepjet",
+        )
+        cfg.x.btag_default = cfg.x.btag_default
     elif run == 3:
         # https://btv-wiki.docs.cern.ch/ScaleFactors/Run3Summer22
         # https://btv-wiki.docs.cern.ch/ScaleFactors/Run3Summer22EE
@@ -1242,11 +1371,12 @@ def add_config(
             },
             "particleNet": {
                 "loose": {"2022": 0.047, "2022EE": 0.0499, "2023": 0.0358, "2023BPix": 0.0359, "2024": None}[btag_key],
-                "medium": {"2022": 0.245, "2022EE": 0.2605, "2023": 0.1917, "2023BPix": 0.1919, "2024": None}[btag_key],
-                "tight": {"2022": 0.6734, "2022EE": 0.6915, "2023": 0.6172, "2023BPix": 0.6133, "2024": None}[btag_key],
-                "xtight": {"2022": 0.7862, "2022EE": 0.8033, "2023": 0.7515, "2023BPix": 0.7544, "2024": None}[btag_key],
-                "xxtight": {"2022": 0.961, "2022EE": 0.9664, "2023": 0.9659, "2023BPix": 0.9688, "2024": None}[btag_key],
+                "medium": {"2022": 0.245, "2022EE": 0.2605, "2023": 0.1917, "2023BPix": 0.1919, "2024": None}[btag_key],  # noqa: E501
+                "tight": {"2022": 0.6734, "2022EE": 0.6915, "2023": 0.6172, "2023BPix": 0.6133, "2024": None}[btag_key],  # noqa: E501
+                "xtight": {"2022": 0.7862, "2022EE": 0.8033, "2023": 0.7515, "2023BPix": 0.7544, "2024": None}[btag_key],  # noqa: E501
+                "xxtight": {"2022": 0.961, "2022EE": 0.9664, "2023": 0.9659, "2023BPix": 0.9688, "2024": None}[btag_key],  # noqa: E501
             },
+            # 2024 wps can be taken from "UParTAK4_wp_values" correction set in BTV correctionlib file
             "upart": {
                 "loose": {"2022": None, "2022EE": None, "2023": None, "2023BPix": None, "2024": 0.0246}[btag_key],
                 "medium": {"2022": None, "2022EE": None, "2023": None, "2023BPix": None, "2024": 0.1272}[btag_key],
@@ -1254,16 +1384,34 @@ def add_config(
                 "xtight": {"2022": None, "2022EE": None, "2023": None, "2023BPix": None, "2024": 0.6298}[btag_key],
                 "xxtight": {"2022": None, "2022EE": None, "2023": None, "2023BPix": None, "2024": 0.9739}[btag_key],
             },
-            # TODO: fallback to run2, due to missing wp values
             # https://cms.cern.ch/iCMS/jsp/db_notes/noteInfo.jsp?cmsnoteid=CMS%20AN-2021/005 chapter 4.5 in v12
             # performance studies for run 3 available and show improvements:
             # https://cds.cern.ch/record/2904691/files/DP2024_055.pdf
+            # TODO: fallback to run2, due to missing wp values
             "particleNetMD": {
-                "hp": {"2022": 0.9883, "2022EE": 0.9883, "2023": 0.9870, "2023BPix": 0.9880, "2024": None}[btag_key],
-                "mp": {"2022": 0.9737, "2022EE": 0.9735, "2023": 0.9714, "2023BPix": 0.9734, "2024": None}[btag_key],
-                "lp": {"2022": 0.9088, "2022EE": 0.9137, "2023": 0.9105, "2023BPix": 0.9172, "2024": None}[btag_key],
+                "hp": {"2022": 0.9883, "2022EE": 0.9883, "2023": 0.9870, "2023BPix": 0.9880, "2024": 0.9880}[btag_key],
+                "mp": {"2022": 0.9737, "2022EE": 0.9735, "2023": 0.9714, "2023BPix": 0.9734, "2024": 0.9734}[btag_key],
+                "lp": {"2022": 0.9088, "2022EE": 0.9137, "2023": 0.9105, "2023BPix": 0.9172, "2024": 0.9172}[btag_key],
             },
         })
+
+        # btag columns and working point values for easy use throughout the code
+        cfg.x.btag_deepjet = DotDict(
+            jet_column="btagDeepFlavB",
+            wp=cfg.x.btag_working_points.deepjet.medium,
+            weight_column="normalized_njet_btag_weight_deepjet",
+        )
+        cfg.x.btag_pnet = DotDict(
+            jet_column="btagPNetB",
+            wp=cfg.x.btag_working_points.particleNet.medium,
+            weight_column="normalized_njet_btag_weight_pnet",
+        )
+        cfg.x.btag_upart = DotDict(
+            jet_column="btagUParTAK4B",
+            wp=cfg.x.btag_working_points.upart.medium,
+            weight_column="btag_weight",  # no need for normalization in wp based method
+        )
+        cfg.x.btag_default = cfg.x.btag_upart if year == 2024 else cfg.x.btag_pnet
     else:
         assert False
 
@@ -1313,14 +1461,57 @@ def add_config(
     cfg.x.btag_sf_deepjet = BTagSFConfig(
         correction_set="deepJet_shape",
         jec_sources=cfg.x.btag_sf_jec_sources,
-        discriminator="btagDeepFlavB",
+        discriminator=cfg.x.btag_deepjet.jet_column,
     )
     if run == 3:
-        cfg.x.btag_sf_pnet = BTagSFConfig(
-            correction_set="particleNet_shape",
-            jec_sources=cfg.x.btag_sf_jec_sources,
-            discriminator="btagPNetB",
-        )
+        if year != 2024:
+            cfg.x.btag_sf_pnet = BTagSFConfig(
+                correction_set="particleNet_shape",
+                jec_sources=cfg.x.btag_sf_jec_sources,
+                discriminator=cfg.x.btag_default.jet_column,
+            )
+        else:
+            from columnflow.selection.cms.btag import BTagWPCountConfig
+            cfg.x.btag_wp_count_config = BTagWPCountConfig(
+                jet_name="Jet",
+                btag_column=cfg.x.btag_default.jet_column,
+                btag_wps=cfg.x.btag_working_points.upart.copy(),
+                pt_edges=(0, 20, 30, 50, 70, 100, 140, 200, 300, 600, 10_000),
+                abs_eta_edges=(0.0, 1.0, 1.5, 2.0, 5.0),
+            )
+
+            from columnflow.production.cms.btag import BTagWPSFConfig
+
+            def dataset_groups(dataset_inst: od.Dataset) -> list[od.Dataset]:
+                # check which group the dataset belongs to
+                for group_index in range(len(cfg.x.btag_wp_eff_groups)):
+                    group_tag = f"btag_wp_eff_group_{group_index}"
+                    if dataset_inst.has_tag(group_tag):
+                        return [
+                            _dataset_inst
+                            for _dataset_inst in cfg.datasets
+                            if _dataset_inst.has_tag(group_tag)
+                        ]
+                raise NotImplementedError(f"btag WP efficiency group not implemented for dataset {dataset_inst.name}")
+
+            cfg.x.btag_wp_sf_config = BTagWPSFConfig(
+                jet_name="Jet",
+                btag_column=cfg.x.btag_default.jet_column,
+                correction_set="UParTAK4_merged",
+                btag_wps={
+                    name: value for name, value in cfg.x.btag_working_points.upart.items()
+                    if name != "xxtight"
+                },
+                dataset_groups=dataset_groups,
+                # merge pt and eta bins w.r.t. btag_wp_count_config
+                # (dropped pt 600 and eta 2.0)
+                pt_edges=(0, 20, 30, 50, 70, 100, 140, 200, 300, 10_000),
+                abs_eta_edges=(0.0, 1.0, 1.5, 5.0),
+                # also merge xxtight with xtight
+                wp_merging={
+                    "xtight": ["xtight", "xxtight"],
+                },
+            )
 
     ################################################################################################
     # dataset / process specific methods
@@ -1356,16 +1547,11 @@ def add_config(
         dy_era = f"{year}"
         if year == 2022:
             dy_era += "preEE" if campaign.has_tag("preEE") else "postEE"
-        elif year == 2023:
+        if year == 2023:
             dy_era += "preBPix" if campaign.has_tag("preBPix") else "postBPix"
-        elif year == 2024:
-            # no postfix for 2024
-            pass
-        else:
-            assert False
 
         # dy reweighting with custom weights
-        # https://cms-higgs-leprare.docs.cern.ch/htt-common/DY_reweight
+        # (originally by hleprare group, https://cms-higgs-leprare.docs.cern.ch/htt-common/DY_reweight)
         cfg.x.dy_weight_config = DrellYanConfig(
             era=dy_era,
             correction="dy_weight",
@@ -1373,10 +1559,14 @@ def add_config(
                 "stat_btag0_up", "stat_btag0_down",
                 "stat_btag1_up", "stat_btag1_down",
                 "stat_btag2_up", "stat_btag2_down",
+                "stat_up", "stat_down",
+                "syst_up", "syst_down",
+                "syst_gauss_up", "syst_gauss_down",
+                "syst_linear_up", "syst_linear_down",
             ],
             get_njets=(lambda prod, events: sys.modules["awkward"].num(events.Jet, axis=1)),
-            get_nbtags=(lambda prod, events: sys.modules["awkward"].sum(events.Jet.btagPNetB > cfg.x.btag_working_points.particleNet.medium, axis=1)),  # noqa: E501
-            used_columns={"Jet.btagPNetB"},
+            get_nbtags=(lambda prod, events: sys.modules["awkward"].sum(events.Jet[cfg.x.btag_default.jet_column] > cfg.x.btag_default.wp, axis=1)),  # noqa: E501
+            used_columns={f"Jet.{cfg.x.btag_default.jet_column}"},
         )
 
         # dy boson recoil correction
@@ -1454,8 +1644,6 @@ def add_config(
                 cfg,
                 f"jec_{jec_source}",
                 {
-                    # "normalized_btag_weight_deepjet": "normalized_btag_weight_deepjet_{name}",
-                    # "normalized_njet_btag_weight_deepjet": "normalized_njet_btag_weight_deepjet_{name}",
                     "normalized_btag_weight_pnet": "normalized_btag_weight_pnet_{name}",
                     "normalized_njet_btag_weight_pnet": "normalized_njet_btag_weight_pnet_{name}",
                 },
@@ -1474,7 +1662,7 @@ def add_config(
         },
     )
 
-    for i, (match, dm) in enumerate(itertools.product(["jet", "e"], [0, 1, 10, 11])):
+    for i, (match, dm) in enumerate(itertools.product(["tau", "e", "mu"], [0, 1, 10, 11])):
         cfg.add_shift(name=f"tec_{match}_dm{dm}_up", id=20 + 2 * i, type="shape", tags={"tec"})
         cfg.add_shift(name=f"tec_{match}_dm{dm}_down", id=21 + 2 * i, type="shape", tags={"tec"})
         add_shift_aliases(
@@ -1483,21 +1671,24 @@ def add_config(
             {
                 "Tau.pt": "Tau.pt_{name}",
                 "Tau.mass": "Tau.mass_{name}",
-                f"{cfg.x.met_name}.pt": f"{cfg.x.met_name}.pt_{{name}}",
-                f"{cfg.x.met_name}.phi": f"{cfg.x.met_name}.phi_{{name}}",
+                # no MET propagation needed for tec shifts
+                # f"{cfg.x.met_name}.pt": f"{cfg.x.met_name}.pt_{{name}}",
+                # f"{cfg.x.met_name}.phi": f"{cfg.x.met_name}.phi_{{name}}",
             },
         )
 
     # start at id=50
+    # TODO: 2024: the tau_stat* uncertainties are currently not present in TAU correction weight files, and if they
+    # won't be added by design, we should add different tau systematics here for 2024
     cfg.x.tau_unc_names = [
-        "jet_stat1_dm0", "jet_stat1_dm1", "jet_stat1_dm10", "jet_stat1_dm11",
-        "jet_stat2_dm0", "jet_stat2_dm1", "jet_stat2_dm10", "jet_stat2_dm11",
+        "tau_stat1_dm0", "tau_stat1_dm1", "tau_stat1_dm10", "tau_stat1_dm11",
+        "tau_stat2_dm0", "tau_stat2_dm1", "tau_stat2_dm10", "tau_stat2_dm11",
         "e_barrel", "e_endcap",
         "mu_0p0To0p4", "mu_0p4To0p8", "mu_0p8To1p2", "mu_1p2To1p7", "mu_1p7To2p3",
     ]
     for i, unc in enumerate(cfg.x.tau_unc_names):
         chs = {
-            "jet": ["etau", "mutau", "tautau"],
+            "tau": ["etau", "mutau", "tautau"],
             "e": ["etau"],
             "mu": ["mutau"],
         }[unc.split("_", 1)[0]]
@@ -1541,7 +1732,7 @@ def add_config(
     add_shift_aliases(cfg, "mer", {"Muon.pt": "Muon.pt_res_{direction}"})
 
     # btagging shifts
-    cfg.x.btag_unc_names = [
+    cfg.x.btag_unc_names = [  # TODO: 2024: update unc names
         "hf", "lf",
         "hfstats1", "hfstats2",
         "lfstats1", "lfstats2",
@@ -1555,8 +1746,6 @@ def add_config(
             cfg,
             f"btag_{unc}",
             {
-                # "normalized_btag_weight_deepjet": f"normalized_btag_weight_deepjet_{unc}_{{direction}}",
-                # "normalized_njet_btag_weight_deepjet": f"normalized_njet_btag_weight_deepjet_{unc}_{{direction}}",
                 "normalized_btag_weight_pnet": f"normalized_btag_weight_pnet_{unc_no_suffix}_{{direction}}",
                 "normalized_njet_btag_weight_pnet": f"normalized_njet_btag_weight_pnet_{unc_no_suffix}_{{direction}}",
             },
@@ -1619,10 +1808,10 @@ def add_config(
         add_shift_aliases(cfg, f"trigger_{leg}", {"trigger_weight": f"trigger_weight_{leg}_{{direction}}"})
 
     # dy scale factors
-    for i, nb in enumerate([0, 1, 2]):
-        cfg.add_shift(name=f"dy_stat_btag{nb}_up", id=210 + 2 * i, type="shape")
-        cfg.add_shift(name=f"dy_stat_btag{nb}_down", id=211 + 2 * i, type="shape")
-        add_shift_aliases(cfg, f"dy_stat_btag{nb}", {"dy_weight": f"dy_weight_stat_btag{nb}_{{direction}}"})
+    for i, dy_name in enumerate(["syst", "syst_gauss", "syst_linear", "stat", "stat_btag0", "stat_btag1", "stat_btag2"]):
+        cfg.add_shift(name=f"dy_{dy_name}_up", id=210 + 2 * i, type="shape")
+        cfg.add_shift(name=f"dy_{dy_name}_down", id=211 + 2 * i, type="shape")
+        add_shift_aliases(cfg, f"dy_{dy_name}", {"dy_weight": f"dy_weight_{dy_name}_{{direction}}"})
 
     ################################################################################################
     # external files
@@ -1662,36 +1851,35 @@ def add_config(
                 vnano=12,
                 era="22CDSep23-Summer22",
                 pog_directories={"dc": "Collisions22"},
-                snapshot=CATSnapshot(btv="2025-08-20", dc="2025-07-25", egm="2025-10-22", jme="2025-09-23", lum="2024-01-31", muo="2025-08-14", tau="2025-10-01"),  # noqa: E501
+                snapshot=CATSnapshot(btv="2025-08-20", dc="2026-02-26", egm="2025-12-15", jme="2026-04-13", lum="2024-01-31", muo="2026-04-28", tau="2025-12-25"),  # noqa: E501
             ),
             (2022, "EE", 14): CATInfo(
                 run=3,
                 vnano=12,
                 era="22EFGSep23-Summer22EE",
                 pog_directories={"dc": "Collisions22"},
-                snapshot=CATSnapshot(btv="2025-08-20", dc="2025-07-25", egm="2025-10-22", jme="2025-10-07", lum="2024-01-31", muo="2025-08-14", tau="2025-10-01"),  # noqa: E501
+                snapshot=CATSnapshot(btv="2025-08-20", dc="2026-02-26", egm="2025-12-15", jme="2026-04-13", lum="2024-01-31", muo="2026-04-28", tau="2025-12-25"),  # noqa: E501
             ),
             (2023, "", 14): CATInfo(
                 run=3,
                 vnano=12,
                 era="23CSep23-Summer23",
                 pog_directories={"dc": "Collisions23"},
-                snapshot=CATSnapshot(btv="2025-08-20", dc="2025-07-25", egm="2025-10-22", jme="2025-10-07", lum="2024-01-31", muo="2025-08-14", tau="2025-10-01"),  # noqa: E501
+                snapshot=CATSnapshot(btv="2025-08-20", dc="2026-02-26", egm="2025-12-15", jme="2026-04-13", lum="2024-01-31", muo="2026-04-28", tau="2025-12-25"),  # noqa: E501
             ),
             (2023, "BPix", 14): CATInfo(
                 run=3,
                 vnano=12,
                 era="23DSep23-Summer23BPix",
                 pog_directories={"dc": "Collisions23"},
-                snapshot=CATSnapshot(btv="2025-08-20", dc="2025-07-25", egm="2025-10-22", jme="2025-10-07", lum="2024-01-31", muo="2025-08-14", tau="2025-10-01"),  # noqa: E501
+                snapshot=CATSnapshot(btv="2025-08-20", dc="2026-02-26", egm="2025-12-15", jme="2026-04-13", lum="2024-01-31", muo="2026-04-28", tau="2025-12-25"),  # noqa: E501
             ),
             (2024, "", 15): CATInfo(
                 run=3,
                 vnano=15,
                 era="24CDEReprocessingFGHIPrompt-Summer24",
                 pog_directories={"dc": "Collisions24"},
-                # TODO: tau and lum not yet available
-                snapshot=CATSnapshot(btv="2025-08-19", dc="2025-07-25", egm="2025-10-22", jme="2025-07-17", muo="2025-10-17"),  # noqa: E501
+                snapshot=CATSnapshot(btv="2026-03-10", dc="2026-02-25", egm="2025-12-15", jme="2025-12-02", lum="2026-04-15", muo="2026-04-28", tau="2026-01-14"),  # noqa: E501
             ),
         }[(year, campaign.x.postfix, vnano)]
     else:
@@ -1708,57 +1896,62 @@ def add_config(
             2016: ("/afs/cern.ch/cms/CAF/CMSCOMM/COMM_DQM/certification/Collisions16/13TeV/Legacy_2016/Cert_271036-284044_13TeV_Legacy2016_Collisions16_JSON.txt", "v1"),  # noqa: E501
             2017: ("/afs/cern.ch/cms/CAF/CMSCOMM/COMM_DQM/certification/Collisions17/13TeV/Legacy_2017/Cert_294927-306462_13TeV_UL2017_Collisions17_GoldenJSON.txt", "v1"),  # noqa: E501
             2018: ("/afs/cern.ch/cms/CAF/CMSCOMM/COMM_DQM/certification/Collisions18/13TeV/Legacy_2018/Cert_314472-325175_13TeV_Legacy2018_Collisions18_JSON.txt", "v1"),  # noqa: E501
-            # https://twiki.cern.ch/twiki/bin/view/CMS/PdmVRun3Analysis?rev=161#Year_2022
+            # https://twiki.cern.ch/twiki/bin/view/CMS/PdmVRun3Analysis?rev=194#Year_2022
             2022: (cat_info.get_file("dc", "Cert_Collisions2022_355100_362760_Golden.json"), "v1"),
-            # https://twiki.cern.ch/twiki/bin/view/CMS/PdmVRun3Analysis?rev=161#Year_2023
+            # https://twiki.cern.ch/twiki/bin/view/CMS/PdmVRun3Analysis?rev=194#Year_2023
             2023: (cat_info.get_file("dc", "Cert_Collisions2023_366442_370790_Golden.json"), "v1"),
-            # https://twiki.cern.ch/twiki/bin/view/CMS/PdmVRun3Analysis?rev=180#Year_2024
-            # not yet available at CAT space
-            # 2024: (cat_info.get_file("dc", "Cert_Collisions2024_378981_386951_Golden.json"), "v1"),
-            2024: ("https://cms-service-dqmdc.web.cern.ch/CAF/certification/Collisions24/Cert_Collisions2024_378981_386951_Golden.json", "v1"),  # noqa: E501
+            # https://twiki.cern.ch/twiki/bin/view/CMS/PdmVRun3Analysis?rev=194#Year_2024
+            2024: (cat_info.get_file("dc", "Cert_Collisions2024_378981_386951_Golden.json"), "v1"),
         }[year],
         "normtag": {
             2016: ("/afs/cern.ch/user/l/lumipro/public/Normtags/normtag_PHYSICS.json", "v1"),
             2017: ("/afs/cern.ch/user/l/lumipro/public/Normtags/normtag_PHYSICS.json", "v1"),
             2018: ("/afs/cern.ch/user/l/lumipro/public/Normtags/normtag_PHYSICS.json", "v1"),
-            # https://twiki.cern.ch/twiki/bin/view/CMS/PdmVRun3Analysis?rev=161#Year_2022
-            2022: ("/cvmfs/cms-bril.cern.ch/cms-lumi-pog/Normtags/normtag_BRIL.json", "v1"),
-            # https://twiki.cern.ch/twiki/bin/view/CMS/PdmVRun3Analysis?rev=161#Year_2023
-            2023: ("/cvmfs/cms-bril.cern.ch/cms-lumi-pog/Normtags/normtag_BRIL.json", "v1"),
-            # https://twiki.cern.ch/twiki/bin/view/CMS/PdmVRun3Analysis?rev=180#Year_2024
-            2024: ("/cvmfs/cms-bril.cern.ch/cms-lumi-pog/Normtags/normtag_BRIL.json", "v1"),  # TODO: correct?
+            # https://twiki.cern.ch/twiki/bin/view/CMS/PdmVRun3Analysis?rev=194#Year_2022
+            2022: ("/cvmfs/cms-bril.cern.ch/cms-lumi-pog/Normtags/normtag_PHYSICS.json", "v1"),
+            # https://twiki.cern.ch/twiki/bin/view/CMS/PdmVRun3Analysis?rev=194#Year_2023
+            2023: ("/cvmfs/cms-bril.cern.ch/cms-lumi-pog/Normtags/normtag_PHYSICS.json", "v1"),
+            # https://twiki.cern.ch/twiki/bin/view/CMS/PdmVRun3Analysis?rev=194#Year_2024
+            2024: ("/cvmfs/cms-bril.cern.ch/cms-lumi-pog/Normtags/normtag_PHYSICS.json", "v1"),
         }[year],
     })
     # pileup weight corrections
-    if year != 2024:  # TODO: not yet available, see https://cms-analysis-corrections.docs.cern.ch
-        add_external("pu_sf", (cat_info.get_file("lum", "puWeights.json.gz"), "v1"))
+    add_external("pu_sf", (cat_info.get_file("lum", f"puWeights{'_BCDEFGHI' if year == 2024 else ''}.json.gz"), "v1"))
     # jet energy correction
     add_external("jet_jerc", (cat_info.get_file("jme", "jet_jerc.json.gz"), "v1"))
     # jet veto map
     add_external("jet_veto_map", (cat_info.get_file("jme", "jetvetomaps.json.gz"), "v1"))
     # btag scale factor
-    add_external("btag_sf_corr", (cat_info.get_file("btv", "btagging.json.gz"), "v1"))
+    if run == 3 and year == 2024:
+        add_external("btag_wp_sf_corr", (f"{central_hbt_dir}/custom_btv_files/btag_merged_2024_2026-03-10.json.gz", "v1"))  # noqa: E501
+    else:
+        # tmp fix for 23post, see https://trello.com/c/DbgRNT7o/24-change-23post-btagsfcorr-back-to-cat-deployed-file
+        if (year, campaign.x.postfix) == (2023, "BPix"):
+            add_external("btag_sf_corr", ("/afs/cern.ch/work/v/vanderli/public/btv/tmpSFs/2023_Summer23BPix/btagging_v3.json", "v1"))  # noqa: E501
+        else:
+            add_external("btag_sf_corr", (cat_info.get_file("btv", "btagging.json.gz"), "v1"))  # noqa: E501
     # Tobias' tautauNN (https://github.com/uhh-cms/tautauNN)
-    add_external("res_pdnn", (f"{central_hbt_dir}/res_models/res_prod3/model_fold0.tgz", "v1"))
+    # add_external("res_pdnn", (f"{central_hbt_dir}/res_models/res_prod3/model_fold0.tgz", "v1"))
     # non-parametric (flat) training up to mX = 800 GeV
-    add_external("res_dnn", (f"{central_hbt_dir}/res_models/res_prod3_nonparam/model_fold0.tgz", "v1"))
+    # add_external("res_dnn", (f"{central_hbt_dir}/res_models/res_prod3_nonparam/model_fold0.tgz", "v1"))
     # non-parametric regression from the resonant analysis
-    add_external("reg_dnn", (f"{central_hbt_dir}/res_models/reg_prod1_nonparam/model_fold0_seed0.tgz", "v1"))
-    add_external("reg_dnn_moe", (f"{central_hbt_dir}/res_models/reg_prod1_nonparam/model_fold0_moe.tgz", "v1"))
+    add_external("reg_dnn_moe", (f"{central_hbt_dir}/res_models/reg_prod1_nonparam/model_fold0{'_nobtag' if year == 2024 else ''}_moe.tgz", "v1"))  # noqa: E501
     # dnn models trained with run 2 legacy setup but run 3 data
     for fold in range(5):
-        add_external(f"run3_dnn_fold{fold}_moe", (f"{central_hbt_dir}/run3_models/run3_dnn/model_fold{fold}_moe.tgz", "v1"))  # noqa: E501
+        # for 2024, use version with btag for now, but we could also drop it since we have no full shape correction
+        basename = f"model_2024_v2_fold{fold}_btag_moe.tgz" if year == 2024 else f"model_fold{fold}_moe.tgz"
+        add_external(f"run3_dnn_fold{fold}_moe", (f"{central_hbt_dir}/run3_models/run3_dnn/{basename}", "v1"))
     # simple version of same model for quick comparisons
-    add_external("run3_dnn_simple", (f"{central_hbt_dir}/run3_models/run3_dnn_simple/model_fold0_seed1.tgz", "v1"))
-    # and again with different kl setups
-    add_external("run3_dnn_simple_kl1", (f"{central_hbt_dir}/run3_models/run3_dnn_simple_kl1/model_fold0_seed1.tgz", "v1"))  # noqa: E501
-    add_external("run3_dnn_simple_kl0", (f"{central_hbt_dir}/run3_models/run3_dnn_simple_kl0/model_fold0_seed1.tgz", "v1"))  # noqa: E501
-    add_external("run3_dnn_simple_allkl", (f"{central_hbt_dir}/run3_models/run3_dnn_simple_allkl/model_fold0_seed1.tgz", "v1"))  # noqa: E501
+    add_external("run3_dnn_simple", (f"{central_hbt_dir}/run3_models/run3_dnn_simple_fixedweights_kl01/model_fold0_seed1.tgz", "v1"))  # noqa: E501
+    # and again with different kl setups (disabled since they were still run with the broken dy frequencies)
+    # add_external("run3_dnn_simple_kl1", (f"{central_hbt_dir}/run3_models/run3_dnn_simple_kl1/model_fold0_seed1.tgz", "v1"))  # noqa: E501
+    # add_external("run3_dnn_simple_kl0", (f"{central_hbt_dir}/run3_models/run3_dnn_simple_kl0/model_fold0_seed1.tgz", "v1"))  # noqa: E501
+    # add_external("run3_dnn_simple_allkl", (f"{central_hbt_dir}/run3_models/run3_dnn_simple_allkl/model_fold0_seed1.tgz", "v1"))  # noqa: E501
     # pytorch models
     add_external("torch_test_dnn", (f"{central_hbt_dir}/run3_models/run3_torch_test/run3_external_dnn.pt2", "v1"))
-    # vbf models trained by cclub
-    for fold in range(5):
-        add_external(f"vbf_dnn_fold{fold}", (f"{central_hbt_dir}/run3_models/run3_vbf_dnn/model_fold{fold}.tgz", "v1"))
+    add_external("torch_simple_kl01", (f"{central_hbt_dir}/run3_models/run3_torch_simple_kl01/comparison_dnn.pt2", "v3"))  # noqa: E501
+    # e2e model test
+    add_external("e2e_model1", (f"{central_hbt_dir}/run3_models/e2e_test/e2e_model1.pt2", "v1"))
 
     # run specific files
     if run == 2:
@@ -1797,36 +1990,50 @@ def add_config(
         # hh-btag, https://github.com/elviramartinv/HHbtag/tree/CCLUB
         hhb_postfix = "_2024" if year == 2024 else ""
         add_external("hh_btag_repo", Ext(
-            f"{central_hbt_dir}/HHbtag-79225dd.tar.gz",
+            f"{central_hbt_dir}/HHbtag-9b98eb8.tar.gz",
             subpaths=DotDict(
-                even=f"HHbtag-79225dd94019b1c0d6cc8bb416f55e4acf1c1f47/models/HHbtag_v3{hhb_postfix}_par_0",
-                odd=f"HHbtag-79225dd94019b1c0d6cc8bb416f55e4acf1c1f47/models/HHbtag_v3{hhb_postfix}_par_1",
+                even=f"HHbtag-9b98eb82f633115b0e6b9e45a9d8ac96dd3aa38f/models/HHbtag_v3{hhb_postfix}_par_0",
+                odd=f"HHbtag-9b98eb82f633115b0e6b9e45a9d8ac96dd3aa38f/models/HHbtag_v3{hhb_postfix}_par_1",
             ),
             version="v3",
         ))
         # vbf-hhtag, https://github.com/elviramartinv/VBFjtag/tree/CCLUB, https://indico.cern.ch/event/1590750/contributions/6784135/attachments/3169657/5634394/Jet_taggers_0711.pdf # noqa
+        vbfj_postfix = "_2024" if year == 2024 else ""
         add_external("vbf_jtag_repo", Ext(
-            f"{central_hbt_dir}/VBFjtag-0f0bec9.tar.gz",
+            f"{central_hbt_dir}/VBFjtag-82b2a1a.tar.gz",
             subpaths=DotDict(
-                even="VBFjtag-0f0bec91c848c026156227ccecdcabc4f9daef89/models/VBFjTag_par_0",
-                odd="VBFjtag-0f0bec91c848c026156227ccecdcabc4f9daef89/models/VBFjTag_par_1",
+                even=f"VBFjtag-82b2a1ae7129cdc2679a2a3b14b7f12de5ca827b/models/VBFjTag{vbfj_postfix}_par_0",
+                odd=f"VBFjtag-82b2a1ae7129cdc2679a2a3b14b7f12de5ca827b/models/VBFjTag{vbfj_postfix}_par_1",
             ),
             version="v2",
+        ))
+        # vbf models trained by cclub
+        # https://gitlab.cern.ch/cclubbtautau/AnalysisCore/-/tree/cclub_cmssw15010/data/DNN_models/HHRun3DNN?ref_type=heads
+        cclub_hash, cclub_long_hash = "d08a1868", "d08a1868a05818f3cb525367f9b72f9aba2667c9"
+        vbfnn_postfix = "_24" if year == 2024 else "_22-23"
+        add_external("vbf_dnn_repo", Ext(
+            f"{central_hbt_dir}/AnalysisCore-{cclub_hash}.tar.gz",
+            subpaths=DotDict.wrap({
+                f"fold{f}": f"AnalysisCore-{cclub_long_hash}/data/DNN_models/HHRun3DNN/vbf_model_v7{vbfnn_postfix}/model_{f}/model.onnx"  # noqa: E501
+                for f in range(5)
+            }),
+            version="v7",
         ))
         # muon energy (scale and resolution) corrections and helper tools
         add_external("muon_sr", (cat_info.get_file("muo", "muon_scalesmearing.json.gz"), "v1"))
         add_external("muon_sr_tools", Ext(
-            f"{central_hbt_dir}/muonscarekit-master.tar.gz",
+            f"{central_hbt_dir}/muonscarekit-244739ce.tar.gz",
             subpaths="muonscarekit-master/scripts/MuonScaRe.py",
             version="v1",
         ))
         # dy weight and recoil corrections
-        add_external("dy_weight_sf", (f"{central_hbt_dir}/custom_dy_files/hbt_corrections.json.gz", "v2"))  # noqa: E501
-        add_external("dy_recoil_sf", (f"{central_hbt_dir}/central_dy_files/Recoil_corrections_v3.json.gz", "v1"))
-        # tau and trigger specific files are not consistent across 2022/2023 and 2024yet
+        # https://cms-higgs-leprare.docs.cern.ch/htt-common/V_recoil
+        add_external("dy_weight_sf", (f"{central_hbt_dir}/custom_dy_files/hbt_corrections_v3.json.gz", "v4"))
+        add_external("dy_recoil_sf", (f"{central_hbt_dir}/central_dy_files/Recoil_corrections_v5.json.gz", "v1"))
+        # tau and trigger specific files are not consistent across 2022/2023 and 2024 yet
+        trigger_sf_internal_subpath = f"AnalysisCore-{cclub_long_hash}/data/TriggerScaleFactors"
         if year in {2022, 2023}:
             # tau energy correction and scale factors
-            tau_pog_era_cclub = f"{year}{cfg.x.full_postfix}"
             if year == 2022:
                 tau_pog_era = f"{year}_{'pre' if campaign.has_tag('preEE') else 'post'}EE"
             else:  # 2023
@@ -1836,23 +2043,94 @@ def add_config(
             add_external("tau_sf", (f"{central_hbt_dir}/custom_tau_files/tau_DeepTau2018v2p5_{tau_pog_era}.json.gz", "v1"))  # noqa: E501
 
             # trigger scale factors
-            trigger_sf_internal_subpath = "AnalysisCore-59ae66c4a39d3e54afad5733895c33b1fb511c47/data/TriggerScaleFactors"  # noqa: E501
-            add_external("trigger_sf", Ext(
+            add_external("trigger_sf_single_e", (cat_info.get_file("egm", "electronHlt.json.gz"), "v2"))
+            add_external("trigger_sf_tau", (cat_info.get_file("tau", "tau.json.gz"), "v2"))
+
+            tau_pog_era_cclub = f"{year}{cfg.x.full_postfix}"
+            cclub_postfix = cfg.x.full_postfix
+            if year == 2022:
+                ditaujet_postfix = f"{year}{cclub_postfix}"
+                muon_postfix = f"{year}" if campaign.has_tag("preEE") else f"{year}_EE"
+                add_external("trigger_sf", Ext(
+                    f"{central_hbt_dir}/AnalysisCore-{cclub_hash}.tar.gz",
+                    subpaths=DotDict(
+                        muon=f"{trigger_sf_internal_subpath}/{tau_pog_era_cclub}/ScaleFactors_Muon_Z_HLT_{muon_postfix}_eta_pt_schemaV2.json.gz",  # noqa: E501
+                        cross_muon=f"{trigger_sf_internal_subpath}/{tau_pog_era_cclub}/CrossMuTauHlt.json.gz",
+                        cross_electron=f"{trigger_sf_internal_subpath}/{tau_pog_era_cclub}/CrossEleTauHlt.json.gz",
+                        ditau_jet=f"{trigger_sf_internal_subpath}/{tau_pog_era_cclub}/ditaujet_jetleg60_{ditaujet_postfix}.json.gz",  # noqa: E501
+                        vbf_ditau=f"{trigger_sf_internal_subpath}/{tau_pog_era_cclub}/VBF2tau_SF_{year}.json.gz",  # noqa: E501
+                        # TODO: MET and AK8 for boosted tautau, not used in analysis for now
+                        # met=f"{trigger_sf_internal_subpath}/{tau_pog_era_cclub}/METTrigger_SFs_run3_{tau_pog_era_cclub}.json.gz",  # noqa: E501
+                        # ak8=f"{trigger_sf_internal_subpath}/{tau_pog_era_cclub}/Trigger_SF_{year}_Ak8_Pnet_HLT_pT_mSD.json.gz",  # noqa: E501
+                    ),
+                    version="v2",
+                ))
+
+            elif year == 2023:
+                ditaujet_postfix = f"{year}{cclub_postfix}"
+                muon_postfix = f"{year}" if campaign.has_tag("preBPix") else f"{year}_BPix"
+                add_external("trigger_sf", Ext(
+                    f"{central_hbt_dir}/AnalysisCore-{cclub_hash}.tar.gz",
+                    subpaths=DotDict(
+                        muon=f"{trigger_sf_internal_subpath}/{tau_pog_era_cclub}/ScaleFactors_Muon_Z_HLT_{muon_postfix}_eta_pt_schemaV2.json.gz",  # noqa: E501
+                        cross_muon=f"{trigger_sf_internal_subpath}/{tau_pog_era_cclub}/CrossMuTauHlt.json.gz",
+                        cross_electron=f"{trigger_sf_internal_subpath}/{tau_pog_era_cclub}/CrossEleTauHlt.json.gz",
+                        ditau_jet=f"{trigger_sf_internal_subpath}/{tau_pog_era_cclub}/ditaujet_jetleg60_{ditaujet_postfix}.json.gz",  # noqa: E501
+                        vbf_ditau=f"{trigger_sf_internal_subpath}/{tau_pog_era_cclub}/VBF2tau_SF_{year}.json.gz",  # noqa: E501
+                        vbf_e=f"{trigger_sf_internal_subpath}/{tau_pog_era_cclub}/VBFEle_SF_{year}_{cclub_postfix}.json.gz",  # noqa: E501
+                        vbf_mu=f"{trigger_sf_internal_subpath}/{tau_pog_era_cclub}/VBFMu_SF_{year}.json.gz",  # noqa: E501
+                        vbf_tau=f"{trigger_sf_internal_subpath}/{tau_pog_era_cclub}/VBFTau_JetSF_{year}_{cclub_postfix}.json.gz",  # noqa: E501
+                        vbf_incl=f"{trigger_sf_internal_subpath}/{tau_pog_era_cclub}/VBFIncl_SF_{year}.json.gz",  # noqa: E501
+                        # TODO: MET and AK8 for boosted tautau, not used in analysis for now
+                        # met=f"{trigger_sf_internal_subpath}/{tau_pog_era_cclub}/METTrigger_SFs_run3_{tau_pog_era_cclub}.json.gz",  # noqa: E501
+                        # ak8=f"{trigger_sf_internal_subpath}/{tau_pog_era_cclub}/Trigger_SF_{year}_Ak8_Pnet_HLT_pT_mSD.json.gz",  # noqa: E501
+                    ),
+                    version="v2",
+                ))
+
+            trigger_sf_legacy_internal_subpath = "AnalysisCore-59ae66c4a39d3e54afad5733895c33b1fb511c47/data/TriggerScaleFactors"  # noqa: E501
+            add_external("trigger_sf_legacy", Ext(
                 f"{central_hbt_dir}/AnalysisCore-59ae66c4.tar.gz",
                 subpaths=DotDict(
-                    muon=f"{trigger_sf_internal_subpath}/{tau_pog_era_cclub}/temporary_MuHlt_abseta_pt.json",
-                    cross_muon=f"{trigger_sf_internal_subpath}/{tau_pog_era_cclub}/CrossMuTauHlt.json",
-                    electron=f"{trigger_sf_internal_subpath}/{tau_pog_era_cclub}/electronHlt.json",
-                    cross_electron=f"{trigger_sf_internal_subpath}/{tau_pog_era_cclub}/CrossEleTauHlt.json",
-                    tau=f"{trigger_sf_internal_subpath}/{tau_pog_era_cclub}/tau_trigger_DeepTau2018v2p5_{tau_pog_era_cclub}.json",  # noqa: E501
-                    jet=f"{trigger_sf_internal_subpath}/{tau_pog_era_cclub}/ditaujet_jetleg_SFs_{cfg.x.full_postfix}.json",  # noqa: E501
+                    muon=f"{trigger_sf_legacy_internal_subpath}/{tau_pog_era_cclub}/temporary_MuHlt_abseta_pt.json",
+                    cross_muon=f"{trigger_sf_legacy_internal_subpath}/{tau_pog_era_cclub}/CrossMuTauHlt.json",
+                    electron=f"{trigger_sf_legacy_internal_subpath}/{tau_pog_era_cclub}/electronHlt.json",
+                    cross_electron=f"{trigger_sf_legacy_internal_subpath}/{tau_pog_era_cclub}/CrossEleTauHlt.json",
+                    tau=f"{trigger_sf_legacy_internal_subpath}/{tau_pog_era_cclub}/tau_trigger_DeepTau2018v2p5_{tau_pog_era_cclub}.json",  # noqa: E501
+                    jet=f"{trigger_sf_legacy_internal_subpath}/{tau_pog_era_cclub}/ditaujet_jetleg_SFs_{cfg.x.full_postfix}.json",  # noqa: E501
                 ),
                 version="v1",
             ))
         elif year == 2024:
-            # TODO: 2024: add once available
-            pass
+            add_external("tau_sf", (cat_info.get_file("tau", "tau.json.gz"), "v1"))
 
+            tau_pog_era_cclub = f"{year}fullYear"
+            cclub_postfix = "fullYear"
+
+            add_external("trigger_sf_single_e", (cat_info.get_file("egm", "electronHlt.json.gz"), "v2"))
+            add_external("trigger_sf_tau", (cat_info.get_file("tau", "tau.json.gz"), "v2"))
+
+            add_external("trigger_sf", Ext(
+                f"{central_hbt_dir}/AnalysisCore-{cclub_hash}.tar.gz",
+                subpaths=DotDict(
+                    muon=f"{trigger_sf_internal_subpath}/{tau_pog_era_cclub}/ScaleFactors_Muon_Z_HLT_{year}_eta_pt_schemaV2.json.gz",  # noqa: E501
+                    cross_muon=f"{trigger_sf_internal_subpath}/{tau_pog_era_cclub}/CrossMuTauHlt.json.gz",
+                    cross_electron=f"{trigger_sf_internal_subpath}/{tau_pog_era_cclub}/CrossEleTauHlt.json.gz",
+                    ditau_jet=f"{trigger_sf_internal_subpath}/{tau_pog_era_cclub}/ditaujet_jetleg60_{year}.json.gz",  # noqa: E501
+                    vbf_ditau=f"{trigger_sf_internal_subpath}/{tau_pog_era_cclub}/VBF2tau_SF_{year}.json.gz",  # noqa: E501
+                    vbf_e=f"{trigger_sf_internal_subpath}/{tau_pog_era_cclub}/VBFEle_SF_{year}_{cclub_postfix}.json.gz",  # noqa: E501
+                    vbf_mu=f"{trigger_sf_internal_subpath}/{tau_pog_era_cclub}/VBFMu_SF_{year}_{cclub_postfix}.json.gz",  # noqa: E501
+                    vbf_tau=f"{trigger_sf_internal_subpath}/{tau_pog_era_cclub}/VBFTau_JetSF_{year}_{cclub_postfix}.json.gz",  # noqa: E501
+                    vbf_incl=f"{trigger_sf_internal_subpath}/{tau_pog_era_cclub}/VBFIncl_SF_{year}_{cclub_postfix}.json.gz",  # noqa: E501
+                    quadjet_jet=f"{trigger_sf_internal_subpath}/{tau_pog_era_cclub}/ParkingHH_PNet1BTag0p20_BTag.json.gz",  # noqa: E501
+                    quadjet_tau=f"{trigger_sf_internal_subpath}/{tau_pog_era_cclub}/ParkingHH_PNet1BTag0p20_L1HTTau.json.gz",  # noqa: E501
+                    # TODO: MET and AK8 for boosted tautau, not used in analysis for now
+                    # met=f"{trigger_sf_internal_subpath}/{tau_pog_era_cclub}/METTrigger_SFs_run3_{tau_pog_era_cclub}.json.gz",  # noqa: E501
+                    # ak8=f"{trigger_sf_internal_subpath}/{tau_pog_era_cclub}/Trigger_SF_{year}_Ak8_Pnet_HLT_pT_mSD.json.gz",  # noqa: E501
+
+                ),
+                version="v2",
+            ))
     else:
         assert False
 
@@ -1872,10 +2150,10 @@ def add_config(
             # event info
             "deterministic_seed",
             # object info
-            "Jet.{pt,eta,phi,mass,hadronFlavour,puId,hhbtag,btagPNet*,btagDeep*,deterministic_seed,chHEF,neHEF,chEmEF,neEmEF,muEF,chMultiplicity,neMultiplicity}",  # noqa: E501
-            "HHBJet.{pt,eta,phi,mass,hadronFlavour,puId,hhbtag,btagPNet*,btagDeep*,deterministic_seed}",
-            "NonHHBJet.{pt,eta,phi,mass,hadronFlavour,puId,hhbtag,btagPNet*,btagDeep*,deterministic_seed}",
-            "VBFJet.{pt,eta,phi,mass,hadronFlavour,puId,hhbtag,btagPNet*,btagDeep*,deterministic_seed}",
+            "Jet.{pt,eta,phi,mass,hadronFlavour,puId,hhbtag,btag*,deterministic_seed,chHEF,neHEF,chEmEF,neEmEF,muEF,chMultiplicity,neMultiplicity}",  # noqa: E501
+            "HHBJet.{pt,eta,phi,mass,hadronFlavour,puId,hhbtag,btag*,deterministic_seed}",
+            "NonHHBJet.{pt,eta,phi,mass,hadronFlavour,puId,hhbtag,btag*,deterministic_seed}",
+            "VBFJet.{pt,eta,phi,mass,hadronFlavour,puId,hhbtag,btag*,deterministic_seed}",
             "FatJet.*",
             "SubJet{1,2}.*",
             "Electron.*", *skip_column("Electron.{track_cov,gsf}*"),
@@ -1908,11 +2186,13 @@ def add_config(
                 "Electron.{eta,phi,pt,mass,charge}",
                 "Muon.{eta,phi,pt,mass,charge}",
                 "Tau.{eta,phi,pt,mass,charge,decayMode}",
-                "HHBJet.{pt,eta,phi,mass,hhbtag,btagDeepFlav*,btagPNet*}",
+                "HHBJet.{pt,eta,phi,mass,hhbtag,btag*}",
                 "FatJet.{eta,phi,pt,mass}",
                 f"{cfg.x.met_name}.{{pt,phi,covXX,covXY,covYY}}",
                 "reg_dnn{,_moe}_nu{1,2}_p{x,y,z}",
+                "reg_dnn_moe_*",
                 "run3_dnn{,_moe}_*",
+                "h_kinfit*.*_scale", "h_kinfit*.*.{pt,eta,phi,mass}",
                 "vbf_dnn*",
                 "nu_truth.*.*",
                 *skip_column("*_{up,down}"),
@@ -1944,7 +2224,7 @@ def add_config(
         "normalized_pu_weight": get_shifts("minbias_xs"),
         "normalized_isr_weight": get_shifts("isr"),
         "normalized_fsr_weight": get_shifts("fsr"),
-        "normalized_njet_btag_weight_pnet": get_shifts(*(f"btag_{unc}" for unc in cfg.x.btag_unc_names)),
+        cfg.x.btag_default.weight_column: get_shifts(*(f"btag_{unc}" for unc in cfg.x.btag_unc_names)),
         "electron_id_weight": get_shifts("e_id"),
         "electron_reco_weight": get_shifts("e_reco"),
         "muon_id_weight": get_shifts("mu_id"),
@@ -1958,7 +2238,7 @@ def add_config(
         if dataset.has_tag("ttbar"):
             dataset.x.event_weights = {"top_pt_weight": get_shifts("top_pt")}
         if dataset.has_tag("dy"):
-            dataset.x.event_weights = {"dy_weight": get_shifts(*(f"dy_stat_btag{nb}" for nb in [0, 1, 2]))}
+            dataset.x.event_weights = {"dy_weight": get_shifts("dy_*")}
 
     cfg.x.shift_groups = {
         "jec": [
@@ -2099,6 +2379,9 @@ def add_config(
                 ]
                 for lfn_num_base in lfn_num_bases
             ), [])
+
+            if (skip_lfns := dataset_inst.get_info(shift_inst.name).x("skip_lfns", [])):
+                lfns = set(lfns) - set(skip_lfns)
 
             return sorted(lfns)
 

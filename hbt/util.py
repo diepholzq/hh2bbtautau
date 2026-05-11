@@ -8,10 +8,12 @@ from __future__ import annotations
 
 __all__ = []
 
-from columnflow.types import Any
-from columnflow.columnar_util import ArrayFunction, deferred_column
-from columnflow.columnar_util import IF_DATA, IF_MC, IF_DATASET_HAS_TAG, IF_DATASET_NOT_HAS_TAG  # noqa: F401
+from columnflow.columnar_util import (  # noqa: F401
+    IF_DATA, IF_MC, IF_DATASET_HAS_TAG, IF_DATASET_NOT_HAS_TAG, EMPTY_FLOAT, ArrayFunction, deferred_column,
+    ak_concatenate_safe,
+)
 from columnflow.util import maybe_import
+from columnflow.types import Any, Sequence
 
 np = maybe_import("numpy")
 ak = maybe_import("awkward")
@@ -146,8 +148,15 @@ def IF_RUN_3_2024(self: ArrayFunction.DeferredColumn, func: ArrayFunction) -> An
 
 
 @deferred_column
-def IF_RUN_3_22_23(self: ArrayFunction.DeferredColumn, func: ArrayFunction) -> Any | set[Any]:
+def IF_RUN_3_2022_2023(self: ArrayFunction.DeferredColumn, func: ArrayFunction) -> Any | set[Any]:
     if func.config_inst.campaign.x.run == 3 and func.config_inst.campaign.x.year in {2022, 2023}:
+        return self.get()
+    return None
+
+
+@deferred_column
+def IF_RUN_3_2023_2024(self: ArrayFunction.DeferredColumn, func: ArrayFunction) -> Any | set[Any]:
+    if func.config_inst.campaign.x.run == 3 and func.config_inst.campaign.x.year in {2023, 2024}:
         return self.get()
     return None
 
@@ -161,6 +170,17 @@ IF_DATASET_IS_DY_MADGRAPH = IF_DATASET_HAS_TAG("dy_madgraph")
 IF_DATASET_IS_DY_AMCATNLO = IF_DATASET_HAS_TAG("dy_amcatnlo")
 IF_DATASET_IS_DY_POWHEG = IF_DATASET_HAS_TAG("dy_powheg")
 IF_DATASET_IS_W_LNU = IF_DATASET_HAS_TAG("w_lnu")
+
+
+@deferred_column
+def IF_QUADJET_APPLIES_TO_DATASET(self: ArrayFunction.DeferredColumn, func: ArrayFunction) -> Any | set[Any]:
+    if any(
+        trigger_inst.applies_to_dataset(func.dataset_inst)
+        for trigger_inst in func.config_inst.x.triggers
+        if trigger_inst.has_tag("cross_quadjet")
+    ):
+        return self.get()
+    return None
 
 
 @deferred_column
@@ -227,23 +247,33 @@ def hash_events(arr: np.ndarray) -> np.ndarray:
     )
 
 
-def with_type(type_name: str, data: dict[str, ak.Array], behavior: dict | None = None) -> ak.Array:
+def with_type(type_name: str, data: ak.Array | dict[str, ak.Array], behavior: dict | None = None) -> ak.Array:
     """
     Attaches a named behavior *type_name* to the structured *data* and returns an array with that behavior. The source
     behavior is extracted from the *behavior* mapping, which is extracted from the first data column if not provided.
 
     :param type_name: The name of the type to attach.
-    :param data: The structured data to attach the behavior to.
+    :param data: The structured data or array to attach the behavior to.
     :param behavior: The behavior to attach, defaults to the first data column's behavior.
     :return: Array with the specified behavior.
     """
     # extract the behavior from the first data column
     if behavior is None:
-        behavior = next(iter(data.values())).behavior
+        behavior = next(iter(data.values())).behavior if isinstance(data, dict) else data.behavior
+    if behavior is None:
+        import coffea.nanoevents.methods.nanoaod
+        behavior = coffea.nanoevents.methods.nanoaod.behavior
     return ak.Array(data, with_name=type_name, behavior=behavior)
 
 
-def create_lvector_exyz(e: ak.Array, px: ak.Array, py: ak.Array, pz: ak.Array, behavior: dict | None = None) -> ak.Array:
+def create_lvector_exyz(
+    e: ak.Array,
+    px: ak.Array,
+    py: ak.Array,
+    pz: ak.Array,
+    depth_limit: int | None = None,
+    behavior: dict | None = None,
+) -> ak.Array:
     """
     Creates a Lorentz vector with the given energy and momentum components.
 
@@ -251,6 +281,8 @@ def create_lvector_exyz(e: ak.Array, px: ak.Array, py: ak.Array, pz: ak.Array, b
     :param px: x-component of momentum.
     :param py: y-component of momentum.
     :param pz: z-component of momentum.
+    :param depth_limit: Limit to pass to ak.zip.
+    :param behavior: Behavior to attach to the resulting array.
     :return: Lorentz vector as an awkward array.
     """
     data = {
@@ -259,10 +291,17 @@ def create_lvector_exyz(e: ak.Array, px: ak.Array, py: ak.Array, pz: ak.Array, b
         "py": py,
         "pz": pz,
     }
-    return with_type("PtEtaPhiMLorentzVector", data, behavior=behavior)
+    arr = ak.zip(data, depth_limit=depth_limit)
+    return with_type("LorentzVector", arr, behavior=behavior)
 
 
-def create_lvector_xyz(px: ak.Array, py: ak.Array, pz: ak.Array, behavior: dict | None = None) -> ak.Array:
+def create_lvector_xyz(
+    px: ak.Array,
+    py: ak.Array,
+    pz: ak.Array,
+    depth_limit: int | None = None,
+    behavior: dict | None = None,
+) -> ak.Array:
     """
     Creates a Lorentz vector with the given momentum components and zero mass.
 
@@ -272,7 +311,42 @@ def create_lvector_xyz(px: ak.Array, py: ak.Array, pz: ak.Array, behavior: dict 
     :return: Lorentz vector as an awkward array.
     """
     p = (px**2 + py**2 + pz**2)**0.5
-    return create_lvector_exyz(p, px, py, pz, behavior=behavior)
+    return create_lvector_exyz(p, px, py, pz, depth_limit=depth_limit, behavior=behavior)
+
+
+def stack_lvectors(lvectors: Sequence[ak.Array]) -> ak.Array:
+    """
+    Stack multiple Lorentz vectors.
+
+    :param lvectors: Sequence of Lorentz vectors to stack.
+    :return: Stacked Lorentz vectors.
+    """
+    # convert to same lvector types, add new dimension if necessary
+    lvectors = [
+        lv if lv.ndim == 2 else lv[:, None]
+        for lv in (create_lvector_exyz(lv.e, lv.px, lv.py, lv.pz) for lv in lvectors)
+    ]
+
+    # concatenate
+    stacked = ak_concatenate_safe(lvectors, axis=1)
+
+    return stacked
+
+
+def rotate_px_py(
+    px: ak.Array | np.ndarray,
+    py: ak.Array | np.ndarray,
+    ref_phi: ak.Array | np.ndarray,
+) -> ak.Array | np.ndarray:
+    new_phi = np.arctan2(py, px) + ref_phi  # mind the "+"
+    pt = (px**2 + py**2)**0.5
+    return pt * np.cos(new_phi), pt * np.sin(new_phi)
+
+
+def delta_r12(vectors: ak.Array) -> ak.Array:
+    # delta r between first two elements
+    dr = ak.firsts(vectors[:, :1], axis=1).delta_r(ak.firsts(vectors[:, 1:2], axis=1))
+    return ak.fill_none(dr, EMPTY_FLOAT)
 
 
 _uppercase_wps = {

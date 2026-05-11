@@ -6,25 +6,29 @@ Wrappers for some default sets of producers.
 
 from columnflow.production import Producer, producer
 from columnflow.production.categories import category_ids
+from columnflow.production.cms.btag import btag_wp_weights
 from columnflow.production.cms.electron import electron_weights
 from columnflow.production.cms.muon import muon_weights
 from columnflow.production.cms.top_pt_weight import top_pt_weight as cf_top_pt_weight
 from columnflow.production.cms.dy import dy_weights
 from columnflow.util import maybe_import
-from columnflow.columnar_util import attach_coffea_behavior, default_coffea_collections, set_ak_column
+from columnflow.columnar_util import attach_coffea_behavior, set_ak_column
 
 from hbt.production.weights import (
     stitched_normalization_weights_dy_tautau_drop, normalized_pu_weight, normalized_pdf_weight,
-    normalized_murmuf_weight, normalized_ps_weights, normalized_btag_weights_deepjet, normalized_btag_weights_pnet,
+    normalized_murmuf_weight, normalized_ps_weights, normalized_btag_weights_pnet,
 )
 from hbt.production.tau import tau_weights
 from hbt.production.trigger_sf import trigger_weight
-from hbt.util import IF_DATASET_HAS_LHE_WEIGHTS, IF_RUN_3
+from hbt.util import IF_DATASET_HAS_LHE_WEIGHTS, IF_RUN_3_2022_2023, IF_RUN_3_2024
 
+np = maybe_import("numpy")
 ak = maybe_import("awkward")
 
 
-hbt_category_ids = category_ids.derive("hbt_category_ids", cls_dict={"require_producers": ["vbf_dnn_moe"]})
+hbt_category_ids = category_ids.derive("hbt_category_ids", cls_dict={
+    "require_producers": ["reg_dnn_moe", "vbf_dnn_moe"],
+})
 
 electron_id_weights = electron_weights.derive(
     "electron_id_weights",
@@ -81,14 +85,14 @@ muon_weights_lowpt = muon_weights.derive(
 @producer(
     uses={
         hbt_category_ids, stitched_normalization_weights_dy_tautau_drop, normalized_pu_weight, normalized_ps_weights,
-        normalized_btag_weights_deepjet, IF_RUN_3(normalized_btag_weights_pnet),
+        IF_RUN_3_2022_2023(normalized_btag_weights_pnet), IF_RUN_3_2024(btag_wp_weights),
         IF_DATASET_HAS_LHE_WEIGHTS(normalized_pdf_weight, normalized_murmuf_weight),
         # weight producers added dynamically if produce_weights is set
 
     },
     produces={
         hbt_category_ids, stitched_normalization_weights_dy_tautau_drop, normalized_pu_weight, normalized_ps_weights,
-        normalized_btag_weights_deepjet, IF_RUN_3(normalized_btag_weights_pnet),
+        IF_RUN_3_2022_2023(normalized_btag_weights_pnet), IF_RUN_3_2024(btag_wp_weights),
         IF_DATASET_HAS_LHE_WEIGHTS(normalized_pdf_weight, normalized_murmuf_weight),
         # weight producers added dynamically if produce_weights is set
 
@@ -101,10 +105,7 @@ muon_weights_lowpt = muon_weights.derive(
 )
 def default(self: Producer, events: ak.Array, **kwargs) -> ak.Array:
     # category ids
-    events = attach_coffea_behavior(
-        events,
-        collections={"HHBJet": default_coffea_collections["Jet"]},
-    )
+    events = attach_coffea_behavior(events, collections={"HHBJet": "Jet", "VBFJet": "Jet"})
     events = self[hbt_category_ids](events, **kwargs)
 
     # mc-only weights
@@ -127,9 +128,10 @@ def default(self: Producer, events: ak.Array, **kwargs) -> ak.Array:
         events = self[normalized_ps_weights](events, **kwargs)
 
         # btag weights
-        events = self[normalized_btag_weights_deepjet](events, **kwargs)
         if self.has_dep(normalized_btag_weights_pnet):
             events = self[normalized_btag_weights_pnet](events, **kwargs)
+        if self.has_dep(btag_wp_weights):
+            events = self[btag_wp_weights](events, **kwargs)
 
         # tau weights
         if self.has_dep(tau_weights):

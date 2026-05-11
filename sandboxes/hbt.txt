@@ -1,4 +1,4 @@
-# version 1
+# version 2
 
 -r ../modules/columnflow/sandboxes/columnar.txt
 
@@ -8,3 +8,4 @@ torchmetrics~=1.8.2
 torchdata~=0.11.0
 jax~=0.4.30
 vector~=1.6.3
+onnxruntime~=1.19.2

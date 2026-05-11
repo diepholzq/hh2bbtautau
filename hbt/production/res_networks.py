@@ -17,8 +17,9 @@ from columnflow.columnar_util import (
     set_ak_column, attach_behavior, flat_np_view, EMPTY_FLOAT, default_coffea_collections, ak_concatenate_safe,
     layout_ak_array,
 )
+from columnflow.tasks.external import BundleExternalFiles
 from columnflow.util import maybe_import, dev_sandbox, DotDict
-from columnflow.types import Any
+from columnflow.types import Any, Literal
 
 from hbt.util import MET_COLUMN
 
@@ -32,13 +33,15 @@ logger = law.logger.get_logger(__name__)
 set_ak_column_f32 = functools.partial(set_ak_column, value_type=np.float32)
 set_ak_column_i32 = functools.partial(set_ak_column, value_type=np.int32)
 
+BTagType = Literal["deepjet", "pnet", "upart", "none"]
+
 
 def rotate_to_phi(ref_phi: ak.Array, px: ak.Array, py: ak.Array) -> tuple[ak.Array, ak.Array]:
     """
     Rotates a momentum vector extracted from *events* in the transverse plane to a reference phi
     angle *ref_phi*. Returns the rotated px and py components in a 2-tuple.
     """
-    new_phi = np.arctan2(py, px) - ref_phi
+    new_phi = np.arctan2(py, px, dtype=np.float64) - ref_phi
     pt = (px**2 + py**2)**0.5
     return pt * np.cos(new_phi), pt * np.sin(new_phi)
 
@@ -59,15 +62,18 @@ class _res_dnn_evaluation(Producer):
         "Tau.{eta,phi,pt,mass,charge,decayMode}",
         "Electron.{eta,phi,pt,mass,charge}",
         "Muon.{eta,phi,pt,mass,charge}",
-        "HHBJet.{pt,eta,phi,mass,hhbtag,btagDeepFlav*,btagPNet*}",
+        "HHBJet.{pt,eta,phi,mass,hhbtag,btagDeepFlav*,btagPNet*,btagUParTAK4*}",
         "FatJet.{eta,phi,pt,mass}",
         MET_COLUMN("{pt,phi,covXX,covXY,covYY}"),
     }
 
-    # whether to use pnet instead of deepflavor for btagging variables
-    use_pnet: bool = False
+    # if onnx is used, otherwise assumes the default tf model type
+    use_onnx: bool = False
 
-    # whether the model is parameterized in mass, spin and year
+    # which type of btagging variables to use
+    btag_type: BTagType = "deepjet"
+
+    # whether the model is parametrized in mass, spin and year
     # (this is a slight forward declaration but simplifies the code reasonably well in our use case)
     parametrized: bool | None = None
 
@@ -95,7 +101,23 @@ class _res_dnn_evaluation(Producer):
         # name of the model bundle in the external files
         return self.cls_name
 
+    def load_model(self, bundle: BundleExternalFiles) -> law.LocalTarget:
+        model_dir = bundle.files_dir.child(f"{self.external_name}_unpacked", type="d")
+        model_dir_exists = lambda: model_dir.exists() and model_dir.listdir()
+        if not model_dir_exists():
+            # unpack into a tmpdir first and then move to reduce race conditions
+            tmp_dir = law.LocalDirectoryTarget(is_tmp=True)
+            getattr(bundle.files, self.external_name).load(tmp_dir, formatter="tar")
+            if not model_dir_exists():
+                tmp_dir.move_to_local(model_dir)
+            tmp_dir.remove()
+        if self.dir_name:
+            model_dir = model_dir.child(self.dir_name, type="d")
+        return model_dir
+
     def init_func(self, **kwargs) -> None:
+        assert self.btag_type in {"deepjet", "pnet", "upart", "none"}
+
         # set feature production options when requested
         if self.produce_features is None:
             self.produce_features = self.config_inst.x.sync
@@ -119,34 +141,44 @@ class _res_dnn_evaluation(Producer):
     def requires_func(self, task: law.Task, reqs: dict, **kwargs) -> None:
         super().requires_func(task=task, reqs=reqs, **kwargs)
 
-        if "external_files" in reqs:
-            return
-
-        from columnflow.tasks.external import BundleExternalFiles
-        reqs["external_files"] = BundleExternalFiles.req(task)
+        if "external_files" not in reqs:
+            reqs["external_files"] = BundleExternalFiles.req(task)
 
     def setup_func(self, task: law.Task, reqs: dict[str, DotDict[str, Any]], **kwargs) -> None:
         super().setup_func(task=task, reqs=reqs, **kwargs)
-
-        from hbt.ml.evaluators import TFEvaluator
-        if not getattr(task, "taf_tf_evaluator", None):
-            task.taf_tf_evaluator = TFEvaluator()
-        self.evaluator = task.taf_tf_evaluator
 
         # some checks
         if not isinstance(self.parametrized, bool):
             raise AttributeError("'parametrized' must be set in the producer configuration")
 
-        # unpack the model archive
-        bundle = reqs["external_files"]
-        bundle.files
-        model_dir = bundle.files_dir.child(f"{self.external_name}_unpacked", type="d")
-        getattr(bundle.files, self.external_name).load(model_dir, formatter="tar")
-        if self.dir_name:
-            model_dir = model_dir.child(self.dir_name, type="d")
+        # tf or onnx setup
+        if not self.use_onnx:
+            from hbt.ml.evaluators import TFEvaluator
+            if not getattr(task, "taf_tf_evaluator", None):
+                task.taf_tf_evaluator = TFEvaluator()
+            self.evaluator = task.taf_tf_evaluator
 
-        # setup the evaluator
-        self.evaluator.add_model(self.cls_name, model_dir.abspath, signature_key="serving_default")
+            # unpack the model archive
+            bundle = reqs["external_files"]
+            bundle.files
+            model_dir = self.load_model(bundle)
+
+            # setup the evaluator
+            self.evaluator.add_model(self.cls_name, model_dir.abspath, signature_key="serving_default")
+
+        else:
+            from hbt.ml.evaluators import ONNXEvaluator
+            if not getattr(task, "taf_onnx_evaluator", None):
+                task.taf_onnx_evaluator = ONNXEvaluator()
+            self.evaluator = task.taf_onnx_evaluator
+
+            # unpack the model archive
+            bundle = reqs["external_files"]
+            bundle.files
+            model = self.load_model(bundle)
+
+            # setup the evaluator
+            self.evaluator.add_model(self.cls_name, model.abspath)
 
         # categorical values handled by the network
         # (names and values from training code that was aligned to KLUB notation)
@@ -169,9 +201,9 @@ class _res_dnn_evaluation(Producer):
             self.config_inst.channels.n.etau.id: 1,
             self.config_inst.channels.n.tautau.id: 2,
             # unknown during training
-            self.config_inst.channels.n.ee.id: 1,
-            self.config_inst.channels.n.mumu.id: 0,
-            self.config_inst.channels.n.emu.id: 1,
+            self.config_inst.channels.n.ee.id: 1,  # like etau
+            self.config_inst.channels.n.mumu.id: 0,  # like mutau
+            self.config_inst.channels.n.emu.id: 1,  # like etau
         }
 
         # define the year based on the incoming campaign
@@ -185,18 +217,20 @@ class _res_dnn_evaluation(Producer):
             (2022, "EE"): 3,
             (2023, ""): 3,
             (2023, "BPix"): 3,
+            (2024, ""): 3,
         }[(self.config_inst.campaign.x.year, self.config_inst.campaign.x.postfix)]
 
     def teardown_func(self, task: law.Task, **kwargs) -> None:
         """
-        Stops the TF evaluator.
+        Stops the ML evaluator.
         """
-        if (evaluator := getattr(task, "taf_tf_evaluator", None)):
+        attr = "taf_onnx_evaluator" if self.use_onnx else "taf_tf_evaluator"
+        if (evaluator := getattr(task, attr, None)):
             evaluator.stop()
-        task.taf_tf_evaluator = None
+        setattr(task, attr, None)
         self.evaluator = None
 
-    def call_func(self, events: ak.Array, **kwargs) -> ak.Array:
+    def call_func(self, events: ak.Array, task: law.Task, **kwargs) -> ak.Array:
         # start the evaluator
         if not self.evaluator.running:
             self.evaluator.start()
@@ -213,6 +247,10 @@ class _res_dnn_evaluation(Producer):
 
         # apply event mask to all features
         event_mask = self.define_event_mask(events, cat, cont)
+        if not ak.any(event_mask):
+            task.logger.warning(
+                f"{self.cls_name}: 0 / {len(events)} selected for evaluation ({task.dataset_inst.name})",
+            )
         n_mask = ak.sum(event_mask)
         for n, v in cont.items():
             cont[n] = v[event_mask]
@@ -227,6 +265,7 @@ class _res_dnn_evaluation(Producer):
             ]
             if t is not None
         ]
+        continuous_inputs = np.concatenate(continuous_inputs, axis=1)
 
         # build categorical inputs
         categorical_inputs = [
@@ -236,15 +275,21 @@ class _res_dnn_evaluation(Producer):
                 (self.spin * np.ones(n_mask, dtype=np.int32)) if self.parametrized else None,
             ] if t is not None
         ]
+        categorical_inputs = np.concatenate(categorical_inputs, axis=1)
 
         # evaluate the model
-        scores = self.evaluator(
-            self.cls_name,
-            inputs=[
-                np.concatenate(continuous_inputs, axis=1),
-                np.concatenate(categorical_inputs, axis=1),
-            ],
-        )
+        if ak.any(event_mask):
+            if not self.use_onnx:
+                scores = self.evaluator(self.cls_name, inputs=[continuous_inputs, categorical_inputs])
+            else:
+                scores = self.evaluator(
+                    self.cls_name,
+                    {"cont_input": continuous_inputs, "cat_input": categorical_inputs.astype(np.float32)},
+                )[0]
+        else:
+            scores = np.empty((0, len(self.output_columns)), dtype=np.float32)
+        del continuous_inputs
+        del categorical_inputs
 
         # in very rare cases (1 in 25k), the network output can be none, likely for numerical reasons,
         # so issue a warning and set them to a default value
@@ -257,6 +302,7 @@ class _res_dnn_evaluation(Producer):
             scores[nan_mask] = self.empty_value
 
         # prepare output columns with the shape of the original events and assign values into them
+        assert scores.shape[1] == len(self.output_columns)
         for i, column in enumerate(self.output_columns):
             values = self.empty_value * np.ones(len(events), dtype=np.float32)
             values[event_mask] = scores[:, i]
@@ -291,7 +337,11 @@ class _res_dnn_evaluation(Producer):
 
         # compute angle from visible mother particle of vis_tau1 and vis_tau2
         # used to rotate the kinematics of dau{1,2}, met, bjet{1,2} and fatjets relative to it
-        dilep_phi = np.arctan2(vis_tau[:, 0].py + vis_tau[:, 1].py, vis_tau[:, 0].px + vis_tau[:, 1].px)
+        dilep_phi = np.arctan2(
+            vis_tau[:, 0].py + vis_tau[:, 1].py,
+            vis_tau[:, 0].px + vis_tau[:, 1].px,
+            dtype=np.float64,
+        )
         events = set_ak_column(events, "feat_dilep_phi", dilep_phi)
 
         return events
@@ -353,17 +403,31 @@ class _res_dnn_evaluation(Producer):
         # bjet 1
         cont.bjet1_px, cont.bjet1_py = rot(bjets[:, 0].px, bjets[:, 0].py)
         cont.bjet1_pz, cont.bjet1_e = bjets[:, 0].pz, bjets[:, 0].energy
-        cont.bjet1_tag_b = bjets[:, 0]["btagPNetB" if self.use_pnet else "btagDeepFlavB"]
-        cont.bjet1_tag_cvsb = bjets[:, 0]["btagPNetCvB" if self.use_pnet else "btagDeepFlavCvB"]
-        cont.bjet1_tag_cvsl = bjets[:, 0]["btagPNetCvL" if self.use_pnet else "btagDeepFlavCvL"]
+        if self.btag_type == "deepjet":
+            cont.bjet1_tag_b = bjets[:, 0].btagDeepFlavB
+            cont.bjet1_tag_cvsb = bjets[:, 0].btagDeepFlavCvB
+            cont.bjet1_tag_cvsl = bjets[:, 0].btagDeepFlavCvL
+        elif self.btag_type == "pnet":
+            cont.bjet1_tag_b = bjets[:, 0].btagPNetB
+            cont.bjet1_tag_cvsb = bjets[:, 0].btagPNetCvB
+            cont.bjet1_tag_cvsl = bjets[:, 0].btagPNetCvL
+        elif self.btag_type == "upart":
+            cont.bjet1_tag_b = bjets[:, 0].btagUParTAK4B
         cont.bjet1_hhbtag = bjets[:, 0].hhbtag
 
         # bjet 2
         cont.bjet2_px, cont.bjet2_py = rot(bjets[:, 1].px, bjets[:, 1].py)
         cont.bjet2_pz, cont.bjet2_e = bjets[:, 1].pz, bjets[:, 1].energy
-        cont.bjet2_tag_b = bjets[:, 1]["btagPNetB" if self.use_pnet else "btagDeepFlavB"]
-        cont.bjet2_tag_cvsb = bjets[:, 1]["btagPNetCvB" if self.use_pnet else "btagDeepFlavCvB"]
-        cont.bjet2_tag_cvsl = bjets[:, 1]["btagPNetCvL" if self.use_pnet else "btagDeepFlavCvL"]
+        if self.btag_type == "deepjet":
+            cont.bjet2_tag_b = bjets[:, 1].btagDeepFlavB
+            cont.bjet2_tag_cvsb = bjets[:, 1].btagDeepFlavCvB
+            cont.bjet2_tag_cvsl = bjets[:, 1].btagDeepFlavCvL
+        elif self.btag_type == "pnet":
+            cont.bjet2_tag_b = bjets[:, 1].btagPNetB
+            cont.bjet2_tag_cvsb = bjets[:, 1].btagPNetCvB
+            cont.bjet2_tag_cvsl = bjets[:, 1].btagPNetCvL
+        elif self.btag_type == "upart":
+            cont.bjet2_tag_b = bjets[:, 1].btagUParTAK4B
         cont.bjet2_hhbtag = bjets[:, 1].hhbtag
 
         # fatjet variables
@@ -375,6 +439,8 @@ class _res_dnn_evaluation(Producer):
             if not ak.any(mask):
                 return
             for field in fields:
+                if field not in cont:
+                    continue
                 arr = flat_np_view(ak.fill_none(cont[field], value, axis=0), copy=True)
                 arr[flat_np_view(mask)] = value
                 cont[field] = layout_ak_array(arr, cont[field]) if cont[field].ndim > 1 else arr
@@ -420,7 +486,7 @@ class _res_dnn_evaluation(Producer):
             np.isin(cat.vis_tau1_charge, self.embedding_expected_inputs["charge1"]) &
             np.isin(cat.vis_tau2_charge, self.embedding_expected_inputs["charge2"]) &
             (cat.has_jet_pair | cat.has_fatjet) &
-            (self.year_flag in self.embedding_expected_inputs["year"])
+            (not self.parametrized or self.year_flag in self.embedding_expected_inputs["year"])
         )
 
 
@@ -480,7 +546,7 @@ class res_pdnn(_res_dnn):
 
 class res_dnn(_res_dnn):
     """
-    Non-parameterized network, trained only with Radion (spin 0) samples up to mX = 800 GeV across all run 2 eras.
+    Non-parametrized network, trained only with Radion (spin 0) samples up to mX = 800 GeV across all run 2 eras.
     """
 
     parametrized = False
@@ -494,7 +560,7 @@ class res_dnn_pnet(res_dnn):
     """
 
     external_name = "res_dnn"
-    use_pnet = True
+    btag_type = "pnet"
     produce_features = True
     output_prefix = "res_dnn_pnet"
 
@@ -508,6 +574,10 @@ class _reg_dnn(_res_dnn_evaluation):
 
     empty_value = 0.0
     parametrized = False
+
+    @property
+    def btag_type(self):
+        return "none" if self.config_inst.campaign.x.year == 2024 else "deepjet"
 
     def init_func(self, **kwargs) -> None:
         super().init_func(**kwargs)
@@ -523,23 +593,13 @@ class _reg_dnn(_res_dnn_evaluation):
         self.produces |= set(self.output_columns)
 
 
-class reg_dnn(_reg_dnn):
-    """
-    Single regression network, trained with Radion samples and a flat mass range.
-    """
-
-    dir_name = "model_fold0_seed0"
-    output_prefix = "reg_dnn"
-    exposed = True
-
-
 class reg_dnn_moe(_reg_dnn):
     """
     Mixture of experts regression network, trained with Radion samples and a flat mass range.
     """
 
-    dir_name = "model_fold0_moe"
     output_prefix = "reg_dnn_moe"
+    produce_features = True
     exposed = True
 
 
@@ -550,7 +610,6 @@ class reg_dnn_moe(_reg_dnn):
 class _run3_dnn(_res_dnn):
 
     parametrized = False
-    use_pnet = True
     dir_name = None
     fold = None
     n_folds = 5
@@ -558,6 +617,10 @@ class _run3_dnn(_res_dnn):
     @property
     def output_prefix(self) -> str:
         return self.cls_name
+
+    @property
+    def btag_type(self):
+        return "upart" if self.config_inst.campaign.x.year == 2024 else "pnet"
 
     def define_event_mask(self, events: ak.Array, cat: DotDict, cont: DotDict) -> ak.Array:
         event_mask = super().define_event_mask(events, cat, cont)
@@ -701,17 +764,50 @@ class _vbf_dnn(_res_dnn_evaluation):
     def output_prefix(self) -> str:
         return self.cls_name
 
+    def load_model(self, bundle: BundleExternalFiles) -> law.LocalTarget:
+        # should be overwritten in inheriting produicers with knowledge on fold info
+        raise NotImplementedError
+
     def init_func(self, **kwargs) -> None:
         super().init_func(**kwargs)
 
+        # store the model version and check if onnx should be used which was used starting from v6 onwards
+        self.vbf_dnn_version = self.config_inst.x.external_files.vbf_dnn_repo.version
+        self.use_onnx = int(self.vbf_dnn_version[1:]) >= 6
+
+        # store names of output classes
+        self.output_classes = ["hh_vbf", "tt", "dy"] if self.use_onnx else ["hh_ggf", "tt", "dy", "hh_vbf"]
+
         # output column names (in this order)
+        # note: in the onnx models, the output columns changed
         self.output_columns = [
             f"{self.output_prefix}_{name}"
-            for name in ["hh_ggf", "tt", "dy", "hh_vbf"]
+            for name in self.output_classes
         ]
 
         # update produced columns
         self.produces |= set(self.output_columns)
+
+    def setup_func(self, task: law.Task, reqs: dict[str, DotDict[str, Any]], **kwargs) -> None:
+        super().setup_func(task=task, reqs=reqs, **kwargs)
+
+        # our channel ids mapped to cclub "pair_type"
+        # (note that cclub used ee/mumu/emu as well)
+        self.channel_id_to_pair_type = {
+            self.config_inst.channels.n.mutau.id: 0,
+            self.config_inst.channels.n.etau.id: 1,
+            self.config_inst.channels.n.tautau.id: 2,
+            self.config_inst.channels.n.ee.id: 4,
+            self.config_inst.channels.n.mumu.id: 3,
+            self.config_inst.channels.n.emu.id: 5,
+        }
+
+        # adjust expected categorical inputs as well
+        # cclub training used additional pair types and uses -999 for invalid decay mode
+        self.embedding_expected_inputs["pair_type"] = list(self.channel_id_to_pair_type.values())
+        # cclub uses -999 for invalid decay mode
+        self.embedding_expected_inputs["decay_mode1"] = [-999, 0, 1, 10, 11]
+        self.embedding_expected_inputs["decay_mode2"] = [-999, 0, 1, 10, 11]
 
     def update_events(self, events: ak.Array) -> ak.Array:
         events = super().update_events(events)
@@ -730,8 +826,9 @@ class _vbf_dnn(_res_dnn_evaluation):
     def define_categorical_inputs(self, events: ak.Array, cat: DotDict) -> None:
         super().define_categorical_inputs(events, cat)
 
-        # dm1 for e/mu is changed from -1 to -999
+        # dm for e/mu is changed from -1 to -999
         cat.dm1[cat.dm1 == -1] = -999
+        cat.dm2[cat.dm2 == -1] = -999
 
         # add vbf jet pair presence
         cat.has_vbf_jets = ak.num(events.VBFJet) >= 2
@@ -874,13 +971,15 @@ class _vbf_dnn(_res_dnn_evaluation):
         event_mask = super().define_event_mask(events, cat, cont)
 
         # add vbf preselection and presence of vbf jets
-        vbfjet1 = events.padded_vbf_jets[:, 0]
-        vbfjet2 = events.padded_vbf_jets[:, 1]
-        vbf_preselection_mask = (
-            ak.fill_none((vbfjet1 + vbfjet2).mass > 500.0, False) &
-            ak.fill_none(vbfjet1.delta_r(vbfjet2) > 2.5, False)
-        )
-        event_mask = event_mask & cat.has_vbf_jets & vbf_preselection_mask
+        # vbfjet1 = events.padded_vbf_jets[:, 0]
+        # vbfjet2 = events.padded_vbf_jets[:, 1]
+        # vbf_preselection_mask = (
+        #     ak.fill_none((vbfjet1 + vbfjet2).mass > 500.0, False) &
+        #     ak.fill_none(vbfjet1.delta_r(vbfjet2) > 2.5, False)
+        # )
+        # event_mask = event_mask & cat.has_vbf_jets & vbf_preselection_mask
+        # disabled for now
+        event_mask = event_mask & cat.has_vbf_jets
 
         return event_mask
 
@@ -892,6 +991,9 @@ class _vbf_dnn_xvalid(_vbf_dnn):
 
     n_folds = 5
     fold = None
+
+    def load_model(self, bundle: BundleExternalFiles) -> law.LocalTarget:
+        return bundle.files.vbf_dnn_repo[f"fold{self.fold}"]
 
     def define_event_mask(self, events: ak.Array, cat: DotDict, cont: DotDict) -> ak.Array:
         event_mask = super().define_event_mask(events, cat, cont)
@@ -925,18 +1027,25 @@ class vbf_dnn_moe(Producer):
     # used and produced columns
     # (used ones are updated dynamically in init_func)
     uses = {"event"}
-    produces = {"vbf_dnn_moe_{hh_ggf,tt,dy,hh_vbf}"}
 
     def init_func(self, **kwargs) -> None:
+        # store the model version and check if onnx should be used which was used starting from v6 onwards
+        self.vbf_dnn_version = self.config_inst.x.external_files.vbf_dnn_repo.version
+        self.use_onnx = int(self.vbf_dnn_version[1:]) >= 6
+
+        # store names of output classes
+        self.output_classes = ["hh_vbf", "tt", "dy"] if self.use_onnx else ["hh_ggf", "tt", "dy", "hh_vbf"]
+
         # store dnn evaluation classes
         self.dnn_classes = {
             f: _vbf_dnn_xvalid.get_cls(f"vbf_dnn_fold{f}")
             for f in range(_run3_dnn.n_folds)
         }
 
-        # update used columns / dependencies
+        # update columns & dependencies
+        self.produces.add(f"vbf_dnn_moe_{{{','.join(self.output_classes)}}}")
         for dnn_cls in self.dnn_classes.values():
-            self.uses.add(f"{dnn_cls.cls_name}_{{hh_ggf,tt,dy,hh_vbf}}" if self.require_folds else dnn_cls)
+            self.uses.add(f"{dnn_cls.cls_name}_{{{','.join(self.output_classes)}}}" if self.require_folds else dnn_cls)
 
     @property
     def require_producers(self) -> list[str] | None:
@@ -971,7 +1080,7 @@ class vbf_dnn_moe(Producer):
             for dnn_cls in self.dnn_classes.values():
                 events = self[dnn_cls](events, **kwargs)
 
-        for out in ["hh_ggf", "tt", "dy", "hh_vbf"]:
+        for out in self.output_classes:
             # fill score from columns at positions with different folds
             score = EMPTY_FLOAT * np.ones(len(events), dtype=np.float32)
             for f in range(_vbf_dnn_xvalid.n_folds):

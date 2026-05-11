@@ -69,6 +69,7 @@ def hhbtag(
     met = events[event_mask][self.config_inst.x.met_name]
     jet_shape = abs(jets.pt) >= 0
     n_jets_capped = ak.num(jets, axis=1)
+
     # get input features
     input_features = [
         jet_shape * 1,
@@ -77,7 +78,7 @@ def hhbtag(
         jets.mass / jets.pt,
         jets.energy / jets.pt,
         abs(jets.eta - htt.eta),
-        (jets.btagDeepFlavB if self.hhbtag_version == "v2" else jets.btagPNetB),
+        jets[self.btag_col],
         jets.delta_phi(htt),
         jet_shape * (self.hhbtag_campaign),
         jet_shape * self.hhbtag_channel_map[events[event_mask].channel_id],
@@ -183,14 +184,13 @@ def hhbtag_init(self: Producer, **kwargs) -> None:
     # get the model version (coincides with the external file version)
     self.hhbtag_version = self.config_inst.x.external_files.hh_btag_repo.version
 
-    # produce input columns
-    self.hhbtag_version = self.config_inst.x.external_files.hh_btag_repo.version
+    # define btag column to be read and used
+    self.btag_col = self.config_inst.x.btag_default.jet_column
+    self.uses.add(f"Jet.{self.btag_col}")
+
+    # columns produced for sync
     if self.config_inst.x.sync:
         self.produces.add("sync_*")
-    if self.hhbtag_version == "v2":
-        self.uses.add("Jet.btagDeepFlavB")
-    if self.hhbtag_version == "v3":
-        self.uses.add("Jet.btagPNetB")
 
 
 @hhbtag.requires
@@ -258,6 +258,7 @@ def hhbtag_setup(
         (2022, "EE"): 1,
         (2023, ""): 2,
         (2023, "BPix"): 3,
+        (2024, ""): 4,
     }[campaign_key]
 
     # validate the met name

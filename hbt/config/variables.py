@@ -6,16 +6,15 @@ Definition of variables.
 
 from __future__ import annotations
 
-from functools import partial
+import functools
 
 import order as od
 
-from columnflow.columnar_util import (
-    EMPTY_FLOAT, attach_coffea_behavior, default_coffea_collections, ak_concatenate_safe,
-)
+from columnflow.columnar_util import EMPTY_FLOAT, Route, attach_coffea_behavior
 from columnflow.util import maybe_import
+from columnflow.types import Sequence, Callable, Type, Any
 
-from hbt.util import create_lvector_xyz
+from hbt.util import create_lvector_xyz, stack_lvectors, rotate_px_py, delta_r12, with_type
 
 np = maybe_import("numpy")
 ak = maybe_import("awkward")
@@ -25,54 +24,46 @@ def add_variables(config: od.Config) -> None:
     """
     Adds all variables to a *config*.
     """
+    # helper that automatically adds null_value and under/overflow flags if not specified
+    def add_variable(*args, **kwargs) -> od.Variable:
+        kwargs.setdefault("null_value", EMPTY_FLOAT)
+        # create the variable
+        variable = config.add_variable(*args, **kwargs)
+        # defaults
+        if not variable.has_aux("underflow"):
+            variable.x.underflow = True
+        if not variable.has_aux("overflow"):
+            variable.x.overflow = True
+        # return result
+        return variable
+
     add_variable(
-        config,
         name="event",
         expression="event",
-        binning=(1, 0.0, 1.0e9),
+        binning=(100, 0.0, 1.0e9),
         x_title="Event number",
-        discrete_x=True,
     )
     add_variable(
-        config,
         name="run",
         expression="run",
-        binning=(1, 100000.0, 500000.0),
+        binning=(100, 100000.0, 500000.0),
         x_title="Run number",
-        discrete_x=True,
     )
     add_variable(
-        config,
         name="lumi",
         expression="luminosityBlock",
-        binning=(1, 0.0, 5000.0),
+        binning=(100, 0.0, 5000.0),
         x_title="Luminosity block",
-        discrete_x=True,
     )
     add_variable(
-        config,
-        name="n_hhbtag",
-        expression="n_hhbtag",
-        binning=(4, -0.5, 3.5),
-        x_title="Number of HH b-tags",
-        discrete_x=True,
-    )
-    def build_ht(events):
-        objs = ak_concatenate_safe([events.Electron * 1, events.Muon * 1, events.Tau * 1, events.Jet * 1], axis=1)[:, :]
-        objs_sum = objs.sum(axis=1)
-        return objs_sum.pt
-    build_ht.inputs = ["{Electron,Muon,Tau,Jet}.{pt,eta,phi,mass}"]
-    add_variable(
-        config,
         name="ht",
-        expression=partial(build_ht),
-        aux={"inputs": build_ht.inputs},
+        expression=(var_ht := VarHt()),
+        aux={"inputs": var_ht.uses},
         binning=[0, 80, 120, 160, 200, 240, 280, 320, 400, 500, 600, 800],
         unit="GeV",
         x_title="HT",
     )
     add_variable(
-        config,
         name="jet_pt",
         expression="Jet.pt",
         binning=(40, 0.0, 400.0),
@@ -80,7 +71,6 @@ def add_variables(config: od.Config) -> None:
         x_title=r"all Jet $p_{T}$",
     )
     add_variable(
-        config,
         name="jet1_pt",
         expression="Jet.pt[:,0]",
         binning=(40, 0.0, 400.0),
@@ -88,35 +78,30 @@ def add_variables(config: od.Config) -> None:
         x_title=r"Leading jet $p_{T}$",
     )
     add_variable(
-        config,
         name="jet1_eta",
         expression="Jet.eta[:,0]",
         binning=(30, -3.0, 3.0),
         x_title=r"Leading jet $\eta$",
     )
     add_variable(
-        config,
         name="jet1_phi",
         expression="Jet.phi[:,0]",
         binning=(66, -3.3, 3.3),
         x_title=r"Leading jet $\phi$",
     )
     add_variable(
-        config,
         name="jet1_chEmEF",
         expression="Jet.chEmEF[:,0]",
         binning=(40, 0.0, 0.2),
         x_title="Leading jet chEmEF",
     )
     add_variable(
-        config,
         name="jet1_muEF",
         expression="Jet.muEF[:,0]",
         binning=(40, 0.6, 1.0),
         x_title="Leading jet muEF",
     )
     add_variable(
-        config,
         name="jet2_pt",
         expression="Jet.pt[:,1]",
         binning=(40, 0.0, 400.0),
@@ -124,35 +109,86 @@ def add_variables(config: od.Config) -> None:
         x_title=r"Subleading jet $p_{T}$",
     )
     add_variable(
-        config,
         name="jet2_eta",
         expression="Jet.eta[:,1]",
         binning=(30, -3.0, 3.0),
         x_title=r"Subleading jet $\eta$",
     )
     add_variable(
-        config,
         name="jet2_phi",
         expression="Jet.phi[:,1]",
         binning=(66, -3.3, 3.3),
         x_title=r"Subleading jet $\phi$",
     )
+
     add_variable(
-        config,
+        name="n_hhbtag",
+        expression="n_hhbtag",
+        binning=(4, -0.5, 3.5),
+        x_title="Number of HH b-tags",
+        discrete_x=True,
+    )
+    add_variable(
+        name="njets",
+        expression=lambda events: ak.num(events.Jet["pt"], axis=1),
+        aux={"inputs": {"Jet.pt"}},
+        binning=(11, -0.5, 10.5),
+        x_title=r"Number of jets",
+    )
+    add_variable(
+        name="nbjets_deepjet",
+        expression=(var_nbjets := VarNBTags()).partial(config_inst=config, attr="btagDeepFlavB"),
+        aux={"inputs": var_nbjets.uses},
+        binning=(11, -0.5, 10.5),
+        x_title=r"Number of b-jets (DeepJet medium)",
+        discrete_x=True,
+    )
+    add_variable(
+        name="nbjets_pnet",
+        expression=(var_nbjets := VarNBTags()).partial(config_inst=config, attr="btagPNetB"),
+        aux={"inputs": var_nbjets.uses},
+        binning=(11, -0.5, 10.5),
+        x_title=r"Number of b-jets (PNet medium)",
+        discrete_x=True,
+    )
+
+    add_variable(
+        name="nbjets_pnet_overflow",
+        expression=config.variables.n.nbjets_pnet.expression,
+        aux={**config.variables.n.nbjets_pnet.aux, "overflow": True},
+        binning=(4, -0.5, 3.5),
+        x_title=r"Number of b-jets (PNet medium)",
+        discrete_x=True,
+    )
+    add_variable(
+        name="nbjets_upart",
+        expression=(var_nbjets := VarNBTags()).partial(config_inst=config, attr="btagUParTAK4B"),
+        aux={"inputs": var_nbjets.uses},
+        binning=(11, -0.5, 10.5),
+        x_title=r"Number of b-jets (UParT medium)",
+        discrete_x=True,
+    )
+    add_variable(
+        name="nbjets_upart_overflow",
+        expression=config.variables.n.nbjets_upart.expression,
+        aux={**config.variables.n.nbjets_upart.aux, "overflow": True},
+        binning=(4, -0.5, 3.5),
+        x_title=r"Number of b-jets (UParT medium)",
+        discrete_x=True,
+    )
+    add_variable(
         name="met_pt",
         expression="PuppiMET.pt",
         binning=(40, 0, 200),
         x_title=r"MET $p_T$",
     )
     add_variable(
-        config,
         name="met_phi",
         expression="PuppiMET.phi",
         binning=(66, -3.3, 3.3),
         x_title=r"MET $\phi$",
     )
     add_variable(
-        config,
         name="met_px",
         expression=lambda events: events.PuppiMET.px,
         aux={"inputs": ["PuppiMET.{pt,phi}"]},
@@ -160,132 +196,70 @@ def add_variables(config: od.Config) -> None:
         x_title=r"MET $p_x$",
     )
     add_variable(
-        config,
         name="met_py",
         expression=lambda events: events.PuppiMET.py,
         aux={"inputs": ["PuppiMET.{pt,phi}"]},
         binning=(50, -250, 250),
         x_title=r"MET $p_y$",
     )
+
+    # regression variables
     for n in range(1, 2 + 1):
         for v in ["px", "py", "pz"]:
             add_variable(
-                config,
                 name=f"reg_dnn_nu{n}_{v}",
+                expression=f"reg_dnn_moe_nu{n}_{v}",
                 binning=(40, -150, 150),
                 x_title=rf"Regressed $\nu_{n} {v}$",
             )
 
-    def build_reg_h(events, which=None):
-        import numpy as np
-        vis_leps = ak_concatenate_safe([events.Electron * 1, events.Muon * 1, events.Tau * 1], axis=1)[:, :2]
-        ref_phi = vis_leps.sum(axis=1).phi
-        def rotate_px_py(px, py):
-            new_phi = np.arctan2(py, px) + ref_phi  # mind the "+"
-            pt = (px**2 + py**2)**0.5
-            return pt * np.cos(new_phi), pt * np.sin(new_phi)
-        nu1 = create_lvector_xyz(*rotate_px_py(events.reg_dnn_nu1_px, events.reg_dnn_nu1_py), events.reg_dnn_nu1_pz)
-        nu2 = create_lvector_xyz(*rotate_px_py(events.reg_dnn_nu2_px, events.reg_dnn_nu2_py), events.reg_dnn_nu2_pz)
-        if which == "nus":
-            return nu1, nu2
-        # build the higgs
-        h = ak_concatenate_safe([nu1[:, None] * 1, nu2[:, None] * 1, vis_leps], axis=1).sum(axis=1)
-        if which is None:
-            return h
-        if which == "mass":
-            return h.mass
-        raise ValueError(f"Unknown which: {which}")
-    build_reg_h.inputs = ["{Electron,Muon,Tau}.{pt,eta,phi,mass}", "reg_dnn_nu{1,2}_p{x,y,z}"]
     add_variable(
-        config,
-        name="reg_h_mass",
-        expression=partial(build_reg_h, which="mass"),
-        aux={"inputs": build_reg_h.inputs},
-        binning=(50, 0.0, 250.0),
-        x_title=r"Regressed $m_{H}$",
-    )
-
-    def build_vis_h(events, which=None):
-        vis_h = ak_concatenate_safe([events.Electron * 1, events.Muon * 1, events.Tau * 1], axis=1)[:, :2].sum(axis=1)
-        if which is None:
-            return vis_h
-        if which == "mass":
-            return vis_h.mass
-        raise ValueError(f"Unknown which: {which}")
-    build_vis_h.inputs = ["{Electron,Muon,Tau}.{pt,eta,phi,mass}"]
-    add_variable(
-        config,
-        name="vis_h_mass",
-        expression=partial(build_vis_h, which="mass"),
-        aux={"inputs": build_vis_h.inputs},
-        binning=(50, 0.0, 250.0),
-        x_title=r"Visible $m_{H}$",
-    )
-
-    def build_reg_met(events, which=None):
-        nu1, nu2 = build_reg_h(events, which="nus")
-        if which == "px":
-            return nu1.px + nu2.px
-        if which == "py":
-            return nu1.py + nu2.py
-        raise ValueError(f"Unknown which: {which}")
-    build_reg_met.inputs = build_reg_h.inputs
-
-    add_variable(
-        config,
         name="reg_met_px",
-        expression=partial(build_reg_met, which="px"),
-        aux={"inputs": build_reg_met.inputs},
+        expression=(var_met_reg := VarMETReg()).partial(attr="px"),
+        aux={"inputs": var_met_reg.uses},
         binning=(50, -250.0, 250.0),
-        x_title=r"Regressed $\nu_1 p_x + \nu_2 p_x$",
+        x_title=r"$\nu_1 p_x + \nu_2 p_x$ (regressed)",
     )
     add_variable(
-        config,
         name="reg_met_py",
-        expression=partial(build_reg_met, which="py"),
-        aux={"inputs": build_reg_met.inputs},
+        expression=var_met_reg.partial(attr="py"),
+        aux={"inputs": var_met_reg.uses},
         binning=(50, -250.0, 250.0),
-        x_title=r"Regressed $\nu_1 p_y + \nu_2 p_y$",
+        x_title=r"$\nu_1 p_y + \nu_2 p_y$ (regressed)",
     )
 
     # weights
     add_variable(
-        config,
         name="mc_weight",
         expression="mc_weight",
         binning=(200, -10, 10),
         x_title="MC weight",
     )
     add_variable(
-        config,
         name="pu_weight",
         expression="pu_weight",
         binning=(40, 0, 2),
         x_title="Pileup weight",
     )
     add_variable(
-        config,
         name="normalized_pu_weight",
         expression="normalized_pu_weight",
         binning=(40, 0, 2),
         x_title="Normalized pileup weight",
     )
     add_variable(
-        config,
         name="btag_weight",
         expression="btag_weight",
         binning=(60, 0, 3),
         x_title="b-tag weight",
     )
     add_variable(
-        config,
         name="normalized_btag_weight",
         expression="normalized_btag_weight",
         binning=(60, 0, 3),
         x_title="Normalized b-tag weight",
     )
     add_variable(
-        config,
         name="normalized_njet_btag_weight",
         expression="normalized_njet_btag_weight",
         binning=(60, 0, 3),
@@ -294,7 +268,6 @@ def add_variables(config: od.Config) -> None:
 
     # cutflow variables
     add_variable(
-        config,
         name="cf_njet",
         expression="cutflow.n_jet",
         binning=(17, -0.5, 16.5),
@@ -302,7 +275,6 @@ def add_variables(config: od.Config) -> None:
         discrete_x=True,
     )
     add_variable(
-        config,
         name="cf_ht",
         expression="cutflow.ht",
         binning=(40, 0.0, 400.0),
@@ -310,7 +282,6 @@ def add_variables(config: od.Config) -> None:
         x_title=r"$H_{T}$",
     )
     add_variable(
-        config,
         name="cf_jet1_pt",
         expression="cutflow.jet1_pt",
         binning=(40, 0.0, 400.0),
@@ -318,21 +289,18 @@ def add_variables(config: od.Config) -> None:
         x_title=r"Leading jet $p_{T}$",
     )
     add_variable(
-        config,
         name="cf_jet1_eta",
         expression="cutflow.jet1_eta",
         binning=(40, -5.0, 5.0),
         x_title=r"Leading jet $\eta$",
     )
     add_variable(
-        config,
         name="cf_jet1_phi",
         expression="cutflow.jet1_phi",
         binning=(66, -3.3, 3.3),
         x_title=r"Leading jet $\phi$",
     )
     add_variable(
-        config,
         name="cf_jet2_pt",
         expression="cutflow.jet2_pt",
         binning=(40, 0.0, 400.0),
@@ -340,1058 +308,336 @@ def add_variables(config: od.Config) -> None:
         x_title=r"Subleading jet $p_{T}$",
     )
 
-    # build variables for dilepton, dijet, and hh
-    def delta_r12(vectors):
-        # delta r between first two elements
-        dr = ak.firsts(vectors[:, :1], axis=1).delta_r(ak.firsts(vectors[:, 1:2], axis=1))
-        return ak.fill_none(dr, EMPTY_FLOAT)
-
-    def build_dilep(events, which=None):
-        leps = ak_concatenate_safe([events.Electron * 1, events.Muon * 1, events.Tau * 1], axis=1)[:, :2]
-        if which == "dr":
-            return delta_r12(leps)
-        dilep = leps.sum(axis=1)
-        if which is None:
-            return dilep * 1
-        if which == "mass":
-            return dilep.mass
-        if which == "pt":
-            return dilep.pt
-        if which == "eta":
-            return dilep.eta
-        if which == "abs_eta":
-            return abs(dilep.eta)
-        if which == "phi":
-            return dilep.phi
-        if which == "energy":
-            return dilep.energy
-        raise ValueError(f"Unknown which: {which}")
-
-    build_dilep.inputs = ["{Electron,Muon,Tau}.{pt,eta,phi,mass}"]
-
-    def build_dibjet(events, which=None):
-        events = attach_coffea_behavior(events, {"HHBJet": default_coffea_collections["Jet"]})
-        hhbjets = events.HHBJet[:, :2]
-        if which == "dr":
-            return delta_r12(hhbjets)
-        dijet = hhbjets.sum(axis=1)
-        if which is None:
-            return dijet * 1
-        if which == "mass":
-            return dijet.mass
-        if which == "pt":
-            return dijet.pt
-        if which == "eta":
-            return dijet.eta
-        if which == "abs_eta":
-            return abs(dijet.eta)
-        if which == "phi":
-            return dijet.phi
-        if which == "energy":
-            return dijet.energy
-        raise ValueError(f"Unknown which: {which}")
-
-    build_dibjet.inputs = ["HHBJet.{pt,eta,phi,mass}"]
-
-    def build_hh(events, which=None):
-        dijet = build_dibjet(events)
-        dilep = build_dilep(events)
-        hs = ak_concatenate_safe([dijet[..., None], dilep[..., None]], axis=1)
-        if which == "dr":
-            return delta_r12(hs)
-        hh = hs.sum(axis=1)
-        if which is None:
-            return hh * 1
-        if which == "mass":
-            return hh.mass
-        if which == "pt":
-            return hh.pt
-        if which == "eta":
-            return hh.eta
-        if which == "abs_eta":
-            return abs(hh.eta)
-        if which == "phi":
-            return hh.phi
-        if which == "energy":
-            return hh.energy
-        raise ValueError(f"Unknown which: {which}")
-
-    build_hh.inputs = build_dibjet.inputs + build_dilep.inputs
-
-    # dibjet variables
+    # dihhbjet variables
     add_variable(
-        config,
-        name="dibjet_energy",
-        expression=partial(build_dibjet, which="energy"),
-        aux={"inputs": build_dibjet.inputs},
+        name="dihhbjet_energy",
+        expression=(var_dihhbjet := VarDiHHBJet()).partial(attr="energy"),
+        aux={"inputs": var_dihhbjet.uses},
         binning=(40, 40, 300),
         unit="GeV",
         x_title=r"$E_{bb}$",
     )
     add_variable(
-        config,
-        name="dibjet_mass",
-        expression=partial(build_dibjet, which="mass"),
-        aux={"inputs": build_dibjet.inputs},
+        name="dihhbjet_mass",
+        expression=var_dihhbjet.partial(attr="mass"),
+        aux={"inputs": var_dihhbjet.uses},
         binning=(30, 0, 300),
         unit="GeV",
         x_title=r"$m_{bb}$",
     )
     add_variable(
-        config,
-        name="dibjet_pt",
-        expression=partial(build_dibjet, which="pt"),
-        aux={"inputs": build_dibjet.inputs},
+        name="dihhbjet_pt",
+        expression=var_dihhbjet.partial(attr="pt"),
+        aux={"inputs": var_dihhbjet.uses},
         binning=(40, 0, 200),
         unit="GeV",
         x_title=r"$p_{T,bb}$",
     )
     add_variable(
-        config,
-        name="dibjet_eta",
-        expression=partial(build_dibjet, which="eta"),
-        aux={"inputs": build_dibjet.inputs},
+        name="dihhbjet_eta",
+        expression=var_dihhbjet.partial(attr="eta"),
+        aux={"inputs": var_dihhbjet.uses},
         binning=(50, -5, 5),
         x_title=r"$\eta_{bb}$",
     )
     add_variable(
-        config,
-        name="dibjet_phi",
-        expression=partial(build_dibjet, which="phi"),
-        aux={"inputs": build_dibjet.inputs},
+        name="dihhbjet_phi",
+        expression=var_dihhbjet.partial(attr="phi"),
+        aux={"inputs": var_dihhbjet.uses},
         binning=(66, -3.3, 3.3),
         x_title=r"$\phi_{bb}$",
     )
     add_variable(
-        config,
-        name="dibjet_dr",
-        expression=partial(build_dibjet, which="dr"),
-        aux={"inputs": build_dibjet.inputs},
+        name="dihhbjet_dr",
+        expression=var_dihhbjet.partial(attr="dr"),
+        aux={"inputs": var_dihhbjet.uses},
         binning=(30, 0, 6),
         x_title=r"$\Delta R_{bb}$",
     )
 
-    def build_nbjets(events, which=None):
-        wp = "medium"
-        if which == "btagPNetB":
-            wp_value = config.x.btag_working_points["particleNet"][wp]
-        elif which == "btagDeepFlavB":
-            wp_value = config.x.btag_working_points["deepjet"][wp]
-        else:
-            raise ValueError(f"Unknown which: {which}")
-        bjet_mask = events.Jet[which] >= wp_value
-        objects = events.Jet[bjet_mask]
-        objects_num = ak.num(objects, axis=1)
-        return objects_num
-
-    build_nbjets.inputs = ["Jet.{btagPNetB,btagDeepFlavB}"]
-
+    # visible dilepton variables
     add_variable(
-        config,
-        name="nbjets_deepjet",
-        expression=partial(build_nbjets, which="btagDeepFlavB"),
-        aux={"inputs": build_nbjets.inputs},
-        binning=(11, -0.5, 10.5),
-        x_title=r"Number of b-jets (DeepJet medium)",
-        discrete_x=True,
-    )
-    add_variable(
-        config,
-        name="nbjets_pnet",
-        expression=partial(build_nbjets, which="btagPNetB"),
-        aux={"inputs": build_nbjets.inputs},
-        binning=(11, -0.5, 10.5),
-        x_title=r"Number of b-jets (PNet medium)",
-        discrete_x=True,
-    )
-
-    add_variable(
-        config,
-        name="nbjets_pnet_overflow",
-        expression=config.variables.n.nbjets_pnet.expression,
-        aux={**config.variables.n.nbjets_pnet.aux, "overflow": True},
-        binning=(4, -0.5, 3.5),
-        x_title=r"Number of b-jets (PNet medium)",
-        discrete_x=True,
-    )
-
-    add_variable(
-        config,
-        name="nbjets_pnet_no_overflow",
-        expression=config.variables.n.nbjets_pnet.expression,
-        aux={**config.variables.n.nbjets_pnet.aux, "overflow": False},
-        binning=(4, -0.5, 3.5),
-        x_title=r"Number of b-jets (PNet medium)",
-        discrete_x=True,
-    )
-
-    # dilepton variables
-    add_variable(
-        config,
-        name="dilep_energy",
-        expression=partial(build_dilep, which="energy"),
-        aux={"inputs": build_dilep.inputs},
+        name="dilep_vis_energy",
+        expression=(var_dilepvis := VarDiLepVis()).partial(attr="energy"),
+        aux={"inputs": var_dilepvis.uses},
         binning=(40, 40, 300),
         unit="GeV",
-        x_title=r"$E_{ll}$",
+        x_title=r"$E_{ll}$ (visible)",
     )
     add_variable(
-        config,
-        name="dilep_mass",
-        expression=partial(build_dilep, which="mass"),
-        aux={"inputs": build_dilep.inputs},
-        binning=(40, 40, 120),
+        name="dilep_vis_mass",
+        expression=var_dilepvis.partial(attr="mass"),
+        aux={"inputs": var_dilepvis.uses},
+        binning=(50, 0.0, 250.0),
         unit="GeV",
-        x_title=r"$m_{ll}$",
+        x_title=r"$m_{ll}$ (visible)",
     )
     add_variable(
-        config,
-        name="dilep_pt",
-        expression=partial(build_dilep, which="pt"),
-        aux={"inputs": build_dilep.inputs},
+        name="dilep_vis_pt",
+        expression=var_dilepvis.partial(attr="pt"),
+        aux={"inputs": var_dilepvis.uses},
         binning=(40, 0, 200),
         unit="GeV",
-        x_title=r"$p_{T,ll}$",
+        x_title=r"$p_{T,ll}$ (visible)",
     )
     add_variable(
-        config,
-        name="dilep_pt_low",
-        expression=partial(build_dilep, which="pt"),
-        aux={"inputs": build_dilep.inputs, "overflow": False, "underflow": False},
+        name="dilep_vis_pt_low",
+        expression=var_dilepvis.partial(attr="pt"),
+        aux={"inputs": var_dilepvis.uses, "overflow": False, "underflow": False},
         binning=(50, 0, 50),
         unit="GeV",
-        x_title=r"$p_{T,ll}$",
+        x_title=r"$p_{T,ll}$ (visible)",
     )
     add_variable(
-        config,
-        name="dilep_eta",
-        expression=partial(build_dilep, which="eta"),
-        aux={"inputs": build_dilep.inputs},
+        name="dilep_vis_eta",
+        expression=var_dilepvis.partial(attr="eta"),
+        aux={"inputs": var_dilepvis.uses},
         binning=(50, -5, 5),
-        unit="GeV",
-        x_title=r"$\eta_{ll}$",
+        x_title=r"$\eta_{ll}$ (visible)",
     )
     add_variable(
-        config,
-        name="dilep_phi",
-        expression=partial(build_dilep, which="phi"),
-        aux={"inputs": build_dilep.inputs},
+        name="dilep_vis_phi",
+        expression=var_dilepvis.partial(attr="phi"),
+        aux={"inputs": var_dilepvis.uses},
         binning=(66, -3.3, 3.3),
-        unit="GeV",
-        x_title=r"$\phi_{ll}$",
+        x_title=r"$\phi_{ll}$ (visible)",
     )
     add_variable(
-        config,
-        name="dilep_dr",
-        expression=partial(build_dilep, which="dr"),
-        aux={"inputs": build_dilep.inputs},
+        name="dilep_vis_dr",
+        expression=var_dilepvis.partial(attr="dr"),
+        aux={"inputs": var_dilepvis.uses},
         binning=(30, 0, 6),
-        x_title=r"$\Delta R_{ll}$",
+        x_title=r"$\Delta R_{ll}$ (visible)",
     )
 
-    # hh variables
+    # regressed dilepton variables
     add_variable(
-        config,
-        name="hh_energy",
-        expression=partial(build_hh, which="energy"),
-        aux={"inputs": build_hh.inputs},
+        name="dilep_reg_energy",
+        expression=(var_dilepreg := VarDiLepReg()).partial(attr="energy"),
+        aux={"inputs": var_dilepreg.uses},
+        binning=(40, 40, 300),
+        unit="GeV",
+        x_title=r"$E_{ll}$ (regressed)",
+    )
+    add_variable(
+        name="dilep_reg_mass",
+        expression=var_dilepreg.partial(attr="mass"),
+        aux={"inputs": var_dilepreg.uses},
+        binning=(50, 0.0, 250.0),
+        unit="GeV",
+        x_title=r"$m_{ll}$ (regressed)",
+    )
+    add_variable(
+        name="dilep_reg_pt",
+        expression=var_dilepreg.partial(attr="pt"),
+        aux={"inputs": var_dilepreg.uses},
+        binning=(40, 0, 200),
+        unit="GeV",
+        x_title=r"$p_{T,ll}$ (regressed)",
+    )
+    add_variable(
+        name="dilep_reg_pt_low",
+        expression=var_dilepreg.partial(attr="pt"),
+        aux={"inputs": var_dilepreg.uses, "overflow": False, "underflow": False},
+        binning=(50, 0, 50),
+        unit="GeV",
+        x_title=r"$p_{T,ll}$ (regressed)",
+    )
+    add_variable(
+        name="dilep_reg_eta",
+        expression=var_dilepreg.partial(attr="eta"),
+        aux={"inputs": var_dilepreg.uses},
+        binning=(50, -5, 5),
+        x_title=r"$\eta_{ll}$ (regressed)",
+    )
+    add_variable(
+        name="dilep_reg_phi",
+        expression=var_dilepreg.partial(attr="phi"),
+        aux={"inputs": var_dilepreg.uses},
+        binning=(66, -3.3, 3.3),
+        x_title=r"$\phi_{ll}$ (regressed)",
+    )
+    add_variable(
+        name="dilep_reg_dr",
+        expression=var_dilepreg.partial(attr="dr"),
+        aux={"inputs": var_dilepreg.uses},
+        binning=(30, 0, 6),
+        x_title=r"$\Delta R_{ll}$ (regressed)",
+    )
+
+    # visible hh variables
+    add_variable(
+        name="hh_vis_energy",
+        expression=(var_hhvis := VarHHVis()).partial(attr="energy"),
+        aux={"inputs": var_hhvis.uses},
         binning=(35, 100, 800),
         unit="GeV",
-        x_title=r"$E_{ll+bb}$",
+        x_title=r"$E_{ll+bb}$ (visible)",
     )
     add_variable(
-        config,
-        name="hh_mass",
-        expression=partial(build_hh, which="mass"),
-        aux={"inputs": build_hh.inputs},
-        binning=(50, 0, 1000),
+        name="hh_vis_mass",
+        expression=var_hhvis.partial(attr="mass"),
+        aux={"inputs": var_hhvis.uses},
+        binning=(60, 0, 1200),
         unit="GeV",
-        x_title=r"$m_{ll+bb}$",
+        x_title=r"$m_{ll+bb}$ (visible)",
     )
-
     add_variable(
-        config,
-        name="higgs_fam_hh_mass",
-        expression="pdf_input_vars.dihiggs_mass",
-        binning=(50, 0, 1250),
+        name="hh_vis_pt",
+        expression=var_hhvis.partial(attr="pt"),
+        aux={"inputs": var_hhvis.uses},
+        binning=(40, 0, 400),
         unit="GeV",
-        x_title=r"$m_{inv}(H_{bb}, H_{\tau\tau})$",
+        x_title=r"$p_{T,ll+bb}$ (visible)",
     )
     add_variable(
-        config,
-        name="higgs_fam_hh_pt",
-        expression="pdf_input_vars.dihiggs_system_pt",
-        binning=(50, 0, 1000),
-        unit="GeV",
-        x_title=r"$p_{T}(H_{bb}, H_{\tau\tau})$",
-    )
-    add_variable(
-        config,
-        name="higgs_fam_hh_pz",
-        expression="pdf_input_vars.dihiggs_system_pz",
-        binning=(100, -1500, 1500),
-        unit="GeV",
-        x_title=r"$p_{z}(H_{bb}, H_{\tau\tau})$",
-    )
-    add_variable(
-        config,
-        name="higgs_fam_hh_phi",
-        expression="pdf_input_vars.dihiggs_system_phi",
-        binning=(50, -3.3, 3.3),
-        unit="GeV",
-        x_title=r"$\phi(H_{bb}, H_{\tau\tau})$",
-    )
-    add_variable(
-        config,
-        name="higgs_fam_h1_cos_theta",
-        expression="pdf_input_vars.cos_theta_h1",
-        binning=(50, -1, 1),
-        x_title=r"$cos(\theta(H_1^{HH}))$",
-    )
-    add_variable(
-        config,
-        name="higgs_fam_phi_cms_hh_h_1",
-        expression="pdf_input_vars.phi_h1",
-        binning=(50, -3.14, 3.14),
-        unit="rad",
-        x_title=r"$\phi(H_1^{HH})$",
-    )
-    add_variable(
-        config,
-        name="higgs_fam_cos_theta_cms_h_2_tau_vis1",
-        expression="pdf_input_vars.cos_theta_cms_h2_tau_vis1",
-        binning=(50, -1, 1),
-        x_title=r"$cos(\theta(\tau_{vis,1}^{H_2})$",
-    )
-    add_variable(
-        config,
-        name="higgs_fam_phi_cms_h_2_tau_vis1",
-        expression="pdf_input_vars.phi_cms_h2_tau_vis1",
-        binning=(50, -3.14, 3.14),
-        unit="rad",
-        x_title=r"$\phi(\tau_{vis,1}^{H_2})$",
-    )
-    add_variable(
-        config,
-        name="higgs_fam_cos_theta_cms_h1_b1",
-        expression="pdf_input_vars.cos_theta_cms_h1_b1",  # CHANGE
-        binning=(50, -1, 1),
-        x_title=r"$cos(\theta(b_1^{H_1}))$",
-    )
-    add_variable(
-        config,
-        name="higgs_fam_cos_theta_cms_h1_b2",
-        expression="pdf_input_vars.cos_theta_cms_h1_b2",  # CHANGE
-        binning=(50, -1, 1),
-        x_title=r"$cos(\theta(b_2^{H_1}))$",
-    )
-    add_variable(
-        config,
-        name="higgs_fam_phi_cms_h_1_b_1",
-        expression="pdf_input_vars.phi_cms_h1_b1",
-        binning=(50, -3.14, 3.14),
-        unit="rad",
-        x_title=r"$\phi(b_1^{H_1})$",
-    )
-    add_variable(
-        config,
-        name="higgs_reco_hh_mass",
-        expression="pdf_input_vars_reco_higgs.dihiggs_mass",
-        binning=(50, 0, 1250),
-        unit="GeV",
-        x_title=r"$m_{inv}(H_{bb}, H_{\tau\tau})$",
-    )
-    add_variable(
-        config,
-        name="higgs_reco_hh_pt",
-        expression="pdf_input_vars_reco_higgs.dihiggs_system_pt",
-        binning=(50, 0, 1000),
-        unit="GeV",
-        x_title=r"$p_{T}(H_{bb}, H_{\tau\tau})$",
-    )
-    add_variable(
-        config,
-        name="higgs_reco_hh_pz",
-        expression="pdf_input_vars_reco_higgs.dihiggs_system_pz",
-        binning=(100, -1500, 1500),
-        unit="GeV",
-        x_title=r"$p_{z}(H_{bb}, H_{\tau\tau})$",
-    )
-    add_variable(
-        config,
-        name="higgs_reco_hh_phi",
-        expression="pdf_input_vars_reco_higgs.dihiggs_system_phi",
-        binning=(50, -3.3, 3.3),
-        unit="GeV",
-        x_title=r"$\phi(H_{bb}, H_{\tau\tau})$",
-    )
-    add_variable(
-        config,
-        name="higgs_reco_h1_cos_theta",
-        expression="pdf_input_vars_reco_higgs.cos_theta_h1",
-        binning=(50, -1, 1),
-        x_title=r"$cos(\theta(H_1^{HH}))$",
-    )
-    add_variable(
-        config,
-        name="higgs_reco_phi_cms_hh_h_1",
-        expression="pdf_input_vars_reco_higgs.phi_h1",
-        binning=(50, -3.14, 3.14),
-        unit="rad",
-        x_title=r"$\phi(H_1^{HH})$",
-    )
-    add_variable(
-        config,
-        name="higgs_reco_cos_theta_cms_h_2_tau_vis1",
-        expression="pdf_input_vars_reco_higgs.cos_theta_cms_h2_tau_vis1",
-        binning=(50, -1, 1),
-        x_title=r"$cos(\theta(\tau_{vis,1}^{H_2})$",
-    )
-    add_variable(
-        config,
-        name="higgs_reco_phi_cms_h_2_tau_vis1",
-        expression="pdf_input_vars_reco_higgs.phi_cms_h2_tau_vis1",
-        binning=(50, -3.14, 3.14),
-        unit="rad",
-        x_title=r"$\phi(\tau_{vis,1}^{H_2})$",
-    )
-    add_variable(
-        config,
-        name="higgs_reco_cos_theta_cms_h1_b1",
-        expression="pdf_input_vars_reco_higgs.cos_theta_cms_h1_b1",  # CHANGE
-        binning=(50, -1, 1),
-        x_title=r"$cos(\theta(b_1^{H_1}))$",
-    )
-    add_variable(
-        config,
-        name="higgs_reco_phi_cms_h_1_b_1",
-        expression="pdf_input_vars_reco_higgs.phi_cms_h1_b1",
-        binning=(50, -3.14, 3.14),
-        unit="rad",
-        x_title=r"$\phi(b_1^{H_1})$",
-    )
-    add_variable(
-        config, aux={"overflow": True, "underflow": False},
-        name="higgs_reco_constr_term_b",
-        expression="pdf_input_vars_reco_higgs.constr_term_b",
-        binning=(200, 0, 4),
-        x_title=r"constraint term $b\bar{b}$",
-    )
-    add_variable(
-        config, aux={"overflow": True, "underflow": False},
-        name="higgs_reco_constr_term_tau",
-        expression="pdf_input_vars_reco_higgs.constr_term_tau",
-        binning=(200, 0, 4),
-        x_title=r"constraint term $\tau\bar{\tau}$",
-    )
-    add_variable(
-        config,
-        name="top_reco_tt_vis_system_mass",
-        expression="pdf_input_vars_reco_top.tt_vis_system_mass",
-        binning=(100, 60, 1600),
-        x_title=r"$m_{t_{vis}\bar{t}_{vis}}$",
-    )
-    add_variable(
-        config,
-        name="top_reco_tt_vis_system_pt",
-        expression="pdf_input_vars_reco_top.tt_vis_system_pt",
-        binning=(100, 0, 680),
-        x_title=r"$p_{T_{t_{vis}\bar{t}_{vis}}}$",
-    )
-    add_variable(
-        config,
-        name="top_reco_tt_vis_system_pz",
-        expression="pdf_input_vars_reco_top.tt_vis_system_pz",
-        binning=(100, -2000, 1500),
-        x_title=r"$p_{z_{ t_{vis} \bar{t}_{vis} }}$",
-    )
-    add_variable(
-        config,
-        name="top_reco_tt_vis_system_phi",
-        expression="pdf_input_vars_reco_top.tt_vis_system_phi",
-        binning=(100, -np.pi, np.pi),
-        unit="rad",
-        x_title=r"$\phi_{t_{vis}\bar{t}_{vis}}$",
-    )
-    add_variable(
-        config,
-        name="top_reco_t_vis_y_diff",
-        expression="pdf_input_vars_reco_top.t_vis_y_diff",
-        binning=(100, -2.5, 2.7),
-        x_title=r"$\delta \ y(t_{vis}\bar{t}_{vis})$",
-    )
-    add_variable(
-        config,
-        name="top_reco_t1_vis_phi",
-        expression="pdf_input_vars_reco_top.t1_vis_phi",
-        binning=(100, -np.pi, np.pi),
-        x_title=r"$\phi_{\bar{t}_{vis}}$",
-    )
-    add_variable(
-        config, aux={"overflow": True, "underflow": False},
-        name="top_reco_cos_theta_star",
-        expression="pdf_input_vars_reco_top.cos_theta_star",
-        binning=(100, -1, 10),
-        x_title=r"$cos(\theta^{*})$",
-    )
-    add_variable(
-        config,
-        name="top_reco_y_lb",
-        expression="pdf_input_vars_reco_top.lb_y",
-        binning=(100, -1.75, 1.75),
-        x_title=r"$y_{lb}$",
-    )
-
-    # channel truth variables
-    add_variable(
-        config, aux={"overflow": False, "underflow": False},
-        name="sl_ch_id_truth",
-        expression="channel_truth.sl_ch_id_truth",
-        binning=(3, 0.5, 3.5),
-        x_title="ch_id 1,2 are: 1: dl, 2: sl, 3: fh",
-    )
-    add_variable(
-        config, aux={"overflow": False, "underflow": False},
-        name="fh_ch_id_truth",
-        expression="channel_truth.fh_ch_id_truth",
-        binning=(3, 0.5, 3.5),
-        x_title="ch_id 3 is: 1: dl, 2: sl, 3: fh",
-    )
-
-    # Likelihood ratio / hist. method classifier output
-    add_variable(
-        config,
-        name="Likelihood Ratio",
-        expression="likelihood_ratio",
-        binning=(100, -70, 35),
-        x_title=r"$\frac{L^{HH}}{L^{t\bar{t}}}$",
-    )
-    # add_variable
-    #     config, aux={"overflow": False, "underflow": False},
-    #     name="sl_ch_id_is_dilep",
-    #     expression="channel_truth.sl_ch_id_is_dilep",
-    #     binning=(2, -0.5, 1.5),
-    #     x_title="Channels 1 and 2 are dileptonic",
-    # )
-    # add_variable(
-    #     config, aux={"overflow": False, "underflow": False},
-    #     name="sl_ch_id_is_semilep",
-    #     expression="channel_truth.sl_ch_id_is_semilep",
-    #     binning=(2, -0.5, 1.5),
-    #     x_title="Channels 1 and 2 are semileptonic",
-    # )
-    # add_variable(
-    #     config, aux={"overflow": False, "underflow": False},
-    #     name="sl_ch_id_is_full_hadr",
-    #     expression="channel_truth.sl_ch_id_is_full_hadr",
-    #     binning=(2, -0.5, 1.5),
-    #     x_title="Channels 1 and 2 are full hadronic",
-    # )
-    # add_variable(
-    #     config, aux={"overflow": False, "underflow": False},
-    #     name="fh_ch_id_is_dilep",
-    #     expression="channel_truth.fh_ch_id_is_dilep",
-    #     binning=(2, -0.5, 1.5),
-    #     x_title="Channel 3 is dileptonic",
-    # )
-    # add_variable(
-    #     config, aux={"overflow": False, "underflow": False},
-    #     name="fh_ch_id_is_semilep",
-    #     expression="channel_truth.fh_ch_id_is_semilep",
-    #     binning=(2, -0.5, 1.5),
-    #     x_title="Channel 3 is semileptonic",
-    # )
-    # add_variable(
-    #     config, aux={"overflow": False, "underflow": False},
-    #     name="fh_ch_id_is_full_hadr",
-    #     expression="channel_truth.fh_ch_id_is_full_hadr",
-    #     binning=(2, -0.5, 1.5),
-    #     x_title="Channel 3 is full hadronic",
-    # )
-
-    # add_variable(
-    #     config,
-    #     name="higgs_fam_h_bb_pt",
-    #     expression="higgs_family[:,0,0].pt",
-    #     binning=(50, 0, 500),
-    #     unit="GeV",
-    #     x_title=r"$p_T(H_{bb})$",
-    # )
-    # add_variable(
-    #     config,
-    #     name="higgs_fam_h_tautau_pt",
-    #     expression="higgs_family[:,0,1].pt",
-    #     binning=(50, 0, 500),
-    #     unit="GeV",
-    #     x_title=r"$p_T(H_{\tau\tau})$",
-    # )
-    # add_variable(
-    #     config,
-    #     name="higgs_fam_m_h_bb",
-    #     expression="higgs_family[:,0,0].mass",
-    #     binning=(50, 0, 250),
-    #     unit="GeV",
-    #     x_title=r"$m_{H_{bb}}$",
-    # )
-    # add_variable(
-    #     config,
-    #     name="higgs_fam_m_h_tautau",
-    #     expression="higgs_family[:,0,1].mass",
-    #     binning=(50, 0, 250),
-    #     unit="GeV",
-    #     x_title=r"$m_{H_{\tau\tau}}$",
-    # )
-    # add_variable(
-    #     config,
-    #     name="higgs_fam_b_1_pt",
-    #     expression="higgs_family[:,1,0].pt",
-    #     binning=(50, 0, 500),
-    #     unit="GeV",
-    #     x_title=r"$p_T(H_{b_1})$",
-    # )
-    # add_variable(
-    #     config,
-    #     name="higgs_fam_b_2_pt",
-    #     expression="higgs_family[:,1,1].pt",
-    #     binning=(50, 0, 500),
-    #     unit="GeV",
-    #     x_title=r"$p_T(H_{b_2})$",
-    # )
-    # add_variable(
-    #     config,
-    #     name="higgs_fam_tau_1_pt",
-    #     expression="higgs_family[:,2,0].pt",
-    #     binning=(50, 0, 500),
-    #     unit="GeV",
-    #     x_title=r"$p_T(H_{\tau_1})$",
-    # )
-    # add_variable(
-    #     config,
-    #     name="higgs_fam_tau_2_pt",
-    #     expression="higgs_family[:,2,1].pt",
-    #     binning=(50, 0, 500),
-    #     unit="GeV",
-    #     x_title=r"$p_T(H_{\tau_2})$",
-    # )
-    add_variable(
-        config,
-        name="hh_pt",
-        expression=partial(build_hh, which="pt"),
-        aux={"inputs": build_hh.inputs},
-        binning=(40, 0, 500),
-        unit="GeV",
-        x_title=r"$p_{T,ll+bb}$",
-    )
-    add_variable(
-        config,
-        name="hh_eta",
-        expression=partial(build_hh, which="eta"),
-        aux={"inputs": build_hh.inputs},
+        name="hh_vis_eta",
+        expression=var_hhvis.partial(attr="eta"),
+        aux={"inputs": var_hhvis.uses},
         binning=(50, -5, 5),
-        unit="GeV",
-        x_title=r"$\eta_{ll+bb}$",
+        x_title=r"$\eta_{ll+bb}$ (visible)",
     )
     add_variable(
-        config,
-        name="hh_phi",
-        expression=partial(build_hh, which="phi"),
-        aux={"inputs": build_hh.inputs},
+        name="hh_vis_phi",
+        expression=var_hhvis.partial(attr="phi"),
+        aux={"inputs": var_hhvis.uses},
         binning=(66, -3.3, 3.3),
-        unit="GeV",
-        x_title=r"$\phi_{ll+bb}$",
+        x_title=r"$\phi_{ll+bb}$ (visible)",
     )
     add_variable(
-        config,
-        name="hh_dr",
-        expression=partial(build_hh, which="dr"),
-        aux={"inputs": build_hh.inputs},
+        name="hh_vis_dr",
+        expression=var_hhvis.partial(attr="dr"),
+        aux={"inputs": var_hhvis.uses},
         binning=(30, 0, 6),
-        x_title=r"$\Delta R_{ll,bb}$",
+        x_title=r"$\Delta R_{ll,bb}$ (visible)",
     )
-    # Add top family variables
+
+    # regressed hh variables
     add_variable(
-        config,
-        name="top_fam_ttbar_mass",
-        expression="pdf_input_vars.s_hat",
-        binning=(50, 0, 1500),
+        name="hh_reg_energy",
+        expression=(var_hhreg := VarHHReg()).partial(attr="energy"),
+        aux={"inputs": var_hhreg.uses},
+        binning=(35, 100, 800),
         unit="GeV",
-        x_title=r"$m_{inv}(t \bar{t})$",
+        x_title=r"$E_{ll+bb}$ (regressed)",
     )
     add_variable(
-        config,
-        name="top_fam_ttbar_system_pt",
-        expression="pdf_input_vars.s_hat_system_pt",
-        binning=(50, 0, 650),
+        name="hh_reg_mass",
+        expression=var_hhreg.partial(attr="mass"),
+        aux={"inputs": var_hhreg.uses},
+        binning=(60, 0, 1200),
         unit="GeV",
-        x_title=r"$p_{T}(t \bar{t})$",
+        x_title=r"$m_{ll+bb}$ (regressed)",
+        # x_title=r"$m_{ll+bb}$ (bb x, ll x, reg y)",
     )
     add_variable(
-        config,
-        name="top_fam_ttbar_system_pz",
-        expression="pdf_input_vars.s_hat_system_pz",
-        binning=(100, -2000, 2000),
+        name="hh_reg_pt",
+        expression=var_hhreg.partial(attr="pt"),
+        aux={"inputs": var_hhreg.uses},
+        binning=(40, 0, 400),
         unit="GeV",
-        x_title=r"$p_{z}(t \bar{t})$",
+        x_title=r"$p_{T,ll+bb}$ (regressed)",
     )
     add_variable(
-        config,
-        name="top_fam_ttbar_system_phi",
-        expression="pdf_input_vars.s_hat_system_phi",
-        binning=(50, -3.3, 3.3),
+        name="hh_reg_eta",
+        expression=var_hhreg.partial(attr="eta"),
+        aux={"inputs": var_hhreg.uses},
+        binning=(50, -5, 5),
+        x_title=r"$\eta_{ll+bb}$ (regressed)",
+    )
+    add_variable(
+        name="hh_reg_phi",
+        expression=var_hhreg.partial(attr="phi"),
+        aux={"inputs": var_hhreg.uses},
+        binning=(66, -3.3, 3.3),
+        x_title=r"$\phi_{ll+bb}$ (regressed)",
+    )
+    add_variable(
+        name="hh_reg_dr",
+        expression=var_hhreg.partial(attr="dr"),
+        aux={"inputs": var_hhreg.uses},
+        binning=(30, 0, 6),
+        x_title=r"$\Delta R_{ll,bb}$ (regressed)",
+    )
+
+    # hh kinfit variables
+    add_variable(
+        name="hh_kinfit_mass",
+        expression="h_kinfit.hh.mass",
+        binning=(60, 0, 1200),
         unit="GeV",
-        x_title=r"$\phi(t \bar{t})$",
+        x_title=r"$m_{ll+bb}$ (bb y, ll y, reg y)",
     )
     add_variable(
-        config,
-        name="top_fam_cos_theta_t1",
-        expression="pdf_input_vars.cos_theta_t",
-        binning=(50, -1, 1),
-        x_title=r"$\theta t$",
+        name="hh_kinfit_vis_mass",
+        expression="h_kinfit_vis.hh.mass",
+        binning=(60, 0, 1200),
+        unit="GeV",
+        x_title=r"$m_{ll+bb}$ (bb y, ll y, reg x)",
     )
     add_variable(
-        config,
-        name="top_fam_phi_t_1",
-        expression="pdf_input_vars.phi_t",
-        binning=(50, -3.14, 3.14),
-        unit="rad",
-        x_title=r"$\phi t$",
+        name="hh_kinfit_ll_mass",
+        expression="h_kinfit_ll.hh.mass",
+        binning=(60, 0, 1200),
+        unit="GeV",
+        x_title=r"$m_{ll+bb}$ (bb x, ll y, reg y)",
     )
     add_variable(
-        config,
-        name="top_fam_W_t0_phi",
-        expression="pdf_input_vars.W_t0_phi",
-        binning=(50, -3.14, 3.14),
-        x_title=r"$\phi W_{t}$",
+        name="hh_kinfit_b_scale",
+        expression="h_kinfit.b_scale",
+        binning=(30, 0, 3),
+        x_title=r"$b$ scale",
     )
     add_variable(
-        config,
-        name="top_fam_W_t0_cos_theta",
-        expression="pdf_input_vars.W_t0cos_theta",
-        binning=(50, -1, 1),
-        x_title=r"cos($\theta W_1$)",
+        name="hh_kinfit_l_scale",
+        expression="h_kinfit.l_scale",
+        binning=(30, 0, 3),
+        x_title=r"$l$ scale",
     )
+
+    # hh generator variables
     add_variable(
-        config,
-        name="top_fam_W_t1_phi",
-        expression="pdf_input_vars.W_t1_phi",
-        binning=(50, -3.14, 3.14),
-        x_title=r"$\phi W_{\bar{t}}$",
-    )
-    add_variable(
-        config,
-        name="top_fam_W_t1_cos_theta",
-        expression="pdf_input_vars.W_t1cos_theta",
-        binning=(50, -1, 1),
-        x_title=r"cos($\theta W_2$)",
-    )
-    add_variable(
-        config,
-        name="top_fam_W_t0_child_cos_theta",
-        expression="pdf_input_vars.W_t0_child_cos_theta",
-        binning=(50, -1, 1),
-        x_title=r"cos($\theta W_{1, child}$)",
-    )
-    add_variable(
-        config,
-        name="top_fam_W_t1_child_cos_theta",
-        expression="pdf_input_vars.W_t1_child_cos_theta",
-        binning=(50, -1, 1),
-        x_title=r"cos($\theta W_{2, child}$)",
-    )
-    add_variable(
-        config,
-        name="top_fam_W_t0_child_phi",
-        expression="pdf_input_vars.W_t0_child_phi",
-        binning=(50, -3.14, 3.14),
-        x_title=r"$\phi W_{t, child}$",
-    )
-    add_variable(
-        config,
-        name="top_fam_W_t1_child_phi",
-        expression="pdf_input_vars.W_t1_child_phi",
-        binning=(50, -3.14, 3.14),
-        x_title=r"$\phi W_{\bar{t}, child}$",
-    )
-    # ttbar ditau pdf inputs
-    add_variable(
-        config, aux={"underflow": False},
-        name="top_ditau_M_2tau_vis_2b",
-        expression="pdf_input_vars_top_ditau.M_2tau_vis_2b",
-        binning=(50, 0, 1000),
-        x_title=r"$M_{\tau_{vis}\bar{\tau}_{vis}b\bar{b}}$",
-    )
-    add_variable(
-        config, aux={"underflow": False},
-        name="top_ditau_y_tau_vis_antib",
-        expression="pdf_input_vars_top_ditau.y_tau_vis_antib",
-        binning=(50, -5, 5),
-        x_title=r"$y_{\tau_{vis}\bar{b}}$",
-    )
-    add_variable(
-        config, aux={"underflow": False},
-        name="top_ditau_y_antitau_vis_b",
-        expression="pdf_input_vars_top_ditau.y_antitau_vis_b",
-        binning=(50, -5, 5),
-        x_title=r"$y_{\bar{\tau}_{vis}b}$",
-    )
-    add_variable(
-        config, aux={"underflow": False},
-        name="top_ditau_pt_antitau_vis_b",
-        expression="pdf_input_vars_top_ditau.pt_antitau_vis_b",
-        binning=(50, 0, 600),
-        x_title=r"$P_{T_{\bar{\tau}_{vis}b}}$",
-    )
-    add_variable(
-        config, aux={"underflow": False},
-        name="top_ditau_pt_tau_vis_antib",
-        expression="pdf_input_vars_top_ditau.pt_tau_vis_antib",
-        binning=(50, 0, 600),
-        x_title=r"$P_{T_{\tau_{vis}\bar{b}}}$",
-    )
-    add_variable(
-        config, aux={"underflow": False},
-        name="top_ditau_M_tau_vis_antib",
-        expression="pdf_input_vars_top_ditau.M_tau_vis_antib",
-        binning=(50, -150, 300),
-        x_title=r"$M_{\tau_{vis}\bar{b}}$",
-    )
-    add_variable(
-        config, aux={"underflow": False},
-        name="top_ditau_M_antitau_vis_b",
-        expression="pdf_input_vars_top_ditau.M_antitau_vis_b",
-        binning=(50, -150, 300),
-        x_title=r"$M_{\bar{\tau}_{vis}b}$",
-    )
-    add_variable(
-        config, aux={"underflow": False},
-        name="top_ditau_M_2tau_2b",
-        expression="pdf_input_vars_top_ditau.M_2tau_2b",
-        binning=(50, 0, 1000),
-        x_title=r"$M_{\tau\bar{\tau}b\bar{b}}$",
-    )
-    add_variable(
-        config, aux={"underflow": False},
-        name="top_ditau_y_tau_antib",
-        expression="pdf_input_vars_top_ditau.y_tau_antib",
-        binning=(50, -5, 5),
-        x_title=r"$y_{\tau\bar{b}}$",
-    )
-    add_variable(
-        config, aux={"underflow": False},
-        name="top_ditau_y_antitau_b",
-        expression="pdf_input_vars_top_ditau.y_antitau_b",
-        binning=(50, -5, 5),
-        x_title=r"$y_{\bar{\tau}b}$",
-    )
-    add_variable(
-        config, aux={"underflow": False},
-        name="top_ditau_pt_antitau_b",
-        expression="pdf_input_vars_top_ditau.pt_antitau_b",
-        binning=(50, 0, 600),
-        x_title=r"$P_{T_{\bar{\tau}b}}$",
-    )
-    add_variable(
-        config, aux={"underflow": False},
-        name="top_ditau_pt_tau_antib",
-        expression="pdf_input_vars_top_ditau.pt_tau_antib",
-        binning=(50, 0, 600),
-        x_title=r"$P_{T_{\tau\bar{b}}}$",
-    )
-    add_variable(
-        config, aux={"underflow": False},
-        name="top_ditau_M_tau_antib",
-        expression="pdf_input_vars_top_ditau.M_tau_antib",
-        binning=(50, -50, 300),
-        x_title=r"$M_{\tau\bar{b}}$",
-    )
-    add_variable(
-        config, aux={"underflow": False},
-        name="top_ditau_M_antitau_b",
-        expression="pdf_input_vars_top_ditau.M_antitau_b",
-        binning=(50, -50, 300),
-        x_title=r"$M_{\bar{\tau}b}$",
-    )
-    add_variable(
-        config, aux={"underflow": False},
-        name="top_ditau_four_part_mass_ratio",
-        expression="pdf_input_vars_top_ditau.four_part_mass_ratio",
-        binning=(50, -10, 10),
-        x_title=r"$\frac{M_{\tau_{vis}\bar{\tau}_{vis}b\bar{b}}}{M_{\tau\bar{\tau}b\bar{b}}}$",
-    )
-    add_variable(
-        config, aux={"underflow": False},
-        name="top_ditau_pt_ratio_tau",
-        expression="pdf_input_vars_top_ditau.pt_ratio_tau",
-        binning=(50, -10, 10),
-        x_title=r"$\frac{P_{t_{\tau_{vis}\bar{b}}}}{P_{t_{\tau\bar{b}}}}$",
-    )
-    add_variable(
-        config, aux={"underflow": False},
-        name="top_ditau_two_part_mass_ratio_tau",
-        expression="pdf_input_vars_top_ditau.two_part_mass_ratio_tau",
-        binning=(50, -10, 10),
-        x_title=r"$\frac{M_{\tau_{vis}\bar{b}}}{M_{\tau\bar{b}}}$",
-    )
-    # higgs is ttbar ditau inputs
-    add_variable(
-        config, aux={"underflow": False},
-        name="top_ditau_higgs_M_2tau_vis_2b",
-        expression="pdf_input_vars_top_ditau_higgs.M_2tau_vis_2b",
-        binning=(50, 0, 1000),
-        x_title=r"$M_{\tau_{vis}\bar{\tau}_{vis}b\bar{b}}$",
-    )
-    add_variable(
-        config, aux={"underflow": False},
-        name="top_ditau_higgs_y_tau_vis_antib",
-        expression="pdf_input_vars_top_ditau_higgs.y_tau_vis_antib",
-        binning=(50, -5, 5),
-        x_title=r"$y_{\tau_{vis}\bar{b}}$",
-    )
-    add_variable(
-        config, aux={"underflow": False},
-        name="top_ditau_higgs_y_antitau_vis_b",
-        expression="pdf_input_vars_top_ditau_higgs.y_antitau_vis_b",
-        binning=(50, -5, 5),
-        x_title=r"$y_{\bar{\tau}_{vis}b}$",
-    )
-    add_variable(
-        config, aux={"underflow": False},
-        name="top_ditau_higgs_pt_antitau_vis_b",
-        expression="pdf_input_vars_top_ditau_higgs.pt_antitau_vis_b",
-        binning=(50, 0, 600),
-        x_title=r"$P_{T_{\bar{\tau}_{vis}b}}$",
-    )
-    add_variable(
-        config, aux={"underflow": False},
-        name="top_ditau_higgs_pt_tau_vis_antib",
-        expression="pdf_input_vars_top_ditau_higgs.pt_tau_vis_antib",
-        binning=(50, 0, 600),
-        x_title=r"$P_{T_{\tau_{vis}\bar{b}}}$",
-    )
-    add_variable(
-        config, aux={"underflow": False},
-        name="top_ditau_higgs_M_tau_vis_antib",
-        expression="pdf_input_vars_top_ditau_higgs.M_tau_vis_antib",
-        binning=(50, -150, 300),
-        x_title=r"$M_{\tau_{vis}\bar{b}}$",
-    )
-    add_variable(
-        config, aux={"underflow": False},
-        name="top_ditau_higgs_M_antitau_vis_b",
-        expression="pdf_input_vars_top_ditau_higgs.M_antitau_vis_b",
-        binning=(50, -150, 300),
-        x_title=r"$M_{\bar{\tau}_{vis}b}$",
-    )
-    add_variable(
-        config, aux={"underflow": False},
-        name="top_ditau_higgs_M_2tau_2b",
-        expression="pdf_input_vars_top_ditau_higgs.M_2tau_2b",
-        binning=(50, 0, 1000),
-        x_title=r"$M_{\tau\bar{\tau}b\bar{b}}$",
-    )
-    add_variable(
-        config, aux={"underflow": False},
-        name="top_ditau_higgs_y_tau_antib",
-        expression="pdf_input_vars_top_ditau_higgs.y_tau_antib",
-        binning=(50, -5, 5),
-        x_title=r"$y_{\tau\bar{b}}$",
-    )
-    add_variable(
-        config, aux={"underflow": False},
-        name="top_ditau_higgs_y_antitau_b",
-        expression="pdf_input_vars_top_ditau_higgs.y_antitau_b",
-        binning=(50, -5, 5),
-        x_title=r"$y_{\bar{\tau}b}$",
-    )
-    add_variable(
-        config, aux={"underflow": False},
-        name="top_ditau_higgs_pt_antitau_b",
-        expression="pdf_input_vars_top_ditau_higgs.pt_antitau_b",
-        binning=(50, 0, 600),
-        x_title=r"$P_{T_{\bar{\tau}b}}$",
-    )
-    add_variable(
-        config, aux={"underflow": False},
-        name="top_ditau_higgs_pt_tau_antib",
-        expression="pdf_input_vars_top_ditau_higgs.pt_tau_antib",
-        binning=(50, 0, 600),
-        x_title=r"$P_{T_{\tau\bar{b}}}$",
-    )
-    add_variable(
-        config, aux={"underflow": False},
-        name="top_ditau_higgs_M_tau_antib",
-        expression="pdf_input_vars_top_ditau_higgs.M_tau_antib",
-        binning=(50, -50, 300),
-        x_title=r"$M_{\tau\bar{b}}$",
-    )
-    add_variable(
-        config, aux={"underflow": False},
-        name="top_ditau_higgs_M_antitau_b",
-        expression="pdf_input_vars_top_ditau_higgs.M_antitau_b",
-        binning=(50, -50, 300),
-        x_title=r"$M_{\bar{\tau}b}$",
-    )
-    add_variable(
-        config, aux={"underflow": False},
-        name="top_ditau_higgs_four_part_mass_ratio",
-        expression="pdf_input_vars_top_ditau_higgs.four_part_mass_ratio",
-        binning=(50, -10, 10),
-        x_title=r"$\frac{M_{\tau_{vis}\bar{\tau}_{vis}b\bar{b}}}{M_{\tau\bar{\tau}b\bar{b}}}$",
-    )
-    add_variable(
-        config, aux={"underflow": False},
-        name="top_ditau_higgs_pt_ratio_tau",
-        expression="pdf_input_vars_top_ditau_higgs.pt_ratio_tau",
-        binning=(50, -10, 10),
-        x_title=r"$\frac{P_{t_{\tau_{vis}\bar{b}}}}{P_{t_{\tau\bar{b}}}}$",
-    )
-    add_variable(
-        config, aux={"underflow": False},
-        name="top_ditau_higgs_two_part_mass_ratio_tau",
-        expression="pdf_input_vars_top_ditau_higgs.two_part_mass_ratio_tau",
-        binning=(50, -10, 10),
-        x_title=r"$\frac{M_{\tau_{vis}\bar{b}}}{M_{\tau\bar{b}}}$",
+        name="hh_gen_mass",
+        expression=(var_hhgen := VarHHGen()).partial(attr="mass"),
+        aux={"inputs": var_hhgen.uses},
+        binning=(60, 0, 1200),
+        unit="GeV",
+        x_title=r"$m_{ll+bb}$ (Gen)",
     )
 
     # single lepton variables
     # single electron
     add_variable(
-        config,
         name="e1_pt",
         expression="Electron.pt[:, 0]",
         binning=(30, 0, 150),
         x_title=r"Leading electron $p_{T}$",
     )
     add_variable(
-        config,
         name="e2_pt",
         expression="Electron.pt[:,1]",
         binning=(30, 0, 150),
         x_title=r"Subleading electron $p_{T}$",
     )
     add_variable(
-        config,
         name="e1_eta",
         expression="Electron.eta[:,0]",
         binning=(50, -2.5, 2.5),
         x_title=r"Leading electron $\eta$",
     )
     add_variable(
-        config,
         name="e2_eta",
         expression="Electron.eta[:,1]",
         binning=(50, -2.5, 2.5),
         x_title=r"Subleading electron $\eta$",
     )
     add_variable(
-        config,
         name="e1_phi",
         expression="Electron.phi[:,0]",
         binning=(66, -3.3, 3.3),
         x_title=r"Leading electron $\phi$",
     )
     add_variable(
-        config,
         name="e2_phi",
         expression="Electron.phi[:,1]",
         binning=(66, -3.3, 3.3),
@@ -1400,42 +646,36 @@ def add_variables(config: od.Config) -> None:
 
     # single tau
     add_variable(
-        config,
         name="tau1_pt",
         expression="Tau.pt[:, 0]",
         binning=(30, 0, 150),
         x_title=r"Leading tau p$_{T}$",
     )
     add_variable(
-        config,
         name="tau2_pt",
         expression="Tau.pt[:,1]",
         binning=(30, 0, 150),
         x_title=r"Subleading tau $p_{T}$",
     )
     add_variable(
-        config,
         name="tau1_eta",
         expression="Tau.eta[:,0]",
         binning=(50, -2.5, 2.5),
         x_title=r"Leading tau $\eta$",
     )
     add_variable(
-        config,
         name="tau2_eta",
         expression="Tau.eta[:,1]",
         binning=(50, -2.5, 2.5),
         x_title=r"Subleading tau $\eta$",
     )
     add_variable(
-        config,
         name="tau1_phi",
         expression="Tau.phi[:,0]",
         binning=(66, -3.3, 3.3),
         x_title=r"Leading tau $\phi$",
     )
     add_variable(
-        config,
         name="tau2_phi",
         expression="Tau.phi[:,1]",
         binning=(66, -3.3, 3.3),
@@ -1444,61 +684,53 @@ def add_variables(config: od.Config) -> None:
 
     # single mu
     add_variable(
-        config,
         name="mu1_pt",
         expression="Muon.pt[:,0]",
         binning=(30, 0, 150),
         x_title=r"Leading muon $p_{T}$",
     )
     add_variable(
-        config,
         name="mu2_pt",
         expression="Muon.pt[:,1]",
         binning=(30, 0, 150),
         x_title=r"Subleading muon $p_{T}$",
     )
     add_variable(
-        config,
         name="mu1_eta",
         expression="Muon.eta[:,0]",
         binning=(50, -2.5, 2.5),
         x_title=r"Leading muon $\eta$",
     )
     add_variable(
-        config,
         name="mu2_eta",
         expression="Muon.eta[:,1]",
         binning=(50, -2.5, 2.5),
         x_title=r"Subleading muon $\eta$",
     )
     add_variable(
-        config,
         name="mu1_phi",
         expression="Muon.phi[:,0]",
         binning=(66, -3.3, 3.3),
         x_title=r"Leading muon $\phi$",
     )
     add_variable(
-        config,
         name="mu2_phi",
         expression="Muon.phi[:,1]",
         binning=(66, -3.3, 3.3),
         x_title=r"Subleading muon $\phi$",
     )
 
-    add_variable(
-        config,
-        name="njets",
-        expression=lambda events: ak.num(events.Jet["pt"], axis=1),
-        aux={"inputs": {"Jet.pt"}},
-        binning=(11, -0.5, 10.5),
-        x_title=r"Number of jets",
-    )
+    # helper for logit-conversion of (e.g.) dnn outputs into a less-compressed target space
+    def logit(events: ak.Array, col: str, eps: float = 1e-6) -> ak.Array | np.ndarray:
+        # eps confines the range of the transformed values to approx. [-13.8, 13.8] for x in [0, 1]
+        import numpy as np
+        x = events[col]
+        return np.log((x + eps) / (1 - x + eps))
 
+    # DNN outputs
     for proc in ["hh", "tt", "dy"]:
         # outputs of the resonant pDNN at SM-like mass and spin values
         add_variable(
-            config,
             name=f"res_pdnn_{proc}",
             expression=f"res_pdnn_s0_m500_{proc}",
             binning=(25, 0.0, 1.0),
@@ -1507,7 +739,6 @@ def add_variables(config: od.Config) -> None:
 
         # outputs of the resonant DNN trained over flat masses
         add_variable(
-            config,
             name=f"res_dnn_{proc}",
             expression=f"res_dnn_{proc}",
             binning=(25, 0.0, 1.0),
@@ -1515,7 +746,6 @@ def add_variables(config: od.Config) -> None:
         )
 
         add_variable(
-            config,
             name=f"res_dnn_{proc}_fine",
             expression=f"res_dnn_{proc}",
             binning=np.linspace(0.0, 0.8, 801).tolist() + np.linspace(0.8, 1.0, 1001)[1:].tolist(),
@@ -1524,87 +754,411 @@ def add_variables(config: od.Config) -> None:
         )
 
         add_variable(
-            config,
             name=f"run3_dnn_moe_{proc}",
             expression=f"run3_dnn_moe_{proc}",
             binning=(25, 0.0, 1.0),
-            x_title=rf"DNN {proc.upper()} output node",
+            x_title=rf"DNN {proc.upper()} output",
         )
 
         add_variable(
-            config,
             name=f"run3_dnn_moe_{proc}_10",
             expression=f"run3_dnn_moe_{proc}",
             binning=(10, 0.0, 1.0),
-            x_title=rf"DNN {proc.upper()} output node",
+            x_title=rf"DNN {proc.upper()} output",
         )
 
         add_variable(
-            config,
+            name=f"run3_dnn_simple_{proc}",
+            expression=f"run3_dnn_simple_{proc}",
+            binning=(25, 0.0, 1.0),
+            x_title=rf"DNN {proc.upper()} output",
+            aux={"x_transformations": "equal_distance_with_indices"},
+        )
+
+        add_variable(
             name=f"run3_dnn_moe_{proc}_fine",
             expression=f"run3_dnn_moe_{proc}",
             binning=np.linspace(0.0, 0.8, 801).tolist() + np.linspace(0.8, 1.0, 1001)[1:].tolist(),
-            x_title=rf"DNN {proc.upper()} output node",
+            x_title=rf"DNN {proc.upper()} output",
             aux={"x_transformations": "equal_distance_with_indices"},
         )
 
         add_variable(
-            config,
+            name=f"run3_dnn_moe_{proc}_logit",
+            expression=functools.partial(logit, col=f"run3_dnn_moe_{proc}"),
+            binning=(30, -15, 15),
+            x_title=rf"logit(DNN {proc.upper()} output)",
+            aux={"inputs": [f"run3_dnn_moe_{proc}"]},
+        )
+
+        add_variable(
+            name=f"run3_dnn_moe_{proc}_logit_fine",
+            expression=functools.partial(logit, col=f"run3_dnn_moe_{proc}"),
+            binning=(2000, -15, 15),
+            x_title=rf"logit(DNN {proc.upper()} output)",
+            aux={
+                "inputs": [f"run3_dnn_moe_{proc}"],
+                "x_transformations": "equal_distance_with_indices",
+            },
+        )
+
+        add_variable(
             name=f"run3_dnn_moe_{proc}_fine_5k",
             expression=f"run3_dnn_moe_{proc}",
             binning=(5000, 0.0, 1.0),
-            x_title=rf"DNN {proc.upper()} output node",
+            x_title=rf"DNN {proc.upper()} output",
             aux={"x_transformations": "equal_distance_with_indices"},
         )
 
         add_variable(
-            config,
             name=f"run3_dnn_simple_{proc}_fine",
             expression=f"run3_dnn_simple_{proc}",
             binning=np.linspace(0.0, 0.8, 801).tolist() + np.linspace(0.8, 1.0, 1001)[1:].tolist(),
-            x_title=rf"DNN {proc.upper()} output node",
+            x_title=rf"DNN {proc.upper()} output",
             aux={"x_transformations": "equal_distance_with_indices"},
         )
 
         add_variable(
-            config,
             name=f"run3_dnn_simple_kl1_{proc}_fine",
             expression=f"run3_dnn_simple_kl1_{proc}",
             binning=np.linspace(0.0, 0.8, 801).tolist() + np.linspace(0.8, 1.0, 1001)[1:].tolist(),
-            x_title=rf"DNN {proc.upper()} output node",
+            x_title=rf"DNN {proc.upper()} output",
             aux={"x_transformations": "equal_distance_with_indices"},
         )
 
         add_variable(
-            config,
             name=f"run3_dnn_simple_kl0_{proc}_fine",
             expression=f"run3_dnn_simple_kl0_{proc}",
             binning=np.linspace(0.0, 0.8, 801).tolist() + np.linspace(0.8, 1.0, 1001)[1:].tolist(),
-            x_title=rf"DNN {proc.upper()} output node",
+            x_title=rf"DNN {proc.upper()} output",
             aux={"x_transformations": "equal_distance_with_indices"},
         )
 
         add_variable(
-            config,
             name=f"run3_dnn_simple_allkl_{proc}_fine",
             expression=f"run3_dnn_simple_allkl_{proc}",
             binning=np.linspace(0.0, 0.8, 801).tolist() + np.linspace(0.8, 1.0, 1001)[1:].tolist(),
-            x_title=rf"DNN {proc.upper()} output node",
+            x_title=rf"DNN {proc.upper()} output",
             aux={"x_transformations": "equal_distance_with_indices"},
         )
 
+    # vbf dnn variables
+    for proc in ["hh_ggf", "hh_vbf", "tt", "dy"]:
+        add_variable(
+            name=f"vbf_dnn_moe_{proc}_fine",
+            expression=f"vbf_dnn_moe_{proc}",
+            binning=np.linspace(0.0, 0.8, 801).tolist() + np.linspace(0.8, 1.0, 1001)[1:].tolist(),
+            x_title=rf"VBF DNN {proc.upper()} output",
+            aux={"x_transformations": "equal_distance_with_indices"},
+        )
+        add_variable(
+            name=f"vbf_dnn_moe_{proc}_logit_fine",
+            expression=functools.partial(logit, col=f"vbf_dnn_moe_{proc}"),
+            binning=(2000, -15, 15),
+            x_title=rf"logit(VBF DNN {proc.upper()} output)",
+            aux={
+                "inputs": [f"vbf_dnn_moe_{proc}"],
+                "x_transformations": "equal_distance_with_indices",
+            },
+        )
 
-# helper to add a variable to the config with some defaults
-def add_variable(config: od.Config, *args, **kwargs) -> od.Variable:
-    kwargs.setdefault("null_value", EMPTY_FLOAT)
+    # end-to-end DNN outputs
+    add_variable(
+        name="e2e_model1_hh_fine",
+        expression="e2e_model1_hh",
+        binning=np.linspace(0.0, 0.8, 801).tolist() + np.linspace(0.8, 1.0, 1001)[1:].tolist(),
+        x_title=rf"E2E DNN {proc.upper()} output",
+        aux={"x_transformations": "equal_distance_with_indices"},
+    )
 
-    # create the variable
-    variable = config.add_variable(*args, **kwargs)
+    # to be use with --hist-producer e2e
+    add_variable(
+        name="e2e_model1_bins",
+        expression=(lambda events: [events[f"e2e_model1_bin{i}"] for i in range(50)]),
+        binning=(50, -0.5, 49.5),
+        x_title="E2E latent space bins",
+        aux={"inputs": ["e2e_model1_bin*"]},
+    )
 
-    # defaults
-    if not variable.has_aux("underflow"):
-        variable.x.underflow = True
-    if not variable.has_aux("overflow"):
-        variable.x.overflow = True
 
-    return variable
+#
+# tools for defining variable functions
+#
+
+class VarExp:
+
+    uses: set[str | Route] | None = None
+    compose: dict[str, Type[VarExp]] | None = None
+
+    def __init__(
+        self,
+        uses: Sequence[str | Route] | set[str | Route] | None = None,
+        compose: dict[str, Type[VarExp]] | None = None,
+    ) -> None:
+        super().__init__()
+
+        # store used columns
+        self.uses = set(uses or self.__class__.uses or set())
+
+        # create sub expressions for composing
+        for attr, cls in (compose or self.__class__.compose or {}).items():
+            assert attr not in {"uses", "compose"}
+            inst = cls()
+            setattr(self, attr, inst)
+            self.uses.update(inst.uses)
+
+    def partial(self, *args, **kwargs) -> Callable[[ak.Array], ak.Array | np.ndarray]:
+        return functools.partial(self.__call__, *args, **kwargs) if args or kwargs else self.__call__
+
+    def __call__(self, events) -> ak.Array | np.ndarray:
+        raise NotImplementedError
+
+    def raise_unknown_attr(self, attr) -> None:
+        raise ValueError(f"unknown {self.__class__.__name__} attr: {attr}")
+
+    def var_kwargs(self, *args, **kwargs) -> dict[str, Any]:
+        return {
+            "expression": self.partial(*args, **kwargs),
+            "aux": {"inputs": self.uses},
+        }
+
+
+#
+# advanced variables
+#
+
+class VarHt(VarExp):
+
+    uses = {"{Electron,Muon,Tau,Jet}.{pt,eta,phi,mass}"}
+
+    def __call__(self, events: ak.Array) -> ak.Array:
+        vectors = stack_lvectors([events.Electron, events.Muon, events.Tau, events.Jet])
+        return vectors.sum(axis=-1).pt
+
+
+class VarDiHHBJet(VarExp):
+
+    uses = {"HHBJet.{pt,eta,phi,mass}"}
+
+    def __call__(self, events: ak.Array, attr: str | None = None) -> ak.Array:
+        events = attach_coffea_behavior(events, {"HHBJet": "Jet"})
+        hhbjets = events.HHBJet[:, :2]
+
+        if attr == "dr":
+            return delta_r12(hhbjets)
+
+        dijet = hhbjets.sum(axis=1)
+
+        if attr is None:
+            return dijet
+        if attr == "mass":
+            return dijet.mass
+        if attr == "pt":
+            return dijet.pt
+        if attr == "eta":
+            return dijet.eta
+        if attr == "abs_eta":
+            return abs(dijet.eta)
+        if attr == "phi":
+            return dijet.phi
+        if attr == "energy":
+            return dijet.energy
+
+        self.raise_unknown_attr()
+
+
+class VarDiLepVis(VarExp):
+
+    uses = {"{Electron,Muon,Tau}.{pt,eta,phi,mass}"}
+
+    def __call__(self, events: ak.Array, attr: str | None = None) -> ak.Array:
+        leps = stack_lvectors([events.Electron, events.Muon, events.Tau])[..., :2]
+
+        if attr == "dr":
+            return delta_r12(leps)
+
+        dilep = leps.sum(axis=1)
+
+        if attr is None:
+            return dilep
+        if attr == "mass":
+            return dilep.mass
+        if attr == "pt":
+            return dilep.pt
+        if attr == "eta":
+            return dilep.eta
+        if attr == "abs_eta":
+            return abs(dilep.eta)
+        if attr == "phi":
+            return dilep.phi
+        if attr == "energy":
+            return dilep.energy
+
+        self.raise_unknown_attr(attr)
+
+
+class VarDiLepReg(VarExp):
+
+    uses = {"reg_dnn_moe_nu{1,2}_p{x,y,z}"}
+    compose = {"dilepvis": VarDiLepVis}
+
+    def __call__(self, events: ak.Array, attr: str | None = None) -> ak.Array:
+        dilepvis = self.dilepvis(events)
+
+        # regressed nu components are relative to the visible dilep system and need to be rotated back
+        ref_phi = dilepvis.phi
+        nu1 = create_lvector_xyz(
+            *rotate_px_py(events.reg_dnn_moe_nu1_px, events.reg_dnn_moe_nu1_py, ref_phi),
+            events.reg_dnn_moe_nu1_pz,
+        )
+        nu2 = create_lvector_xyz(
+            *rotate_px_py(events.reg_dnn_moe_nu2_px, events.reg_dnn_moe_nu2_py, ref_phi),
+            events.reg_dnn_moe_nu2_pz,
+        )
+
+        if attr == "nus":
+            return nu1, nu2
+
+        # build the full system
+        dilepreg = stack_lvectors([nu1, nu2, dilepvis]).sum(axis=-1)
+
+        if attr is None:
+            return dilepreg
+        if attr == "mass":
+            return dilepreg.mass
+
+        self.raise_unknown_attr(attr)
+
+
+class VarMETReg(VarExp):
+
+    compose = {"dilepreg": VarDiLepReg}
+
+    def __call__(self, events: ak.Array, attr: str | None = None) -> ak.Array:
+        # build met
+        nu1, nu2 = self.dilepreg(events, attr="nus")
+        met = stack_lvectors([nu1, nu2]).sum(axis=-11)
+
+        if attr is None:
+            return met
+        if attr == "px":
+            return met.px
+        if attr == "py":
+            return met.py + met.py
+        if attr == "phi":
+            return met.phi
+
+        self.raise_unknown_attr(attr)
+
+
+class VarHHVis(VarExp):
+
+    compose = {"dihhbjet": VarDiHHBJet, "dilepvis": VarDiLepVis}
+
+    def __call__(self, events: ak.Array, attr: str | None = None) -> ak.Array:
+        dihhbjet = self.dihhbjet(events)
+        dilepvis = self.dilepvis(events)
+        hs = stack_lvectors([dihhbjet, dilepvis])
+
+        if attr == "dr":
+            return delta_r12(hs)
+
+        hh = hs.sum(axis=1)
+
+        if attr is None:
+            return hh * 1
+        if attr == "mass":
+            return hh.mass
+        if attr == "pt":
+            return hh.pt
+        if attr == "eta":
+            return hh.eta
+        if attr == "abs_eta":
+            return abs(hh.eta)
+        if attr == "phi":
+            return hh.phi
+        if attr == "energy":
+            return hh.energy
+
+        self.raise_unknown_attr(attr)
+
+
+class VarHHReg(VarExp):
+
+    compose = {"dihhbjet": VarDiHHBJet, "dilepreg": VarDiLepReg}
+
+    def __call__(self, events: ak.Array, attr: str | None = None) -> ak.Array:
+        dihhbjet = self.dihhbjet(events)
+        dilepreg = self.dilepreg(events)
+        hs = stack_lvectors([dihhbjet, dilepreg])
+
+        if attr == "dr":
+            return delta_r12(hs)
+
+        hh = hs.sum(axis=1)
+
+        if attr is None:
+            return hh * 1
+        if attr == "mass":
+            return hh.mass
+        if attr == "pt":
+            return hh.pt
+        if attr == "eta":
+            return hh.eta
+        if attr == "abs_eta":
+            return abs(hh.eta)
+        if attr == "phi":
+            return hh.phi
+        if attr == "energy":
+            return hh.energy
+
+        self.raise_unknown_attr(attr)
+
+
+class VarHHGen(VarExp):
+
+    uses = {"gen_higgs.h.{pt,eta,phi,mass}"}
+
+    def __call__(self, events: ak.Array, attr: str | None = None) -> ak.Array:
+        assert ak.all(ak.num(events.gen_higgs.h, axis=-1) == 2)
+        hh = with_type("LorentzVector", events.gen_higgs.h)
+
+        if attr == "dr":
+            return delta_r12(hh)
+
+        hh = hh.sum(axis=1)
+
+        if attr is None:
+            return hh * 1
+        if attr == "mass":
+            return hh.mass
+        if attr == "pt":
+            return hh.pt
+        if attr == "eta":
+            return hh.eta
+        if attr == "abs_eta":
+            return abs(hh.eta)
+        if attr == "phi":
+            return hh.phi
+        if attr == "energy":
+            return hh.energy
+
+        self.raise_unknown_attr(attr)
+
+
+class VarNBTags(VarExp):
+
+    uses = {"Jet.{btagPNetB,btagDeepFlavB,btagUParTAK4B}"}
+
+    def __call__(self, events: ak.Array, config_inst: od.Config, attr: str | None = None) -> ak.Array:
+        wp = "medium"
+        if attr == "btagPNetB":
+            wp_value = config_inst.x.btag_working_points["particleNet"][wp]
+        elif attr == "btagDeepFlavB":
+            wp_value = config_inst.x.btag_working_points["deepjet"][wp]
+        elif attr == "btagUParTAK4B":
+            wp_value = config_inst.x.btag_working_points["upart"][wp]
+        else:
+            self.raise_unknown_attr(attr)
+
+        return ak.sum(events.Jet[attr] >= wp_value, axis=1)
