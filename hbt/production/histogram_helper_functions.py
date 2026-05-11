@@ -272,7 +272,7 @@ def create_any_hist(
                 # else:
                 #     variation_arr[nb_idx] = dim_var
         neighbour_coords = np.reshape(
-            np.repeat(empty_coordinates, num_neighbours, axis=0), (n_empty, num_neighbours, n_dims)
+            np.repeat(empty_coordinates, num_neighbours, axis=0), (n_empty, num_neighbours, n_dims),
         )
         variation_arr = np.resize(variation_arr, (n_empty, num_neighbours, n_dims))
         neighbour_coords = neighbour_coords + variation_arr
@@ -401,7 +401,6 @@ def get_event_likelihood_nd(
 
             bin_indices_dim2[ev] = bin_index
             if n_dims == 3:
-                from IPython import embed
                 bin_index_dim3 = np.digitize(
                     data_dim3[ev],
                     edges_dict["edges_dim3"][bin_indices_dim1[ev],
@@ -411,9 +410,6 @@ def get_event_likelihood_nd(
                 bin_index_dim3 = min(bin_index_dim3, bins_per_dim[2] - 1)
                 bin_index_dim3 = max(bin_index_dim3, 0)
                 bin_indices_dim3[ev] = bin_index_dim3
-            if ev % 10000 == 0:
-                print(f"@ event {ev} of {len(data_dim2)}", end="\r")
-    print("\n")
 
     # Handle overflow and underflow behaviour -> Put in last and first bin
     # if n_dims > 2:
@@ -448,10 +444,11 @@ def get_event_likelihood_nd(
     else:
         raise Exception("Wrong number of dimensions")
     # Evaluate hist:
-    try:
-        evaluated = hist[tuple(bin_indices.T)]
-    except:
-        embed()
+    # try:
+    #     evaluated = hist[tuple(bin_indices.T)]
+    # except:
+    #
+    evaluated = hist[tuple(bin_indices.T)]
     stat_uncerts = uncertainty_hist[tuple(bin_indices.T)]
 
     return evaluated, stat_uncerts

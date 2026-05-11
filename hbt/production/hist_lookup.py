@@ -3,6 +3,7 @@ from columnflow.util import maybe_import
 from columnflow.columnar_util import set_ak_column
 import hbt.production.likelihood_helper_functions as lhf
 from hbt.production.pdf_input_vars_reco import pdf_inputs
+from columnflow.columnar_util import EMPTY_FLOAT
 
 ak = maybe_import("awkward")
 np = maybe_import("numpy")
@@ -21,12 +22,11 @@ def calculate_likelihood_ratio(
     """Given the signal and background likelihood inputs, evaluates events as both likelihood, then calculates the
     ratio. Also takes into account the jacobian determinant and mass constraint terms
     """
-    from IPython import embed
-    embed(header="ratio test")
     events = self[pdf_inputs](events, **kwargs)
     n_bins_1d = 750
     bins_per_dim_2d = np.array([27, 27])
     bins_per_dim_3d = np.array([20, 7, 7])
+
     # Evaluate provided events as both likelihoods
     eval_data_signal = events.pdf_input_vars_reco_higgs
     p_is_higgs_log, err_is_higgs, err_is_higgs_log, ev_idx_higgs = lhf.calculate_reco_score_higgs(
@@ -56,3 +56,12 @@ def calculate_likelihood_ratio(
 
     ratio = p_is_higgs - p_is_top
     # errors_ratio = np.sqrt((1 / np.exp(p_is_higgs) * err_is_higgs)**2 + (-1 / np.exp(p_is_top) * err_is_top)**2)
+
+    # Make column full length again
+    ev_idx = ev_idx_higgs[ev_idx_mask]
+    all_idx = np.arange(0, len(events), 1)
+    event_mask = np.isin(all_idx, ev_idx)
+    ratio_column = np.ones(len(events)) * EMPTY_FLOAT
+    ratio_column[event_mask] = ratio
+    events = set_ak_column(events, "likelihood_ratio", ratio_column)
+    return events

@@ -6,3 +6,5 @@ tensorflow~=2.16.1
 torch~=2.8.0
 torchmetrics~=1.8.2
 torchdata~=0.11.0
+jax~=0.4.30
+vector~=1.6.3

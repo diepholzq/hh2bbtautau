@@ -31,7 +31,9 @@ def calculate_reco_score_higgs(
     """Calculates likelihood scores for events being signal-like.
     Args:
         eval_data_path (str): Path to the parquet file containing the pdf_input_vars
-        bins_per_dim (int): Number of bins per dimension
+        n_bins_1d (int): Number of bins for 1d factorization steps
+        bins_per_dim (np.ndarray): Array with the bins for the 2d factorization step
+        allow_hist_creations (bool): Behavior if histogram for chosen options does not exist
         statistical_binning (bool): If the statistical_binning tweak should be used
         do_constr (bool): If constraint likelihood terms should be considered
         return_log (bool): If the probabilities should be returned as ln(probabilities)
@@ -100,7 +102,9 @@ def calculate_reco_score_top(
     """Calculates likelihood scores for events being background-like.
     Args:
         eval_data_path (str): Path to the parquet file containing the pdf_input_vars
-        bins_per_dim (int): Number of bins per dimension
+        n_bins_1d (int): Number of bins for 1d factorization steps
+        bins_per_dim (np.ndarray): Array with the bins for the 3d factorization step
+        allow_hist_creations (bool): Behavior if histogram for chosen options does not exist
         statistical_binning (bool): If the statistical_binning tweak should be used
         do_constr (bool): If constraint likelihood terms should be considered
         return_log (bool): If likelihoods should be transformed to log scale
@@ -139,3 +143,71 @@ def calculate_reco_score_top(
         return probs, errors, errors_log, ev_idx
     else:
         return probs * jac_det, errors, ev_idx
+
+
+def calculate_likelihood_ratio_for_plotting(
+    eval_data_path: str,
+    n_bins_1d: int = 750,
+    bins_per_dim_2d: np.ndarray = np.array([27, 27]),
+    bins_per_dim_3d: np.ndarray = np.array([20, 7, 7]),
+    statistical_binning: bool = True,
+    do_constr: bool = True,
+    do_jacobian: bool = False,
+    bin_filling: bool = False,
+):
+    """Calculates the log likelihood ratio for a set of events, the events need to have the columns
+    pdf_input_vars_reco_higgs and pdf_input_vars_reco_top.
+    Args:
+        eval_data_path (str): Path to the file containing the events
+        n_bins_1d (int): Number of bins for 1d factorization steps
+        bins_per_dim_2d (np.ndarray): Array with the bins for the 2d factorization step
+        bins_per_dim_3d (np.ndarray): Array with the bins for the 3d factorization step
+        statistical_binning (bool): If the statistical_binning tweak should be used
+        do_constr (bool): If the gen constraint term should be considered
+        bin_filling (bool): If empty bins should be filled w/ mean of neighb. vals
+        do_jacobian (bool): If jacobian determinant of transformation from detector to pdf input space should be taken
+                            into account
+    Returns:
+        Tuple(np.ndarray, np.ndarray): Array with the event likelihood ratios, Array with the statistical uncertainties
+        per event
+    """
+    # TODO: add all options or remove
+    print(
+        f"\n\n{LINES_STRING}"
+        f"Calculating likelihood ratio, with the following options:\neval_data_path: {eval_data_path}\n"
+        f"n_bins_1d: {n_bins_1d}\nstatistical_binning: {statistical_binning}\ndo_constr: {do_constr}"
+        f"\ndo_jacobian: {do_jacobian}:"
+        f"\n{LINES_STRING}\n",
+    )
+    eval_data_signal = hhf.get_data(eval_data_path, "pdf_input_vars_reco_higgs", drop_nones=False)
+    p_is_higgs_log, err_is_higgs, err_is_higgs_log, ev_idx_higgs = calculate_reco_score_higgs(
+        eval_data_signal,
+        n_bins_1d,
+        bins_per_dim=bins_per_dim_2d,
+        allow_hist_creation=False,
+        statistical_binning=True,
+        do_constr=True,
+        bin_filling=False,
+        do_jacobian=True,
+    )
+
+    eval_data_bg = hhf.get_data(eval_data_path, "pdf_input_vars_reco_top", drop_nones=False)
+    p_is_top_log, err_is_top, err_is_top_log, ev_idx_top = calculate_reco_score_top(
+        eval_data_bg,
+        n_bins_1d,
+        bins_per_dim=bins_per_dim_3d,
+        allow_hist_creation=False,
+        statistical_binning=True,
+        do_constr=True,
+        bin_filling=False,
+        do_jacobian=True,
+    )
+
+    ev_idx_mask = ev_idx_higgs == ev_idx_top
+    p_is_higgs, err_is_higgs = p_is_higgs_log[ev_idx_mask], err_is_higgs[ev_idx_mask]
+    p_is_top, err_is_top = p_is_top_log[ev_idx_mask], err_is_top[ev_idx_mask]
+
+    ratio = p_is_higgs - p_is_top
+    errors_ratio = np.sqrt((1 / np.exp(p_is_higgs) * err_is_higgs)**2 + (-1 / np.exp(p_is_top) * err_is_top)**2)
+
+    return ratio, errors_ratio

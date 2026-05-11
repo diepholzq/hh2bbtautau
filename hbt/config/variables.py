@@ -858,6 +858,14 @@ def add_variables(config: od.Config) -> None:
         x_title="ch_id 3 is: 1: dl, 2: sl, 3: fh",
     )
 
+    # Likelihood ratio / hist. method classifier output
+    add_variable(
+        config,
+        name="Likelihood Ratio",
+        expression="likelihood_ratio",
+        binning=(100, -70, 35),
+        x_title=r"$\frac{L^{HH}}{L^{t\bar{t}}}$",
+    )
     # add_variable
     #     config, aux={"overflow": False, "underflow": False},
     #     name="sl_ch_id_is_dilep",
