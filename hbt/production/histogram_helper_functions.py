@@ -388,6 +388,8 @@ def get_event_likelihood_nd(
     bin_indices_dim1[bin_indices_dim1 == -1] = 0
     bin_indices_dim1[bin_indices_dim1 > bins_per_dim[0] - 1] = bins_per_dim[0] - 1
 
+    if n_dims == 1:
+        print(f"Evaluating... field: {field_list}")
     if n_dims > 1:
         print(f"Evaluating... fields: {field_list}")
         for ev in range(len(data_dim2)):

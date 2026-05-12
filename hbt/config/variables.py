@@ -719,6 +719,13 @@ def add_variables(config: od.Config) -> None:
         binning=(66, -3.3, 3.3),
         x_title=r"Subleading muon $\phi$",
     )
+    # Likelihood ratio / hist. method classifier output
+    add_variable(
+        name="LikelihoodRatio",
+        expression="likelihood_ratio",
+        binning=(100, -70, 35),
+        x_title=r"$\frac{L^{HH}}{L^{t\bar{t}}}$",
+    )
 
     # helper for logit-conversion of (e.g.) dnn outputs into a less-compressed target space
     def logit(events: ak.Array, col: str, eps: float = 1e-6) -> ak.Array | np.ndarray:

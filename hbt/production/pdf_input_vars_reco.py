@@ -312,6 +312,7 @@ def calculate_hbb(inputs):
     b2 = det_coords_to_fourmomentum(inputs[4:8])
     b1b2 = jax.numpy.concatenate([b1, b2], axis=0)
     h1 = four_vec_sum(b1b2)
+    # in 4-momentum space
     return h1
 
 
@@ -320,6 +321,7 @@ def calculate_htautau(inputs):
     tau2 = det_coords_to_fourmomentum(inputs[12:])
     tau1tau2 = jax.numpy.concatenate([tau1, tau2], axis=0)
     h2 = four_vec_sum(tau1tau2)
+    # in 4-momentum space
     return h2
 
 
@@ -327,6 +329,7 @@ def calculate_dihiggs_system(inputs):
     h1 = calculate_hbb(inputs)
     h2 = calculate_htautau(inputs)
     dihiggs_system = four_vec_sum(jax.numpy.concatenate([h1, h2], axis=0))
+    # in 4-momentum space
     return dihiggs_system
 
 
@@ -514,15 +517,17 @@ def calculate_dihiggs_system_phi(inputs):
 def calculate_cos_theta_h1(inputs):
     h1 = calculate_hbb(inputs)
     dihiggs_system = calculate_dihiggs_system(inputs)
-    h1_cms_dihiggs = boost_a_cm_of_b(jax.numpy.concatenate([h1, dihiggs_system], axis=0), dihiggs_system[3])
+    dihiggs_system_detspace = fourmomentum_to_det_coord(dihiggs_system)
+    h1_cms_dihiggs = boost_a_cm_of_b(jax.numpy.concatenate([h1, dihiggs_system], axis=0), dihiggs_system_detspace[3])
     cos_theta_h1 = signed_cos_deltaangle_for_jax(jax.numpy.concatenate([h1_cms_dihiggs[:3], dihiggs_system[:3]], axis=0))
     return cos_theta_h1
 
 
 def calculate_phi_h1(inputs):
-    h1 = calculate_hbb(inputs)
-    dihiggs_system = calculate_dihiggs_system(inputs)
-    h1_cms_dihiggs = boost_a_cm_of_b(jax.numpy.concatenate([h1, dihiggs_system], axis=0), dihiggs_system[3])
+    h1 = calculate_hbb(inputs)   # four momentum space
+    dihiggs_system = calculate_dihiggs_system(inputs)   # four momentum space
+    dihiggs_system_detspace = fourmomentum_to_det_coord(dihiggs_system)
+    h1_cms_dihiggs = boost_a_cm_of_b(jax.numpy.concatenate([h1, dihiggs_system], axis=0), dihiggs_system_detspace[3])
     h1_cms_dihiggs_detspace = fourmomentum_to_det_coord(h1_cms_dihiggs)
     return h1_cms_dihiggs_detspace[2]
 
@@ -865,7 +870,7 @@ def create_pdf_input_vars_reco_higgs(
     jac_matrix_constrained_space = jac_matrix[:, :, np.array([0, 1, 2, 5, 6, 8, 9, 10, 13, 14])]
     # squared_matrix = np.matmul(jac_matrix_transposed, jac_matrix)
     # squared_matrix = np.matmul(jac_matrix, jac_matrix_transposed)
-    jac_det = np.linalg.det(jac_matrix_constrained_space)
+    jac_det = abs(np.linalg.det(jac_matrix_constrained_space))
     jac_matrix_transposed = np.transpose(jac_matrix, axes=(0, 2, 1))
     squared_matrix = np.matmul(jac_matrix_transposed, jac_matrix)
     squared_matrix = np.matmul(jac_matrix, jac_matrix_transposed)
@@ -1041,8 +1046,8 @@ def create_pdf_input_vars_reco_top(
     jac_matrix_constrained_space = jac_matrix[:, :, np.array([0, 1, 2, 4, 5, 6, 8, 9, 10, 12, 13, 14])]
     squared_matrix = np.matmul(jac_matrix_transposed, jac_matrix)
     squared_matrix = np.matmul(jac_matrix, jac_matrix_transposed)
-    jac_det = np.linalg.det(jac_matrix_constrained_space)
-    gramsche = np.linalg.det(squared_matrix)
+    jac_det = abs(np.linalg.det(jac_matrix_constrained_space))
+    gramsche = abs(np.linalg.det(squared_matrix))
 
     EMPTY_FLOAT = -99999.9
     pdf_input_vars_reco_top = ak.zip({

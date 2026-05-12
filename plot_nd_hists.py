@@ -228,6 +228,7 @@ def get_likelihoods_and_ratios(
         bins_per_dim_2d=bins_per_dim_2d,
         bins_per_dim_3d=bins_per_dim_3d,
         statistical_binning=statistical_binning,
+        allow_hist_creation=allow_hist_creations,
         do_constr=do_constr,
         bin_filling=bin_filling,
         do_jacobian=do_jacobian,
@@ -238,6 +239,7 @@ def get_likelihoods_and_ratios(
         bins_per_dim_2d=bins_per_dim_2d,
         bins_per_dim_3d=bins_per_dim_3d,
         statistical_binning=statistical_binning,
+        allow_hist_creation=allow_hist_creations,
         do_constr=do_constr,
         bin_filling=bin_filling,
         do_jacobian=do_jacobian,
@@ -775,8 +777,10 @@ if __name__ == "__main__":
         "/data/dust/user/diepholq/hh2bbtautau/hbt_store/analysis_hbt/cf.ProduceColumns/22pre_v14/tt_dl_powheg/"
         "nominal/calib__default/sel__default/red__default/prod__pdf_inputs/dev_likelihood_ratio/"
     )
-    plot_performance_metrics_wrapper(
-        PATH_HIGGS,
-        PATH_TOP,
-        "/afs/desy.de/user/d/diepholq/Documents/Plots/performance_metrics/",
-    )
+    # plot_performance_metrics_wrapper(
+    #     PATH_HIGGS,
+    #     PATH_TOP,
+    #     "/afs/desy.de/user/d/diepholq/Documents/Plots/performance_metrics/",
+    # )
+    print_correlation_matrix(PATH_HIGGS, "pdf_input_vars_reco_higgs")
+    print_correlation_matrix(PATH_TOP, "pdf_input_vars_reco_top")

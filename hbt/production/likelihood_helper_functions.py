@@ -151,6 +151,7 @@ def calculate_likelihood_ratio_for_plotting(
     bins_per_dim_2d: np.ndarray = np.array([27, 27]),
     bins_per_dim_3d: np.ndarray = np.array([20, 7, 7]),
     statistical_binning: bool = True,
+    allow_hist_creation: bool = False,
     do_constr: bool = True,
     do_jacobian: bool = False,
     bin_filling: bool = False,
@@ -184,11 +185,11 @@ def calculate_likelihood_ratio_for_plotting(
         eval_data_signal,
         n_bins_1d,
         bins_per_dim=bins_per_dim_2d,
-        allow_hist_creation=False,
-        statistical_binning=True,
-        do_constr=True,
-        bin_filling=False,
-        do_jacobian=True,
+        allow_hist_creation=allow_hist_creation,
+        statistical_binning=statistical_binning,
+        do_constr=do_constr,
+        bin_filling=bin_filling,
+        do_jacobian=do_jacobian,
     )
 
     eval_data_bg = hhf.get_data(eval_data_path, "pdf_input_vars_reco_top", drop_nones=False)
@@ -196,11 +197,11 @@ def calculate_likelihood_ratio_for_plotting(
         eval_data_bg,
         n_bins_1d,
         bins_per_dim=bins_per_dim_3d,
-        allow_hist_creation=False,
-        statistical_binning=True,
-        do_constr=True,
-        bin_filling=False,
-        do_jacobian=True,
+        allow_hist_creation=allow_hist_creation,
+        statistical_binning=statistical_binning,
+        do_constr=do_constr,
+        bin_filling=bin_filling,
+        do_jacobian=do_jacobian,
     )
 
     ev_idx_mask = ev_idx_higgs == ev_idx_top

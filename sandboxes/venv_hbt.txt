@@ -1,0 +1,5 @@
+
+-r ../modules/columnflow/sandboxes/columnar.txt
+jax~=0.4.30
+vector~=1.6.3
+onnxruntime~=1.19.2
