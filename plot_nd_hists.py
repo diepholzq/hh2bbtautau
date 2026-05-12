@@ -755,13 +755,13 @@ def plot_performance_metrics_wrapper(
         bins_per_dim2d=bins_per_dim2d,
         bins_per_dim3d=bins_per_dim3d,
         n_mc=300,
-        allow_hist_creations=False,
+        allow_hist_creations=True,
         statistical_binning=True,
         do_constr=True,
         bin_filling=False,
         calculate_uncertainties=False,
         plot_dir="/afs/desy.de/user/d/diepholq/Documents/Plots/performance_metrics/",
-        do_jacobian=True,
+        do_jacobian=False,
         # plot_dir="/tmp/",
     )
 
@@ -777,10 +777,10 @@ if __name__ == "__main__":
         "/data/dust/user/diepholq/hh2bbtautau/hbt_store/analysis_hbt/cf.ProduceColumns/22pre_v14/tt_dl_powheg/"
         "nominal/calib__default/sel__default/red__default/prod__pdf_inputs/dev_likelihood_ratio/"
     )
-    # plot_performance_metrics_wrapper(
-    #     PATH_HIGGS,
-    #     PATH_TOP,
-    #     "/afs/desy.de/user/d/diepholq/Documents/Plots/performance_metrics/",
-    # )
+    plot_performance_metrics_wrapper(
+        PATH_HIGGS,
+        PATH_TOP,
+        "/afs/desy.de/user/d/diepholq/Documents/Plots/performance_metrics/",
+    )
     print_correlation_matrix(PATH_HIGGS, "pdf_input_vars_reco_higgs")
     print_correlation_matrix(PATH_TOP, "pdf_input_vars_reco_top")

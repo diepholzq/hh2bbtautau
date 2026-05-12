@@ -868,7 +868,7 @@ def eval_higgs_likelihood_hists(
         hist_step3,
         edges_step3,
         uncert_hist_step3,
-        np.array(["cos_theta_h1"]),
+        np.array(["cos_theta_cms_h1_b1"]),
         bin_nr,
     )
 
@@ -877,7 +877,7 @@ def eval_higgs_likelihood_hists(
         hist_step4,
         edges_step4,
         uncert_hist_step4,
-        np.array(["cos_theta_cms_h1_b1"]),
+        np.array(["cos_theta_h1"]),
         bin_nr,
     )
 
