@@ -761,7 +761,7 @@ def plot_performance_metrics_wrapper(
         bin_filling=False,
         calculate_uncertainties=False,
         plot_dir="/afs/desy.de/user/d/diepholq/Documents/Plots/performance_metrics/",
-        do_jacobian=False,
+        do_jacobian=True,
         # plot_dir="/tmp/",
     )
 
@@ -782,5 +782,5 @@ if __name__ == "__main__":
         PATH_TOP,
         "/afs/desy.de/user/d/diepholq/Documents/Plots/performance_metrics/",
     )
-    print_correlation_matrix(PATH_HIGGS, "pdf_input_vars_reco_higgs")
-    print_correlation_matrix(PATH_TOP, "pdf_input_vars_reco_top")
+    # print_correlation_matrix(PATH_HIGGS, "pdf_input_vars_reco_higgs")
+    # print_correlation_matrix(PATH_TOP, "pdf_input_vars_reco_top")

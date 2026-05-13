@@ -36,6 +36,8 @@ def signed_cos_deltaangle_for_jax(inputs):
     Args:
         inputs: Array of the thre-momenta of particles a and b, in order px, py, pz
                 for particle a first, particle b second
+    Returns:
+        angle between the vectors
 
     """
     ax, ay, az = inputs[0], inputs[1], inputs[2]
@@ -125,6 +127,12 @@ def fourmomentum_to_det_coord(inputs):
 
 
 def four_vec_sum(inputs):
+    """Calculates the sum of two four-vectors. They do not have to be four-momenta
+    Args:
+        inputs: Both four-vectors concatenated as one array, order: [v1_1, v1_2, ..., v2_4]
+    Returns:
+        Summed four-vector, again in array form: [v1, v2, v3, v4]
+    """
     px1, py1, pz1, e1 = inputs[0], inputs[1], inputs[2], inputs[3]
     px2, py2, pz2, e2 = inputs[4], inputs[5], inputs[6], inputs[7]
     px = px1 + px2
@@ -137,6 +145,12 @@ def four_vec_sum(inputs):
 
 
 def dot_product(inputs):
+    """Calculates the dot product of two four-vectors. They do not have to be four-momenta
+    Args:
+        inputs: Both four-vectors concatenated as one array, order: [v1_1, v1_2, ..., v2_4]
+    Returns:
+        dot: dot product of the two vectors
+    """
     px1, py1, pz1 = inputs[0], inputs[1], inputs[2]
     px2, py2, pz2 = inputs[3], inputs[4], inputs[5]
     dot = px1 * px2 + py1 * py2 + pz1 * pz2
@@ -145,6 +159,10 @@ def dot_product(inputs):
 
 def calculate_velocity(inputs):
     """ Calculates beta (v/c)
+    Args:
+        inputs: Array of px, py, pz, energy of the particle in that order
+    Returns:
+        beta: Velocity of the particle
     """
     px, py, pz, energy = inputs[0], inputs[1], inputs[2], inputs[3]
 
@@ -157,7 +175,6 @@ def calculate_velocity(inputs):
 
 
 def boost_a_cm_of_b(inputs, mass_b):
-    # inputs: shape (8,)
     """Boosts particle a in to the rest frame of particle b
     Args:
         inputs: Array of the four-momenta of particles a and b in unboosted cms, in order px, py, pz, energy
@@ -197,7 +214,7 @@ def boost_a_cm_of_b(inputs, mass_b):
 def calculate_invariant_mass(inputs):
     """Calculates the invariant mass of two particles given their four-momenta
     Args:
-        inputs: jax.numpy.stack of the four-momenta. Order: particle 1 px, py, pz, energy, then particle 2
+        inputs: Array of the four-momenta. Order: particle 1 px, py, pz, energy, then particle 2
     Returns:
         inv_mass: Invariant mass of the two particles
     """
@@ -216,6 +233,13 @@ def calculate_invariant_mass(inputs):
 
 # ------------------ Helper functions to get the relevant particles ----------------------------
 def calculate_b_corrected(inputs, mean_sigma_correction_array, calculate_constr_term=False):
+    """ Scales b-momenta in such a way that their invariant mass equals 125GeV. Returns either the 'corrected'
+        b four-momenta or the log of the gaussian constraint / punishment term
+    Args:
+        inputs: Array of the four-momenta. Order is particle 1 px, py, pz, energy, then particle 2
+        mean_sigma_correction_array: array with mean correction and std dev of correction for both b's
+        calculate_constr_term: If true, returns the constraint therm, if false returns the b vectors.
+    """
     b1_pt, b1_eta, b1_phi, b1_mass = inputs[0], inputs[1], inputs[2], inputs[3]
     b2_pt, b2_eta, b2_phi, b2_mass = inputs[4], inputs[5], inputs[6], inputs[7]
     b1_inputs = jax.numpy.stack([
@@ -263,6 +287,13 @@ def calculate_b_corrected(inputs, mean_sigma_correction_array, calculate_constr_
 
 
 def calculate_tau_corrected(inputs, mean_sigma_correction_array, calculate_constr_term=False):
+    """ Scales tau-momenta in such a way that their invariant mass equals 125GeV. Returns either the 'corrected'
+        tau four-momenta or the log of the gaussian constraint / punishment term
+    Args:
+        inputs: Array of the four-momenta. Order is particle 1 px, py, pz, energy, then particle 2
+        mean_sigma_correction_array: array with mean correction and std dev of correction for both taus
+        calculate_constr_term: If true, returns the constraint therm, if false returns the tau vectors.
+    """
     tau1_pt, tau1_eta, tau1_phi, tau1_mass = inputs[8], inputs[9], inputs[10], inputs[11]
     tau2_pt, tau2_eta, tau2_phi, tau2_mass = inputs[12], inputs[13], inputs[14], inputs[15]
     tau1_inputs = jax.numpy.stack([
@@ -308,6 +339,13 @@ def calculate_tau_corrected(inputs, mean_sigma_correction_array, calculate_const
 
 
 def calculate_hbb(inputs):
+    """Adds both b's together to calculate the four-momentum vector of the H_bb.
+    Args:
+        inputs: Array of the b and tau four-vectors in detector space. Order is particle 1 pt, eta, phi, mass,
+                then particle 2, 3, 4, where particles 1 & 2 are b1 & b2, and 3 & 4 are tau1 & tau2
+    Returns:
+        h1: H_bb four-momentum vector
+    """
     b1 = det_coords_to_fourmomentum(inputs[:4])
     b2 = det_coords_to_fourmomentum(inputs[4:8])
     b1b2 = jax.numpy.concatenate([b1, b2], axis=0)
@@ -317,6 +355,13 @@ def calculate_hbb(inputs):
 
 
 def calculate_htautau(inputs):
+    """Adds both taus together to calculate the four-momentum vector of the H_tautau.
+    Args:
+        inputs: Array of the b and tau four-vectors in detector space. Order is particle 1 pt, eta, phi, mass,
+                then particle 2, 3, 4, where particles 1 & 2 are b1 & b2, and 3 & 4 are tau1 & tau2
+    Returns:
+        h2: H_tautau four-momentum vector
+    """
     tau1 = det_coords_to_fourmomentum(inputs[8:12])
     tau2 = det_coords_to_fourmomentum(inputs[12:])
     tau1tau2 = jax.numpy.concatenate([tau1, tau2], axis=0)
@@ -326,6 +371,13 @@ def calculate_htautau(inputs):
 
 
 def calculate_dihiggs_system(inputs):
+    """Adds both H together to calculate the four-momentum vector of the dihiggs system.
+    Args:
+        inputs: Array of the b and tau four-vectors in detector space. Order is particle 1 pt, eta, phi, mass,
+                then particle 2, 3, 4, where particles 1 & 2 are b1 & b2, and 3 & 4 are tau1 & tau2
+    Returns:
+        dihiggs_system: Dihiggs system four momentum vector
+    """
     h1 = calculate_hbb(inputs)
     h2 = calculate_htautau(inputs)
     dihiggs_system = four_vec_sum(jax.numpy.concatenate([h1, h2], axis=0))
@@ -338,9 +390,10 @@ def calculate_t_vis(inputs):
     """Calculate t_vis / lb for both b assignment possibilities, choose the one with M_lb^2 <= M_t^2 - M_W^2
     if possible, else choose the one where the deviation is smaller
     Args:
-        inputs: Array with bbtautau pt, eta, phi, m
+        inputs: Array of the b and tau four-vectors in detector space. Order is particle 1 pt, eta, phi, mass,
+                then particle 2, 3, 4, where particles 1 & 2 are b1 & b2, and 3 & 4 are tau1 & tau2
     Returns:
-        tvis: Array with t1_vis, t2_vis px, py, pz, energy
+        tvis: Array with t1_vis, t2_vis four-momenta
     """
     m_tw_sq = 175**2 - 80.3**2
 
@@ -446,14 +499,28 @@ def calculate_t_vis(inputs):
 
 
 def calculate_tt_vis_system(inputs):
+    """Adds both t_vis together to calculate the four-momentum vector of the di-t_vis system.
+    Args:
+        inputs: Array of the b and tau four-vectors in detector space. Order is particle 1 pt, eta, phi, mass,
+                then particle 2, 3, 4, where particles 1 & 2 are b1 & b2, and 3 & 4 are tau1 & tau2
+    Returns:
+        tt_vis_system: Di-t_vis system four momentum vector
+    """
     tvis = calculate_t_vis(inputs)
-    tt_vis_system = four_vec_sum(tvis)
+    tt_vis_system = four_vec_sum(tvis)      # in four-momentum space
     return tt_vis_system
 
 
 # ----------------------------- Scalar output functions to calculate the likelihood inputs ------------------------
 # Inputs for Higgs likelihood
 def calculate_cos_theta_cms_h1_b1(inputs):
+    """Calculates the angle between the b1 in the cms of the H_bb and the H_bb in det space
+    Args:
+        inputs: Array of the b and tau four-vectors in detector space. Order is particle 1 pt, eta, phi, mass,
+                then particle 2, 3, 4, where particles 1 & 2 are b1 & b2, and 3 & 4 are tau1 & tau2
+    Returns:
+        cos_theta_cms_h1_b1: Angle between the two vectors
+    """
     b1_corrected = det_coords_to_fourmomentum(inputs[:4])
     h1 = calculate_hbb(inputs)
     h1_detspace = fourmomentum_to_det_coord(h1)
@@ -463,6 +530,13 @@ def calculate_cos_theta_cms_h1_b1(inputs):
 
 
 def calculate_phi_cms_h1_b1(inputs):
+    """Calculates phi of the b1 in the cms of the H_bb
+    Args:
+        inputs: Array of the b and tau four-vectors in detector space. Order is particle 1 pt, eta, phi, mass,
+                then particle 2, 3, 4, where particles 1 & 2 are b1 & b2, and 3 & 4 are tau1 & tau2
+    Returns:
+        phi_cms_h1_b1: Angle phi of the b1 in the cms of the H_bb
+    """
     b1_corrected = det_coords_to_fourmomentum(inputs[:4])
     h1 = calculate_hbb(inputs)
     h1_detspace = fourmomentum_to_det_coord(h1)
@@ -473,6 +547,13 @@ def calculate_phi_cms_h1_b1(inputs):
 
 
 def calculate_cos_theta_cms_h2_tau_vis1(inputs):
+    """Calculates the angle between the tau1 in the cms of the H_tautau and the H_tautau in det space
+    Args:
+        inputs: Array of the b and tau four-vectors in detector space. Order is particle 1 pt, eta, phi, mass,
+                then particle 2, 3, 4, where particles 1 & 2 are b1 & b2, and 3 & 4 are tau1 & tau2
+    Returns:
+        cos_theta_cms_h2_tau_vis1: Angle between the two vectors
+    """
     tau1_corrected = det_coords_to_fourmomentum(inputs[8:12])
     h2 = calculate_htautau(inputs)
     h2_detspace = fourmomentum_to_det_coord(h2)
@@ -482,6 +563,13 @@ def calculate_cos_theta_cms_h2_tau_vis1(inputs):
 
 
 def calculate_phi_cms_h2_tau_vis1(inputs):
+    """Calculates phi of the tau1 in the cms of the H_tautau
+    Args:
+        inputs: Array of the b and tau four-vectors in detector space. Order is particle 1 pt, eta, phi, mass,
+                then particle 2, 3, 4, where particles 1 & 2 are b1 & b2, and 3 & 4 are tau1 & tau2
+    Returns:
+        phi_cms_h2_tau_vis1: Angle phi of the tau1 in the cms of the H_tautau
+    """
     tau1_corrected = det_coords_to_fourmomentum(inputs[8:12])
     h2 = calculate_htautau(inputs)
     h2_detspace = fourmomentum_to_det_coord(h2)
@@ -492,29 +580,65 @@ def calculate_phi_cms_h2_tau_vis1(inputs):
 
 
 def calculate_dihiggs_mass(inputs):
-    dihiggs_system = calculate_dihiggs_system(inputs)
-    dihiggs_system_detspace = fourmomentum_to_det_coord(dihiggs_system)
-    return dihiggs_system_detspace[3]
+    """Calculates the invariant mass of the dihiggs system
+    Args:
+        inputs: Array of the b and tau four-vectors in detector space. Order is particle 1 pt, eta, phi, mass,
+                then particle 2, 3, 4, where particles 1 & 2 are b1 & b2, and 3 & 4 are tau1 & tau2
+    Returns:
+        dihiggs_mass: Mass of the dihiggs_system
+    """
+    h1 = calculate_hbb(inputs)
+    h2 = calculate_htautau(inputs)
+    dihiggs_mass = calculate_invariant_mass(jax.numpy.concatenate([h1, h2], axis=0))
+    return dihiggs_mass
 
 
 def calculate_dihiggs_system_pt(inputs):
+    """Calculates the pt of the dihiggs system
+    Args:
+        inputs: Array of the b and tau four-vectors in detector space. Order is particle 1 pt, eta, phi, mass,
+                then particle 2, 3, 4, where particles 1 & 2 are b1 & b2, and 3 & 4 are tau1 & tau2
+    Returns:
+        dihiggs_system_pt: pt of the dihiggs_system
+    """
     dihiggs_system = calculate_dihiggs_system(inputs)
     dihiggs_system_detspace = fourmomentum_to_det_coord(dihiggs_system)
     return dihiggs_system_detspace[0]
 
 
 def calculate_dihiggs_system_pz(inputs):
+    """Calculates the pz of the dihiggs system
+    Args:
+        inputs: Array of the b and tau four-vectors in detector space. Order is particle 1 pz, eta, phi, mass,
+                then particle 2, 3, 4, where particles 1 & 2 are b1 & b2, and 3 & 4 are tau1 & tau2
+    Returns:
+        dihiggs_system_pz: pz of the dihiggs_system
+    """
     dihiggs_system = calculate_dihiggs_system(inputs)
     return dihiggs_system[2]
 
 
 def calculate_dihiggs_system_phi(inputs):
+    """Calculates angle phi of the dihiggs system
+    Args:
+        inputs: Array of the b and tau four-vectors in detector space. Order is particle 1 pz, eta, phi, mass,
+                then particle 2, 3, 4, where particles 1 & 2 are b1 & b2, and 3 & 4 are tau1 & tau2
+    Returns:
+        dihiggs_system_phi: Angle phi of the dihiggs_system
+    """
     dihiggs_system = calculate_dihiggs_system(inputs)
     dihiggs_system_detspace = fourmomentum_to_det_coord(dihiggs_system)
     return dihiggs_system_detspace[2]
 
 
 def calculate_cos_theta_h1(inputs):
+    """Calculates the angle between the H_bb in the cms of the dihiggs system and the dihiggs system in the detector cms
+    Args:
+        inputs: Array of the b and tau four-vectors in detector space. Order is particle 1 pz, eta, phi, mass,
+                then particle 2, 3, 4, where particles 1 & 2 are b1 & b2, and 3 & 4 are tau1 & tau2
+    Returns:
+        cos_theta_h1: Angle theta between H_bb in dihiggs cms and dihiggs system in detector cms
+    """
     h1 = calculate_hbb(inputs)
     dihiggs_system = calculate_dihiggs_system(inputs)
     dihiggs_system_detspace = fourmomentum_to_det_coord(dihiggs_system)
@@ -524,8 +648,15 @@ def calculate_cos_theta_h1(inputs):
 
 
 def calculate_phi_h1(inputs):
-    h1 = calculate_hbb(inputs)   # four momentum space
-    dihiggs_system = calculate_dihiggs_system(inputs)   # four momentum space
+    """Calculates angle phi of the H_bb in the cms of the dihiggs system
+    Args:
+        inputs: Array of the b and tau four-vectors in detector space. Order is particle 1 pz, eta, phi, mass,
+                then particle 2, 3, 4, where particles 1 & 2 are b1 & b2, and 3 & 4 are tau1 & tau2
+    Returns:
+        phi_h1: Angle phi of the H_bb in the cms of the dihiggs system
+    """
+    h1 = calculate_hbb(inputs)
+    dihiggs_system = calculate_dihiggs_system(inputs)
     dihiggs_system_detspace = fourmomentum_to_det_coord(dihiggs_system)
     h1_cms_dihiggs = boost_a_cm_of_b(jax.numpy.concatenate([h1, dihiggs_system], axis=0), dihiggs_system_detspace[3])
     h1_cms_dihiggs_detspace = fourmomentum_to_det_coord(h1_cms_dihiggs)
@@ -591,29 +722,64 @@ def calculate_constr_term_tau(inputs, mean_sigma_correction_array):
 
 # Inputs for ttbar-likelihood
 def calculate_tt_vis_system_mass(inputs):
-    tt_vis_system = calculate_tt_vis_system(inputs)
-    tt_vis_system_mass = fourmomentum_to_det_coord(tt_vis_system)[3]
+    """Calculates the invariant mass of the di-t_vis system
+    Args:
+        inputs: Array of the b and tau four-vectors in detector space. Order is particle 1 pt, eta, phi, mass,
+                then particle 2, 3, 4, where particles 1 & 2 are b1 & b2, and 3 & 4 are tau1 & tau2
+    Returns:
+        tt_vis_system_mass: Mass of the di-t_vis system
+    """
+    t_vis12 = calculate_t_vis(inputs)
+    tt_vis_system_mass = calculate_invariant_mass(t_vis12)
     return tt_vis_system_mass
 
 
 def calculate_tt_vis_system_pt(inputs):
+    """Calculates the tranverse momentum of the di-t_vis system
+    Args:
+        inputs: Array of the b and tau four-vectors in detector space. Order is particle 1 pt, eta, phi, mass,
+                then particle 2, 3, 4, where particles 1 & 2 are b1 & b2, and 3 & 4 are tau1 & tau2
+    Returns:
+        tt_vis_system_pt: pt of the di-t_vis system
+    """
     tt_vis_system = calculate_tt_vis_system(inputs)
     tt_vis_system_pt = fourmomentum_to_det_coord(tt_vis_system)[0]
     return tt_vis_system_pt
 
 
 def calculate_tt_vis_system_pz(inputs):
+    """Calculates the pz of the di-t_vis system
+    Args:
+        inputs: Array of the b and tau four-vectors in detector space. Order is particle 1 pz, eta, phi, mass,
+                then particle 2, 3, 4, where particles 1 & 2 are b1 & b2, and 3 & 4 are tau1 & tau2
+    Returns:
+        tt_vis_system_pz: pz of the di-t_vis system
+    """
     tt_vis_system = calculate_tt_vis_system(inputs)
     return tt_vis_system[2]
 
 
 def calculate_tt_vis_system_phi(inputs):
+    """Calculates the angle phi of the di-t_vis system
+    Args:
+        inputs: Array of the b and tau four-vectors in detector space. Order is particle 1 phi, eta, phi, mass,
+                then particle 2, 3, 4, where particles 1 & 2 are b1 & b2, and 3 & 4 are tau1 & tau2
+    Returns:
+        tt_vis_system_phi: phi of the di-t_vis system
+    """
     tt_vis_system = calculate_tt_vis_system(inputs)
     tt_vis_system_phi = fourmomentum_to_det_coord(tt_vis_system)[2]
     return tt_vis_system_phi
 
 
 def calculate_t_vis_y_diff(inputs):
+    """Calculates the rapidity difference of both t_vis in the di-t_vis cms
+    Args:
+        inputs: Array of the b and tau four-vectors in detector space. Order is particle 1 phi, eta, phi, mass,
+                then particle 2, 3, 4, where particles 1 & 2 are b1 & b2, and 3 & 4 are tau1 & tau2
+    Returns:
+        t_vis_y_diff: Difference of rapidities of t_vis1 and t_vis2 in di-t_vis cms
+    """
     tvis = calculate_t_vis(inputs)
     tt_vis_system = calculate_tt_vis_system(inputs)
     tt_vis_system_mass = fourmomentum_to_det_coord(tt_vis_system)[3]
@@ -633,6 +799,13 @@ def calculate_t_vis_y_diff(inputs):
 
 
 def calculate_t1_vis_phi(inputs):
+    """Calculates the angle phi of t_vis1 in the di-t_vis cms
+    Args:
+        inputs: Array of the b and tau four-vectors in detector space. Order is particle 1 phi, eta, phi, mass,
+                then particle 2, 3, 4, where particles 1 & 2 are b1 & b2, and 3 & 4 are tau1 & tau2
+    Returns:
+        tt_vis_system_phi: phi of t_vis1 in di-t_vis cms
+    """
     tvis = calculate_t_vis(inputs)
     tt_vis_system = calculate_tt_vis_system(inputs)
     tt_vis_system_mass = fourmomentum_to_det_coord(tt_vis_system)[3]
@@ -646,6 +819,13 @@ def calculate_t1_vis_phi(inputs):
 
 
 def calculate_tau1_cos_theta_star_cms_t1_vis(inputs):
+    """Calculates the angle between tau1 in t_vis1 cms and t_vis1 in det. cms
+    Args:
+        inputs: Array of the b and tau four-vectors in detector space. Order is particle 1 phi, eta, phi, mass,
+                then particle 2, 3, 4, where particles 1 & 2 are b1 & b2, and 3 & 4 are tau1 & tau2
+    Returns:
+        tau1_cos_theta_star_cms_t1_vis: angle between tau1 in t_vis1 cms and t_vis1 in det. cms
+    """
     tau1 = det_coords_to_fourmomentum(inputs[8:12])
     t1_vis = calculate_t_vis(inputs)[:4]
     t1_vis_mass = fourmomentum_to_det_coord(t1_vis)[3]
@@ -660,6 +840,13 @@ def calculate_tau1_cos_theta_star_cms_t1_vis(inputs):
 
 
 def calculate_tau2_cos_theta_star_cms_t2_vis(inputs):
+    """Calculates the angle between tau2 in t_vis2 cms and t_vis2 in det. cms
+    Args:
+        inputs: Array of the b and tau four-vectors in detector space. Order is particle 1 phi, eta, phi, mass,
+                then particle 2, 3, 4, where particles 1 & 2 are b1 & b2, and 3 & 4 are tau1 & tau2
+    Returns:
+        tau2_cos_theta_star_cms_t2_vis: angle between tau2 in t_vis2 cms and t_vis2 in det. cms
+    """
     tau2 = det_coords_to_fourmomentum(inputs[12:])
     t2_vis = calculate_t_vis(inputs)[4:]
     t2_vis_mass = fourmomentum_to_det_coord(t2_vis)[3]
@@ -674,6 +861,13 @@ def calculate_tau2_cos_theta_star_cms_t2_vis(inputs):
 
 
 def calculate_tau1_phi(inputs):
+    """Calculates the angle phi of tau1 in the t_vis1 cms
+    Args:
+        inputs: Array of the b and tau four-vectors in detector space. Order is particle 1 phi, eta, phi, mass,
+                then particle 2, 3, 4, where particles 1 & 2 are b1 & b2, and 3 & 4 are tau1 & tau2
+    Returns:
+        tau1_phi: phi of tau1 in the t_vis1 cms
+    """
     tau1 = det_coords_to_fourmomentum(inputs[8:12])
     t1_vis = calculate_t_vis(inputs)[:4]
     t1_vis_mass = fourmomentum_to_det_coord(t1_vis)[3]
@@ -686,6 +880,13 @@ def calculate_tau1_phi(inputs):
 
 
 def calculate_tau2_phi(inputs):
+    """Calculates the angle phi of tau2 in the t_vis2 cms
+    Args:
+        inputs: Array of the b and tau four-vectors in detector space. Order is particle 1 phi, eta, phi, mass,
+                then particle 2, 3, 4, where particles 1 & 2 are b1 & b2, and 3 & 4 are tau1 & tau2
+    Returns:
+        tau2_phi: phi of tau2 in the t_vis2 cms
+    """
     tau2 = det_coords_to_fourmomentum(inputs[12:])
     t2_vis = calculate_t_vis(inputs)[4:]
     t2_vis_mass = fourmomentum_to_det_coord(t2_vis)[3]
@@ -698,6 +899,14 @@ def calculate_tau2_phi(inputs):
 
 
 def calculate_tau1_cos_theta_star_cms_wplus(inputs):
+    """Calculates the angle between tau1 in W^+ cms and W^+ using an approximative formula depending only on det. level
+    observables (M_lb^2)
+    Args:
+        inputs: Array of the b and tau four-vectors in detector space. Order is particle 1 phi, eta, phi, mass,
+                then particle 2, 3, 4, where particles 1 & 2 are b1 & b2, and 3 & 4 are tau1 & tau2
+    Returns:
+        tau1_cos_theta_star_cms_wplus: angle between tau1 in W^+ cms and W^+
+    """
     t1_vis = calculate_t_vis(inputs)[:4]
     m_lb1 = fourmomentum_to_det_coord(t1_vis)[3]
     tau1_cos_theta_star_cms_wplus = 2 * \
@@ -706,6 +915,14 @@ def calculate_tau1_cos_theta_star_cms_wplus(inputs):
 
 
 def calculate_tau2_cos_theta_star_cms_wminus(inputs):
+    """Calculates the angle between tau2 in W^- cms and W^- using an approximative formula depending only on det. level
+    observables (M_lb^2)
+    Args:
+        inputs: Array of the b and tau four-vectors in detector space. Order is particle 1 phi, eta, phi, mass,
+                then particle 2, 3, 4, where particles 1 & 2 are b1 & b2, and 3 & 4 are tau1 & tau2
+    Returns:
+        tau1_cos_theta_star_cms_wplus: angle between tau2 in W^- cms and W^-
+    """
     t2_vis = calculate_t_vis(inputs)[4:]
     m_lb2 = fourmomentum_to_det_coord(t2_vis)[3]
     tau2_cos_theta_star_cms_wminus = 2 * \

@@ -703,6 +703,7 @@ def eval_top_likelihood_hists(
                 "/data/dust/user/diepholq/hh2bbtautau/hbt_store/analysis_hbt/cf.ProduceColumns/22pre_v14/tt_dl_powheg/"
                 "nominal/calib__default/sel__default/red__default/prod__pdf_inputs/dev_likelihood_ratio/"
             )
+            print("\nCreating background hist...\n")
             create_background_hist(
                 parquet_file_path_bg,
                 bin_nr,
@@ -821,6 +822,7 @@ def eval_higgs_likelihood_hists(
                 "hh_ggf_hbb_htt_kl1_kt1_powheg/nominal/calib__default/sel__default/red__default/prod__pdf_inputs/"
                 "dev_likelihood_ratio/columns_0.parquet"
             )
+            print("\nCreating signal hist...\n")
             create_signal_hist(
                 parquet_file_path_signal,
                 bin_nr,
