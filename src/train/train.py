@@ -4,23 +4,17 @@ from __future__ import annotations
 import dataclasses
 
 # package imports
-
 import numpy as np
 import torch
 
-import loss
-
-from models import create_model
-
+# personal imports
 from data import load_data, preprocessing, sampler, cache
 from utils import logger
 
 from optimizer.utils import init_optimizer, init_scheduler
-from optimizer.early_stopping import EarlyStopOnPlateau, CheckPoint
-
+from optimizer.early_stopping import CheckPoint
 from loss.utils import init_loss
 from models.utils import init_model
-
 from train.train_config import full_config
 from train.loops import TrainingLoop, ValidationLoop
 from train.train_utils import log_metrics
@@ -53,7 +47,6 @@ def main(**kwargs):
         # load data from cache is necessary or from root files
         # events is of form : {uid : {"continuous","categorical", "weight": torch tensor}}
         events = load_data.get_data(full_config.dataset_config, ignore_cache=kwargs["ignore_cache"], _save_cache=kwargs["save_cache"])
-
         fold_split_coordinator = preprocessing.FoldAndSplitCoordinator(
             events=events,
             c_fold=current_fold,
@@ -64,7 +57,6 @@ def main(**kwargs):
         )
 
         train_events, validation_events = fold_split_coordinator(events, which="training"), fold_split_coordinator(events, which="validation")
-
         weight_aggregator = preprocessing.WeightAggregator(events, fold_split_coordinator.indices)
 
         # release fie
@@ -79,7 +71,7 @@ def main(**kwargs):
             "min_size" : full_config.training_config.min_events_in_batch,
             "batch_size" : full_config.training_config.t_batch_size,
             "sample_ratio" : full_config.training_config.sample_ratio,
-            "sub_sample_ratio" : full_config.training_config.sub_process_ratio,
+            "sub_sample_ratio" : full_config.training_config.sub_process_ratios,
         }
 
         training_sampler = sampler.create_sampler(
