@@ -4,6 +4,7 @@ from dataclasses import dataclass, field, asdict
 from typing import Dict, List, Optional, Tuple, Literal, Any
 
 import torch
+import os
 
 from data import features, load_data
 from utils.utils import choice_check, multiply_sub_process_rates
@@ -172,7 +173,10 @@ class TrainingConfig:
     train_ratio: float = 0.75  # split ratio for k-fold data into train and validation
     t_batch_size: int = 4096 * 10
     v_batch_size: int = -1  # validation batch size, -1 = full set,
-    save_model_name: str = "vanilla_bogdan"  # name of the model used to save
+    if int(os.environ["BOGDANS"]):
+        save_model_name: str = "vanilla_bogdan"  # name of the model used to save
+    else:
+        save_model_name: str = os.environ["SAVE_MODEL_NAME"]
 
     # Sampler Settings
     sample_ratio: Dict[str, float] = field(

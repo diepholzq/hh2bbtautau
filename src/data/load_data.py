@@ -428,13 +428,17 @@ def handle_weights_and_convert_to_torch(
             continue
 
         # combine columns from struct numpy and convert to torch tensor
-        # continuous_tensor = torch.from_numpy(
-        #     np.stack([arr[feature] for feature in continuous_features], axis=1)
-        # )
-        continuous_tensor, categorical_tensor = [
-            torch.from_numpy(np.stack([arr[feature] for feature in features], axis=1))
-            for features in (continuous_features, categorical_features)
-        ]
+        if not int(os.environ["BOGDANS"]):
+            continuous_tensor = torch.from_numpy(
+                np.stack([arr[feature] for feature in continuous_features], axis=1)
+            )
+        else:
+            continuous_tensor, categorical_tensor = [
+                torch.from_numpy(
+                    np.stack([arr[feature] for feature in features], axis=1)
+                )
+                for features in (continuous_features, categorical_features)
+            ]
         # handling weights and convert to torch tensors
         # single numbers cant be converted by using from_numpy thus have to be wrapped in array
         final_mask = arr["bjet_mask"] & arr["di_tau_mask"] & arr["di_bjet_mask"]
@@ -458,23 +462,39 @@ def handle_weights_and_convert_to_torch(
 
         # event id is a uint and is stored as uncontiguousarray for some reason after the casting
         event_id = torch.tensor(np.ascontiguousarray(arr["event"]), dtype=torch.int64)
-
-        events[uid] = {
-            "continuous": continuous_tensor,
-            "categorical": categorical_tensor,
-            "event_id": event_id,
-            "normalization_weights": normalization_weights,
-            "product_of_weights": product_of_all_weights,
-            "total_product_of_weights": sum_of_combined_weights,
-            "total_normalization_weights": sum_of_normalization_weights,
-            "total_evaluation_weight": total_evaluation_weight,
-            "evaluation_mask": torch.tensor(final_mask),
-            "mask": {
-                "bjet": arr["bjet_mask"],
-                "di_tau": arr["di_tau_mask"],
-                "di_bjet": arr["di_bjet_mask"],
-            },
-        }
+        if not int(os.environ["BOGDANS"]):
+            events[uid] = {
+                "continuous": continuous_tensor,
+                "event_id": event_id,
+                "normalization_weights": normalization_weights,
+                "product_of_weights": product_of_all_weights,
+                "total_product_of_weights": sum_of_combined_weights,
+                "total_normalization_weights": sum_of_normalization_weights,
+                "total_evaluation_weight": total_evaluation_weight,
+                "evaluation_mask": torch.tensor(final_mask),
+                "mask": {
+                    "bjet": arr["bjet_mask"],
+                    "di_tau": arr["di_tau_mask"],
+                    "di_bjet": arr["di_bjet_mask"],
+                },
+            }
+        else:
+            events[uid] = {
+                "continuous": continuous_tensor,
+                "categorical": categorical_tensor,
+                "event_id": event_id,
+                "normalization_weights": normalization_weights,
+                "product_of_weights": product_of_all_weights,
+                "total_product_of_weights": sum_of_combined_weights,
+                "total_normalization_weights": sum_of_normalization_weights,
+                "total_evaluation_weight": total_evaluation_weight,
+                "evaluation_mask": torch.tensor(final_mask),
+                "mask": {
+                    "bjet": arr["bjet_mask"],
+                    "di_tau": arr["di_tau_mask"],
+                    "di_bjet": arr["di_bjet_mask"],
+                },
+            }
     return events
 
 

@@ -54,9 +54,9 @@ def main(**kwargs):
             ignore_cache=kwargs["ignore_cache"],
             _save_cache=kwargs["save_cache"],
         )
-        # for uid, arrays in events.items():
-        #     l = len(arrays["continuous"])
-        #     arrays["categorical"] = torch.zeros((l, 1))
+        for uid, arrays in events.items():
+            l = len(arrays["continuous"])
+            arrays["categorical"] = torch.zeros((l, 1))
         fold_split_coordinator = preprocessing.FoldAndSplitCoordinator(
             events=events,
             c_fold=current_fold,

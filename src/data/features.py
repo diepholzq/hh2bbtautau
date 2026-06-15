@@ -295,7 +295,8 @@ continuous_features_hard_scattering = feature(
         # "likelihood_ratio",
     ],
 )
-# continuous_features = continuous_features_detector_observables
+continuous_features = continuous_features_detector_observables
 # continuous_features = continuous_features_hard_scattering
-continuous_features = continuous_features_vanilla
-# categorical_features = tuple([])
+if int(os.environ["BOGDANS"]):
+    continuous_features = continuous_features_vanilla
+categorical_features = tuple([])
