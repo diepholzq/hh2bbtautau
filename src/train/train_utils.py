@@ -8,13 +8,15 @@ from utils import logger
 functions = {}
 logger_inst = logger.get_logger(__name__)
 
+
 def do_scheduler_step(
     loss: torch.tensor,
     logger_inst: logger.logging.Logger,
     scheduler_inst: torch.optim.lr_scheduler,
     model_inst: torch.nn.Module,
     optimizer_inst: torch.optim.Optimizer,
-    checkpoint_inst: dict[torch.tensor]) -> None:
+    checkpoint_inst: dict[torch.tensor],
+) -> None:
     """
     Perform with given *scheduler_inst* a scheduler step, under the conditions of the given *scheduler_inst*.
     If a step is performed be vebose using *logger_inst* and reload the last best state for *model_inst* and *optimizer_inst* from
@@ -28,26 +30,29 @@ def do_scheduler_step(
         optimizer_inst (torch.optim.Optimizer): Instance of an Optimizer
         checkpoint_inst (dict[torch.tensor]): Dictionary containing the learning rate, model state dict and optimizer state dict.
     """
-    previous_lr =  optimizer_inst.param_groups[0]["lr"]
+    previous_lr = optimizer_inst.param_groups[0]["lr"]
     scheduler_inst.step(loss)
     current_lr = optimizer_inst.param_groups[0]["lr"]
     if previous_lr != current_lr:
         logger_inst.info(
             f"{previous_lr} -> {current_lr}\n"
             f"Reload model and optimizer from iteration "
-            )
+        )
         model_inst.load_state_dict(checkpoint_inst.last_checkpoint["model_state_dict"])
-        optimizer_inst.load_state_dict(checkpoint_inst.last_checkpoint["optimizer_state_dict"])
+        optimizer_inst.load_state_dict(
+            checkpoint_inst.last_checkpoint["optimizer_state_dict"]
+        )
+
 
 def log_metrics(
     tensorboard_inst,
     iteration_step: int,
     sampler_output: tuple[torch.tensor],
     target_map: dict,
-    mode: str ="train",
+    mode: str = "train",
     exist_check: bool = False,
-    **data: dict[torch.tensor]
-    ) -> None:
+    **data: dict[torch.tensor],
+) -> None:
     """
     Helper function to store all logging efforts in given *tensorboard_inst*.
     Each log is saved under a given *iteration_step*, with a given *mode* prefix.
@@ -64,6 +69,7 @@ def log_metrics(
         target_map (dict): Mapping of output node to index.
         mode (str, optional): Suffix for name, typically "train" oder "validation". Defaults to "train".
     """
+
     def _optional(*keys, log_name=None) -> bool:
         """
         Helper function to enable optional logs only when all *keys* exist.
@@ -77,7 +83,9 @@ def log_metrics(
         if any(missing_keys):
             if exist_check:
                 name = keys if log_name is None else log_name
-                logger_inst.warning(f"Can't produce log of - {log_name} - missing: {missing_keys}")
+                logger_inst.warning(
+                    f"Can't produce log of - {log_name} - missing: {missing_keys}"
+                )
             return False
         return True
 
@@ -90,10 +98,19 @@ def log_metrics(
     # log crossentropy as metric
     # weights are EVENT WEIGHTS, but cross entropy want to have cls weights
     # for this reason reduce is set to false and manual average is calculated
-    cce_metric = torch.nn.functional.cross_entropy(pred, tar, weight=None, reduction="none")
+    cce_metric = torch.nn.functional.cross_entropy(
+        pred,
+        tar,
+        weight=None,
+        reduction="none",
+    )
     weights = weights.reshape(cce_metric.shape)
     cce_metric = torch.mean(cce_metric * weights)
-    tensorboard_inst.log_scalar(values={mode: cce_metric}, step=iteration_step, name=f"{mode} CrossEntropy")
+    tensorboard_inst.log_scalar(
+        values={mode: cce_metric},
+        step=iteration_step,
+        name=f"{mode} CrossEntropy",
+    )
 
     # network prediction of all nodes
     pred_fig, pred_ax = plotting.network_predictions(
@@ -110,18 +127,20 @@ def log_metrics(
         pred,
         target_map,
         sample_weight=weights,
-        normalized="true"
+        normalized="true",
     )
-    tensorboard_inst.log_figure(f"{mode} confusion matrix", c_mat_fig, step=iteration_step)
+    tensorboard_inst.log_figure(
+        f"{mode} confusion matrix",
+        c_mat_fig,
+        step=iteration_step,
+    )
 
     roc_fig, roc_ax = plotting.roc_curve(
-        tar,
-        pred,
-        sample_weight=weights,
-        labels=list(target_map.keys())
+        tar, pred, sample_weight=weights, labels=list(target_map.keys())
     )
-    tensorboard_inst.log_figure(f"{mode} roc curve one vs rest", roc_fig, step=iteration_step)
-
+    tensorboard_inst.log_figure(
+        f"{mode} roc curve one vs rest", roc_fig, step=iteration_step
+    )
 
     if _optional("loss", log_name="Loss"):
         tensorboard_inst.log_loss({mode: data["loss"]}, step=iteration_step)
@@ -130,7 +149,7 @@ def log_metrics(
         tensorboard_inst.log_lr(data["lr"], step=iteration_step)
 
     if _optional("binning_edges", log_name="HH Node Prediction"):
-    # binned network prediction is only available by models with binned activation layer
+        # binned network prediction is only available by models with binned activation layer
         pred_fig, pred_ax = plotting.network_predictions_hh(
             tar,
             pred,
@@ -139,7 +158,9 @@ def log_metrics(
             binning_edges=data["binning_edges"],
             current_iteration=iteration_step,
         )
-        tensorboard_inst.log_figure(f"{mode} HH node output", pred_fig, step=iteration_step)
+        tensorboard_inst.log_figure(
+            f"{mode} HH node output", pred_fig, step=iteration_step
+        )
 
     if _optional("kernels", log_name="Lernable Bin Edges"):
         kernel_fig, kernel_ax = plotting.visualize_bins(data["kernels"])

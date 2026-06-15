@@ -11,6 +11,7 @@ EMPTY_FLOAT = -99999.0
 import torch
 import awkward as ak
 
+
 def multiply_sub_process_rates(which_sub_process, sub_process_rates):
     def validate_exactly_two_levels(d):
         for outer_key, inner in d.items():
@@ -42,12 +43,15 @@ def choice_check(selected, choices):
     choices = typing.get_args(choices)
     is_inside = any([selected in choices for choice in choices])
     if not is_inside:
-        raise ValueError(f"Selected ({selected}) is not part of valid choices {choices}")
+        raise ValueError(
+            f"Selected ({selected}) is not part of valid choices {choices}"
+        )
 
 
 def clip_gradients(parameters: Iterable[torch.nn.Parameter], clip_value: float = 1.0):
     for p in parameters:
         p.register_hook(lambda grad: torch.clamp(grad, -clip_value, clip_value))
+
 
 def get_standardization_parameter(
     data_map: list[ParquetDataset],
@@ -124,7 +128,6 @@ def reorganize_idx(batch):
         return reorganize_list_idx(batch)
 
 
-
 def LookUpTable(array: torch.Tensor, EMPTY=EMPTY_INT, placeholder: int = 15):
     """Maps multiple categories given in *array* into a sparse vectoriced lookuptable.
     Empty values are replaced with *EMPTY*.
@@ -137,7 +140,13 @@ def LookUpTable(array: torch.Tensor, EMPTY=EMPTY_INT, placeholder: int = 15):
         tuple([torch.Tensor]): Returns minimum and LookUpTable
     """
     # add placeholder value to array
-    array = torch.cat([array, torch.ones(array.shape[0], dtype=torch.int32).reshape(-1, 1) * placeholder], axis=-1)
+    array = torch.cat(
+        [
+            array,
+            torch.ones(array.shape[0], dtype=torch.int32).reshape(-1, 1) * placeholder,
+        ],
+        axis=-1,
+    )
     # shift input by minimum, pushing the categories to the valid indice space
     minimum = array.min(axis=-1).values
     indice_array = array - minimum.reshape(-1, 1)
@@ -145,7 +154,9 @@ def LookUpTable(array: torch.Tensor, EMPTY=EMPTY_INT, placeholder: int = 15):
 
     # warn for big categories
     if upper_bound > 100:
-        print("Be aware that a large number of categories will result in a large sparse lookup array")
+        print(
+            "Be aware that a large number of categories will result in a large sparse lookup array"
+        )
 
     # create mapping placeholder
     mapping_array = torch.full(
@@ -161,11 +172,13 @@ def LookUpTable(array: torch.Tensor, EMPTY=EMPTY_INT, placeholder: int = 15):
     for feature_idx, feature in enumerate(indice_array):
         unique = torch.unique(feature, dim=None)
         mapping_array[feature_idx, unique] = torch.arange(
-            stride, stride + len(unique),
+            stride,
+            stride + len(unique),
             dtype=torch.int32,
         )
         stride += len(unique)
     return minimum, mapping_array
+
 
 class CategoricalTokenizer(torch.nn.Module):
     def __init__(self, translation: torch.Tensor, minimum: torch.Tensor):

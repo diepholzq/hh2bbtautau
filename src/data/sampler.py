@@ -6,6 +6,7 @@ from utils import logger
 
 logger_inst = logger.get_logger(__name__)
 
+
 class Process(t_data.Dataset):
 
     def __init__(
@@ -17,9 +18,9 @@ class Process(t_data.Dataset):
         product_of_weights: torch.Tensor,
         weights_statistics: dict[str, torch.Tensor],
         evaluation_space_mask: torch.Tensor,
-        process_id: str=None,
-        process_type: str=None,
-        randomize: bool =True,
+        process_id: str = None,
+        process_type: str = None,
+        randomize: bool = True,
     ):
         """
         A Process Dataset class represents all data connected to a process identified by *process id*.
@@ -95,7 +96,9 @@ class Process(t_data.Dataset):
         else:
             self.indices = torch.arange(len(self))
 
-    def sample(self,sample_from: tuple[str], number: str=None ,device=torch.device("cpu"))-> dict[torch.Tensor]:
+    def sample(
+        self, sample_from: tuple[str], number: str = None, device=torch.device("cpu")
+    ) -> dict[torch.Tensor]:
         """
         Sample *number* of events from attributes defined by *sample_from*.
         Samples from the start again, if maximum number of samples is reached.
@@ -125,13 +128,22 @@ class Process(t_data.Dataset):
         self.current_idx = next_idx
 
         # sample events from sample_from, and normalization weight per default
-        sampled_events = {attribute:getattr(self, attribute)[idx].to(device) for attribute in sample_from}
-        sampled_events["sample_weights"] = torch.full((len(idx), 1), self.weights_statistics["normalization_weights"]["whole_sum"] / self.sample_size).to(device)
+        sampled_events = {
+            attribute: getattr(self, attribute)[idx].to(device)
+            for attribute in sample_from
+        }
+        sampled_events["sample_weights"] = torch.full(
+            (len(idx), 1),
+            self.weights_statistics["normalization_weights"]["whole_sum"]
+            / self.sample_size,
+        ).to(device)
         return sampled_events
 
         # return self.continuous[idx].to(device), self.categorical[idx].to(device), self.targets[idx].to(device)
 
-    def create_sample_generator(self, sample_from, batch_size=-1, device=torch.device("cpu")):
+    def create_sample_generator(
+        self, sample_from, batch_size=-1, device=torch.device("cpu")
+    ):
         """
         Creates a generator object that returns a dict of torch tensors, defined by *sample_from*.
         If *batch
@@ -160,23 +172,30 @@ class Process(t_data.Dataset):
             idx = indices[start_idx:next_idx]
             start_idx = next_idx
             # reset if we reached the end of the dataset and drop last incomplete batch
-            sampled_events = {attribute:getattr(self, attribute)[idx].to(device) for attribute in sample_from}
-            sampled_events["sample_weights"] = torch.full((len(idx), 1), self.weights_statistics["normalization_weights"]["whole_sum"] / self.sample_size).to(device)
+            sampled_events = {
+                attribute: getattr(self, attribute)[idx].to(device)
+                for attribute in sample_from
+            }
+            sampled_events["sample_weights"] = torch.full(
+                (len(idx), 1),
+                self.weights_statistics["normalization_weights"]["whole_sum"]
+                / self.sample_size,
+            ).to(device)
             yield sampled_events
 
 
 class ProcessSampler(t_data.Sampler):
-    signal_background_map = {"hh": "signal", "tt":"background", "dy":"background"}
+    signal_background_map = {"hh": "signal", "tt": "background", "dy": "background"}
 
     def __init__(
         self,
-        batch_size: int=1,
-        sample_ratio: dict[float]={"dy": 0.25, "tt": 0.25, "hh": 0.5},
+        batch_size: int = 1,
+        sample_ratio: dict[float] = {"dy": 0.25, "tt": 0.25, "hh": 0.5},
         sub_sample_ratio: dict[float] = None,
-        min_size: int=0,
+        min_size: int = 0,
         target_map: dict[int] = {"hh": 0, "tt": 1, "dy": 2},
-        weight_aggregator_inst = None,
-        ):
+        weight_aggregator_inst=None,
+    ):
         """
         Manager for Process instances to regulate sampling across multiple processes.
         Each process introduces own sampling method, which the ProcessSampler accesses.
@@ -207,13 +226,23 @@ class ProcessSampler(t_data.Sampler):
         self.weights_aggregator_inst = weight_aggregator_inst
 
         # set attributes to access dataset properties directly from sampler, enabling dot notation
-        self.set_attr([
-            # "total_normalization_weights", "total_product_of_weights",
-            "relative_weight", "sample_size",
-            "process_type", "create_sample_generator", "evaluation_space_mask",
-            "total_process_eval_product_of_weight", "total_process_product_of_weight",
-            "continuous", "categorical", "targets", "normalization_weights", "product_of_weights",
-            ])
+        self.set_attr(
+            [
+                # "total_normalization_weights", "total_product_of_weights",
+                "relative_weight",
+                "sample_size",
+                "process_type",
+                "create_sample_generator",
+                "evaluation_space_mask",
+                "total_process_eval_product_of_weight",
+                "total_process_product_of_weight",
+                "continuous",
+                "categorical",
+                "targets",
+                "normalization_weights",
+                "product_of_weights",
+            ]
+        )
 
     def __getitem__(self, uid):
         return self.processes()[uid]
@@ -222,9 +251,9 @@ class ProcessSampler(t_data.Sampler):
     def sampler_total_eval_weight_per_process_type(self) -> dict[torch.Tensor]:
         if hasattr(self, "_sampler_total_eval_weight_per_process_type"):
             return self._sampler_total_eval_weight_per_process_type
-        process_type_weight = {"dy":0, "tt":0, "hh":0}
+        process_type_weight = {"dy": 0, "tt": 0, "hh": 0}
         for pid, value in self.total_process_eval_product_of_weight().items():
-            if pid >50000:
+            if pid > 50000:
                 process_type_weight["dy"] += value
             elif pid < 40000 and value > 5000:
                 process_type_weight["hh"] += value
@@ -243,9 +272,9 @@ class ProcessSampler(t_data.Sampler):
         """
         if hasattr(self, "_sampler_total_weight_per_process_type"):
             return self._sampler_total_weight_per_process_type
-        process_type_weight = {"dy":0, "tt":0, "hh":0}
+        process_type_weight = {"dy": 0, "tt": 0, "hh": 0}
         for pid, value in self.total_process_product_of_weight().items():
-            if pid >50000:
+            if pid > 50000:
                 process_type_weight["dy"] += value
             elif pid < 40000 and value > 5000:
                 process_type_weight["hh"] += value
@@ -269,11 +298,11 @@ class ProcessSampler(t_data.Sampler):
 
     def apply_func_on_datasets(self, func):
         # small helper to apply function of managet datasets
-        return {uid: func(ds) for uid,ds in self.processes().items()}
+        return {uid: func(ds) for uid, ds in self.processes().items()}
 
     def get_attribute_of_datasets(self, attr):
         # small helper to getattributes from managet datasets
-        return {uid: getattr(ds, attr) for uid,ds in self.processes().items()}
+        return {uid: getattr(ds, attr) for uid, ds in self.processes().items()}
 
     def events_per_dataset(self):
         return self.apply_func_on_datasets(len)
@@ -288,7 +317,9 @@ class ProcessSampler(t_data.Sampler):
         Args:
             process_inst (Process): Instance of the Dataset class
         """
-        self.process_inst[process_inst.process_type][process_inst.process_id] = process_inst
+        self.process_inst[process_inst.process_type][
+            process_inst.process_id
+        ] = process_inst
 
     @property
     def keys(self):
@@ -307,28 +338,32 @@ class ProcessSampler(t_data.Sampler):
                 msg[dataset_type].append(f"{pid} | {ds.sample_size}")
                 _sum_batch += ds.sample_size
 
-            sum_batch[dataset_type] = (_sum_batch, self.sample_ratio[dataset_type] * self.batch_size.item())
+            sum_batch[dataset_type] = (
+                _sum_batch,
+                self.sample_ratio[dataset_type] * self.batch_size.item(),
+            )
 
         # print all processes with their sample size
-        _msg = "\n".join([
-            f"{dataset_type.upper()}:\n\t" + f"\n  ".join(uid_with_samples)
-            for dataset_type, uid_with_samples in msg.items()
-            ])
+        _msg = "\n".join(
+            [
+                f"{dataset_type.upper()}:\n\t" + f"\n  ".join(uid_with_samples)
+                for dataset_type, uid_with_samples in msg.items()
+            ]
+        )
         logger_inst.debug(
-            f"Sample rates for Dataset of Era (PID | Sample Rate)\n" +
-            _msg
+            f"Sample rates for Dataset of Era (PID | Sample Rate)\n" + _msg
         )
         # print summary statistic per dataset type
-        _msg = "\n".join([
-            f"{dataset_type}: {sum_of_batch} | {expected_batch_size}"
-            for dataset_type, (sum_of_batch, expected_batch_size) in self.process_inst.items()
-
-        ])
-        logger_inst.debug(
-            f"Summary statitics:\n" +
-            _msg
+        _msg = "\n".join(
+            [
+                f"{dataset_type}: {sum_of_batch} | {expected_batch_size}"
+                for dataset_type, (
+                    sum_of_batch,
+                    expected_batch_size,
+                ) in self.process_inst.items()
+            ]
         )
-
+        logger_inst.debug(f"Summary statitics:\n" + _msg)
 
     def calculate_sample_size(self, process_type: str):
         """
@@ -353,16 +388,26 @@ class ProcessSampler(t_data.Sampler):
             TypeError: The change of type from float to int changed the value, which should not happen since the algorithm is designed to handle this case.
         """
         if self.batch_size == -1:
-            raise ValueError("Batch Size < 1 is not supported. Try a number big enough to be representative")
-        logger_inst.info(f"Calculate Sampler sample sizes for subprocesses of {process_type}")
+            raise ValueError(
+                "Batch Size < 1 is not supported. Try a number big enough to be representative"
+            )
+        logger_inst.info(
+            f"Calculate Sampler sample sizes for subprocesses of {process_type}"
+        )
         # unpack and convert to tensors for easier handling, get desired_sub_batch_size
 
         # -- calculate weighting for each subprocess --
         weights = []
         for pid, proc in self.process_inst[process_type].items():
-            sub_process_total_normalization_weight = proc.weights_statistics["normalization_weights"]["whole_sum"]
-            sub_process_ratio = self.sub_sample_ratio.get(pid, 1) # defaults to equal importance, if no pid exist
-            weighted_sub_process_weight = sub_process_total_normalization_weight * sub_process_ratio
+            sub_process_total_normalization_weight = proc.weights_statistics[
+                "normalization_weights"
+            ]["whole_sum"]
+            sub_process_ratio = self.sub_sample_ratio.get(
+                pid, 1
+            )  # defaults to equal importance, if no pid exist
+            weighted_sub_process_weight = (
+                sub_process_total_normalization_weight * sub_process_ratio
+            )
             weights.append(weighted_sub_process_weight)
         weights = torch.tensor(weights)
 
@@ -384,15 +429,23 @@ class ProcessSampler(t_data.Sampler):
 
         # add relative contribution as information to process
         for _, ds in self.process_inst[process_type].items():
-            relative_weight_contribution_of_process = ds.weights_statistics["normalization_weights"]["whole_sum"] / total_weight_of_process_type
+            relative_weight_contribution_of_process = (
+                ds.weights_statistics["normalization_weights"]["whole_sum"]
+                / total_weight_of_process_type
+            )
             ds.relative_weight = (
-                 relative_weight_contribution_of_process * self.sample_ratio[process_type]
-                )
+                relative_weight_contribution_of_process
+                * self.sample_ratio[process_type]
+            )
 
         # step 1:
         # check if UPSAMPLING IS NECESSARY AT ALL
-        floored_sizes = torch.floor(ideal_sizes) # decreases sub batch size by length of tensor
-        floored_sizes = torch.maximum(floored_sizes, min_size) # increase sub batch size by different to threshold
+        floored_sizes = torch.floor(
+            ideal_sizes
+        )  # decreases sub batch size by length of tensor
+        floored_sizes = torch.maximum(
+            floored_sizes, min_size
+        )  # increase sub batch size by different to threshold
         # calculate overflow of sub batch
         overflow_size = int(floored_sizes.sum()) - sub_batch_size
 
@@ -401,7 +454,9 @@ class ProcessSampler(t_data.Sampler):
 
         mask_above_threshold = floored_sizes > min_size
         floored_above_threshold = floored_sizes[mask_above_threshold]
-        floored_overflow_sizes = floored_above_threshold / floored_above_threshold.sum() * overflow_size
+        floored_overflow_sizes = (
+            floored_above_threshold / floored_above_threshold.sum() * overflow_size
+        )
         # step 3: floor below median, ceil for weights above
         # sort to be able to use median properlly
         floored_overflow_sizes, floored_oveflow_idx = torch.sort(floored_overflow_sizes)
@@ -420,13 +475,19 @@ class ProcessSampler(t_data.Sampler):
             above_median = floored_oveflow_idx >= median
 
         # apply floor and ceil for targets below and above median
-        floored_overflow_sizes[below_median] = torch.floor(floored_overflow_sizes[below_median])
-        floored_overflow_sizes[above_median] = torch.ceil(floored_overflow_sizes[above_median])
+        floored_overflow_sizes[below_median] = torch.floor(
+            floored_overflow_sizes[below_median]
+        )
+        floored_overflow_sizes[above_median] = torch.ceil(
+            floored_overflow_sizes[above_median]
+        )
 
         # step 4: apply overflow to original floored
         # combine sort indices and threshold mask
         # this returns floored sizes sorted by biggest by indices
-        indices_above_threshold = torch.arange(len(floored_sizes))[mask_above_threshold][floored_oveflow_idx]
+        indices_above_threshold = torch.arange(len(floored_sizes))[
+            mask_above_threshold
+        ][floored_oveflow_idx]
         floored_sizes[indices_above_threshold] -= floored_overflow_sizes
 
         # conver to int but check if values changed, just to be safe
@@ -450,12 +511,21 @@ class ProcessSampler(t_data.Sampler):
         #     raise ValueError(f"Resampling failed: Created batch size of size: {floored_sizes.sum()} but should be {sub_batch_size}")
 
         # store batch size per phase space in dataset
-        logger_inst.debug({k:w.item() for k,w in zip(list(self.process_inst[process_type].keys()), floored_sizes)})
+        logger_inst.debug(
+            {
+                k: w.item()
+                for k, w in zip(
+                    list(self.process_inst[process_type].keys()), floored_sizes
+                )
+            }
+        )
 
         for k, w in zip(list(self.process_inst[process_type].keys()), floored_sizes):
             self.process_inst[process_type][k].sample_size = w.item()
 
-    def sample_batch(self, sample_from: list[str], device: torch.device=torch.device("cpu")):
+    def sample_batch(
+        self, sample_from: list[str], device: torch.device = torch.device("cpu")
+    ):
         """
         This function samples a specific number of events from all datasets instances connected to the sampler.
         Which attribute is samplet is defined by a list of strings in "sample_from". By default ["continuous", "categorical", "target"] is sampled.
@@ -472,7 +542,9 @@ class ProcessSampler(t_data.Sampler):
         # sample sample_size number of events from different process instances
         events = {}
         for _, ds in sorted(self.processes().items()):
-            for attribute, sampled_events in ds.sample(sample_from, device=device).items():
+            for attribute, sampled_events in ds.sample(
+                sample_from, device=device
+            ).items():
                 if attribute not in events:
                     events[attribute] = []
                 events[attribute].append(sampled_events)
@@ -488,7 +560,9 @@ class ProcessSampler(t_data.Sampler):
 
         for attr in attribute:
             if hasattr(self, attr):
-                raise AttributeError(f"Attribute {attr} already exists in sampler class.")
+                raise AttributeError(
+                    f"Attribute {attr} already exists in sampler class."
+                )
 
             def _accesor(*args, dataset_attr=attr, **kwargs):
                 collector = {}
@@ -520,7 +594,7 @@ def create_sampler(
     train=True,
     sample_ratio={"dy": 0.25, "tt": 0.25, "hh": 0.5},
     sub_sample_ratio=None,
-    ):
+):
     # extract data from events and wrap into Datasets
     if not events:
         raise ValueError(f"Sampler is not created due to feeding empty events")
@@ -531,26 +605,28 @@ def create_sampler(
         batch_size=batch_size,
         min_size=min_size,
         sample_ratio=sample_ratio,
-        target_map = target_map,
+        target_map=target_map,
         weight_aggregator_inst=weight_aggregator_inst,
         sub_sample_ratio=sub_sample_ratio,
-        )
+    )
 
     for uid in list(events.keys()):
         (process_type, process_id) = uid
 
-        logger_inst.debug((
-            f"Add {process_type} pid: {process_id} to " +
-            ("Train" if train else "Validation") +
-            " Sampler"
-            ))
+        logger_inst.debug(
+            (
+                f"Add {process_type} pid: {process_id} to "
+                + ("Train" if train else "Validation")
+                + " Sampler"
+            )
+        )
         arrays = events.pop(uid)
 
         # create target tensor from uid
         num_events = len(arrays["continuous"])
         target_value = target_map[process_type]
         target = torch.zeros(size=(num_events, len(target_map)), dtype=torch.float32)
-        target[:, target_value] = 1.
+        target[:, target_value] = 1.0
         process = Process(
             continuous=arrays["continuous"],
             categorical=arrays["categorical"],

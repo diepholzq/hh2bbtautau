@@ -10,16 +10,19 @@ from torch.nn.utils import parametrize
 
 logger_inst = logger.get_logger(__name__)
 
+
 def dummy_identity(layer: torch.nn.Module | None) -> torch.nn.Module:
     if layer is None:
         return torch.nn.Identity()
     return layer
+
 
 class EmptyLayer(torch.nn.Module):
     """
     Empty Layer that return always an empty tensor.
     This kind of layer is useful, when one wants an optional tensor in concatenation operations.
     """
+
     def __init__(self):
         super().__init__()
         self.ndim = 0
@@ -27,13 +30,15 @@ class EmptyLayer(torch.nn.Module):
     def forward(self, *args, **kwargs):
         return torch.tensor([])
 
+
 def dummy_empty(condition, layer: torch.nn.Module | None) -> torch.nn.Module:
     if condition:
         return torch.nn.EmptyLayer()
     return layer
 
+
 class WeightNormalizedLinear(torch.nn.Linear):  # noqa: F811
-    def __init__(self ,*args, normalize=False, **kwargs):
+    def __init__(self, *args, normalize=False, **kwargs):
         """
         If normalize is set to True, Linear layer is replaced by weight normalized layer as described in https://arxiv.org/abs/1602.07868.
         If false, the layer is a normal linear layer.
@@ -47,7 +52,10 @@ class WeightNormalizedLinear(torch.nn.Linear):  # noqa: F811
         """
         super().__init__(*args, **kwargs)
         if normalize:
-            self = torch.nn.utils.parametrizations.weight_norm(self, name='weight', dim=0)
+            self = torch.nn.utils.parametrizations.weight_norm(
+                self, name="weight", dim=0
+            )
+
 
 class PaddingLayer(torch.nn.Module):  # noqa: F811
     def __init__(
@@ -64,8 +72,12 @@ class PaddingLayer(torch.nn.Module):  # noqa: F811
         """
         super().__init__()
 
-        self.padding_value = torch.nn.Buffer(torch.tensor(padding_value).to(torch.float32), persistent=True)
-        self.mask_value = torch.nn.Buffer(torch.tensor(mask_value).to(torch.float32), persistent=True)
+        self.padding_value = torch.nn.Buffer(
+            torch.tensor(padding_value).to(torch.float32), persistent=True
+        )
+        self.mask_value = torch.nn.Buffer(
+            torch.tensor(mask_value).to(torch.float32), persistent=True
+        )
 
     def forward(self, x):
         x = x.to(torch.float32)
@@ -73,10 +85,11 @@ class PaddingLayer(torch.nn.Module):  # noqa: F811
         x[mask] = self.padding_value
         return x
 
+
 class CategoricalTokenizer(torch.nn.Module):  # noqa: F811
     def __init__(
         self,
-        categories: tuple[str ],
+        categories: tuple[str],
         expected_categorical_inputs: dict[str, list[int]],
         empty: int = None,
     ):
@@ -98,7 +111,9 @@ class CategoricalTokenizer(torch.nn.Module):  # noqa: F811
                 Defaults to None.
         """
         super().__init__()
-        self._expected_inputs, self._empty = self.setup(categories, expected_categorical_inputs, empty)
+        self._expected_inputs, self._empty = self.setup(
+            categories, expected_categorical_inputs, empty
+        )
 
         # setup lookuptable, returns dummy if None
         _map, _min = self.LookUpTable(self.pad_to_longest())
@@ -128,8 +143,12 @@ class CategoricalTokenizer(torch.nn.Module):  # noqa: F811
                 return None
             if empty < 0:
                 raise ValueError("Empty value must be positive")
-            if empty in set([item for sublist in expected_inputs.values() for item in sublist]):
-                raise ValueError(f"Empty value {empty} is already used in on the categories")
+            if empty in set(
+                [item for sublist in expected_inputs.values() for item in sublist]
+            ):
+                raise ValueError(
+                    f"Empty value {empty} is already used in on the categories"
+                )
             return empty
 
         # check if cateogries are part of expected_inputs at least one
@@ -171,8 +190,12 @@ class CategoricalTokenizer(torch.nn.Module):  # noqa: F811
         output_per_feature = self.map[self.indices, shifted].transpose(0, 1)
         _str = []
         _str.append("Translation (input : output):")
-        for ind, (categorie, expected_value) in enumerate(self._expected_inputs.items()):
-            _str.append(f"{categorie}: {expected_value} -> {output_per_feature[ind][:len(expected_value)].tolist()}")
+        for ind, (categorie, expected_value) in enumerate(
+            self._expected_inputs.items()
+        ):
+            _str.append(
+                f"{categorie}: {expected_value} -> {output_per_feature[ind][:len(expected_value)].tolist()}"
+            )
         return "\n".join(_str)
 
     def check_for_values_outside_range(self, input_tensor: torch.FloatTensor):
@@ -192,17 +215,19 @@ class CategoricalTokenizer(torch.nn.Module):  # noqa: F811
                 logger_inst.critical(
                     f"{category} has values outside the expected range: {difference}.\n"
                     "The tokenizer will return wrong values for these inputs."
-                    )
+                )
 
     def pad_to_longest(self) -> torch.FloatTensor:
         if not self._expected_inputs:
             return None
         # helper function to pad the input tensor to the longest category
         # first value of the category is used as padding value
-        local_max = max([
-            len(input_for_category)
-            for input_for_category in self._expected_inputs.values()
-        ])
+        local_max = max(
+            [
+                len(input_for_category)
+                for input_for_category in self._expected_inputs.values()
+            ]
+        )
         # pad with first value of the category, so we guarantee to not introduce new values
         array = torch.stack(
             [
@@ -247,7 +272,9 @@ class CategoricalTokenizer(torch.nn.Module):  # noqa: F811
 
         # warn for big categories
         if upper_bound > 100:
-            logger_inst.warning("Be aware that a large number of categories will result in a large sparse lookup array")
+            logger_inst.warning(
+                "Be aware that a large number of categories will result in a large sparse lookup array"
+            )
 
         # create mapping empty
         mapping_array = torch.full(
@@ -262,7 +289,8 @@ class CategoricalTokenizer(torch.nn.Module):  # noqa: F811
         for feature_idx, feature in enumerate(indice_array):
             unique = torch.unique(feature, dim=None)
             mapping_array[feature_idx, unique] = torch.arange(
-                stride, stride + len(unique),
+                stride,
+                stride + len(unique),
                 dtype=torch.int32,
             )
             stride += len(unique)
@@ -274,6 +302,7 @@ class CategoricalTokenizer(torch.nn.Module):  # noqa: F811
         shifted = (x - self.min).to(torch.int32)
         output = self.map[self.indices, shifted]
         return output
+
 
 class CatEmbeddingLayer(torch.nn.Module):  # noqa: F811
     def __init__(
@@ -303,11 +332,14 @@ class CatEmbeddingLayer(torch.nn.Module):  # noqa: F811
         super().__init__()
         self.tokenizer = None
         self.category_dims = category_dims
-        if not self.category_dims and all(x is not None for x in (categories, expected_categorical_inputs)):
+        if not self.category_dims and all(
+            x is not None for x in (categories, expected_categorical_inputs)
+        ):
             self.tokenizer = CategoricalTokenizer(
                 categories=categories,
                 expected_categorical_inputs=expected_categorical_inputs,
-                empty=empty)
+                empty=empty,
+            )
             self.category_dims = self.tokenizer.num_dim
         self.embeddings = torch.nn.Embedding(
             self.category_dims,
@@ -323,7 +355,9 @@ class CatEmbeddingLayer(torch.nn.Module):  # noqa: F811
     def normalize_embeddings(self):
         # normalize the embedding layer to have unit length
         with torch.no_grad():
-            norm = torch.sqrt(torch.sum(self.embeddings.weight**2, dim=-1)).reshape(-1, 1)
+            norm = torch.sqrt(torch.sum(self.embeddings.weight**2, dim=-1)).reshape(
+                -1, 1
+            )
             self.embeddings.weight = torch.nn.Parameter(self.embeddings.weight / norm)
 
     def forward(self, x: torch.FloatTensor) -> torch.FloatTensor:
@@ -340,7 +374,6 @@ class CategoricalInputLayer(torch.nn.Module):
         embedding_layer: torch.nn.Module,
         empty: int = 15,
         padding_categorical_layer: torch.nn.Module | None = None,
-
         *args,
         **kwargs,
     ):
@@ -366,6 +399,7 @@ class CategoricalInputLayer(torch.nn.Module):
         x = self.padding_categorical_layer(x)
         x = self.embedding_layer(x)
         return x
+
 
 class ContinuousInputLayer(torch.nn.Module):  # noqa: F811
     def __init__(
@@ -422,6 +456,7 @@ class OptionalInputLayer(torch.nn.Module):  # noqa: F811
         )
         return x
 
+
 class InputLayer(torch.nn.Module):  # noqa: F811
     def __init__(
         self,
@@ -456,7 +491,8 @@ class InputLayer(torch.nn.Module):  # noqa: F811
                     embedding_dim=embedding_dim,
                     categories=categorical_inputs,
                     expected_categorical_inputs=expected_categorical_inputs,
-                    empty=empty)
+                    empty=empty,
+                )
             # otherwise ?
             elif category_dims:
                 self.embedding_layer = CatEmbeddingLayer(
@@ -474,17 +510,20 @@ class InputLayer(torch.nn.Module):  # noqa: F811
         self.padding_continuous_layer = dummy_identity(padding_continuous_layer)
         self.padding_categorical_layer = dummy_identity(padding_categorical_layer)
 
-
     def dummy_identity(self, layer: torch.nn.Module | None) -> torch.nn.Module:
         if layer is None:
             return torch.nn.Identity()
         return layer
 
-    def categorical_preprocessing_pipeline(self, x: torch.FloatTensor) -> torch.FloatTensor:
+    def categorical_preprocessing_pipeline(
+        self, x: torch.FloatTensor
+    ) -> torch.FloatTensor:
         x = self.padding_categorical_layer(x)
         return self.embedding_layer(x)
 
-    def continuous_preprocessing_pipeline(self, x: torch.FloatTensor) -> torch.FloatTensor:
+    def continuous_preprocessing_pipeline(
+        self, x: torch.FloatTensor
+    ) -> torch.FloatTensor:
         # preprocessing
         x = self.padding_continuous_layer(x)
         x = self.rotation_layer(x)
@@ -502,6 +541,7 @@ class InputLayer(torch.nn.Module):  # noqa: F811
         )
         return x
 
+
 class DenseNetBlock(torch.nn.Module):
     def __init__(
         self,
@@ -509,12 +549,12 @@ class DenseNetBlock(torch.nn.Module):
         output_nodes,
         skip_connection_init=1.0,
         freeze_skip_connection=False,
-        activation_functions = "PReLu",
+        activation_functions="PReLu",
         eps=1e-5,
         normalize=False,
         *args,
         **kwargs,
-        ):
+    ):
         # TODO Docstring
         super().__init__(*args, **kwargs)
         self.input_dim = input_nodes
@@ -524,17 +564,20 @@ class DenseNetBlock(torch.nn.Module):
             output_nodes=output_nodes,
             activation_functions=activation_functions,
             normalize=normalize,
-            eps=eps
+            eps=eps,
         )
-        self.skip_connection_amplifier = torch.nn.Parameter(torch.ones(1) * skip_connection_init)
+        self.skip_connection_amplifier = torch.nn.Parameter(
+            torch.ones(1) * skip_connection_init
+        )
         if freeze_skip_connection:
             self.skip_connection_amplifier.requires_grad = False
 
     def forward(self, x):
         _input = x * self.skip_connection_amplifier
         x = self.dense_block(x)
-        x = torch.concatenate((x, _input), dim = 1)
+        x = torch.concatenate((x, _input), dim=1)
         return x
+
 
 class ResNetBlock(torch.nn.Module):  # noqa: F811
     def __init__(
@@ -544,7 +587,7 @@ class ResNetBlock(torch.nn.Module):  # noqa: F811
         skip_connection_init: float = 1,
         freeze_skip_connection: float = False,
         eps: float = 1e-5,
-        normalize = True,
+        normalize=True,
         *args,
         **kwargs,
     ):
@@ -567,15 +610,20 @@ class ResNetBlock(torch.nn.Module):  # noqa: F811
         super().__init__(*args, **kwargs)
 
         self.nodes = nodes
-        self.act_func = self._get_attr(torch.nn.modules.activation, activation_functions)()
-        self.skip_connection_amplifier = torch.nn.Parameter(torch.ones(1) * skip_connection_init)
+        self.act_func = self._get_attr(
+            torch.nn.modules.activation, activation_functions
+        )()
+        self.skip_connection_amplifier = torch.nn.Parameter(
+            torch.ones(1) * skip_connection_init
+        )
         if freeze_skip_connection:
             self.skip_connection_amplifier.requires_grad = False
 
-        self.linear = WeightNormalizedLinear(self.nodes, self.nodes, bias=True, normalize=normalize)
+        self.linear = WeightNormalizedLinear(
+            self.nodes, self.nodes, bias=True, normalize=normalize
+        )
         self.bn = torch.nn.BatchNorm1d(self.nodes, eps=eps)
         self.act_fn = self.act_func
-
 
     def _get_attr(self, obj, attr):
         for o in dir(obj):
@@ -591,6 +639,7 @@ class ResNetBlock(torch.nn.Module):  # noqa: F811
         x = self.act_fn(x)
         x = x + skip_connection
         return x
+
 
 class DenseBlock(torch.nn.Module):  # noqa: F811
     def __init__(
@@ -615,9 +664,13 @@ class DenseBlock(torch.nn.Module):  # noqa: F811
         self.input_dim = input_nodes
         self.output_dim = output_nodes
 
-        self.linear = WeightNormalizedLinear(self.input_dim, self.output_dim, bias=True, normalize=normalize)
+        self.linear = WeightNormalizedLinear(
+            self.input_dim, self.output_dim, bias=True, normalize=normalize
+        )
         self.bn = torch.nn.BatchNorm1d(self.output_dim, eps=eps)
-        self.act_fn = self._get_attr(torch.nn.modules.activation, activation_functions)()
+        self.act_fn = self._get_attr(
+            torch.nn.modules.activation, activation_functions
+        )()
 
     def _get_attr(self, obj, attr):
         for o in dir(obj):
@@ -631,6 +684,7 @@ class DenseBlock(torch.nn.Module):  # noqa: F811
         x = self.bn(x)
         x = self.act_fn(x)
         return x
+
 
 class ResNetPreactivationBlock(torch.nn.Module):  # noqa: F811
     def __init__(
@@ -664,15 +718,23 @@ class ResNetPreactivationBlock(torch.nn.Module):  # noqa: F811
         """
         super().__init__()
         self.nodes = nodes
-        self.act_func = self._get_attr(torch.nn.modules.activation, activation_functions)()
-        self.skip_connection_amplifier = torch.nn.Parameter(torch.ones(1) * skip_connection_init)
+        self.act_func = self._get_attr(
+            torch.nn.modules.activation, activation_functions
+        )()
+        self.skip_connection_amplifier = torch.nn.Parameter(
+            torch.ones(1) * skip_connection_init
+        )
         if freeze_skip_connection:
             self.skip_connection_amplifier.requires_grad = False
 
-        self.linear_1 = WeightNormalizedLinear(self.nodes, self.nodes, bias=True, normalize=normalize)
+        self.linear_1 = WeightNormalizedLinear(
+            self.nodes, self.nodes, bias=True, normalize=normalize
+        )
         self.bn_1 = torch.nn.BatchNorm1d(self.nodes, eps=eps)
         self.act_fn_1 = self.act_func
-        self.linear_2 = WeightNormalizedLinear(self.nodes, self.nodes, bias=True, normalize=normalize)
+        self.linear_2 = WeightNormalizedLinear(
+            self.nodes, self.nodes, bias=True, normalize=normalize
+        )
         self.bn_2 = torch.nn.BatchNorm1d(self.nodes, eps=eps)
         self.act_fn2 = self.act_func
 
@@ -697,8 +759,8 @@ class ResNetPreactivationBlock(torch.nn.Module):  # noqa: F811
 class StandardizeLayer(torch.nn.Module):  # noqa: F811
     def __init__(
         self,
-        mean: float = 0.,
-        std: float = 1.,
+        mean: float = 0.0,
+        std: float = 1.0,
     ):
         """
         Standardizes the input tensor with given *mean* and *std* tensor.
@@ -718,10 +780,11 @@ class StandardizeLayer(torch.nn.Module):  # noqa: F811
 
     def _type_check(self, mean: torch.FloatTensor, std: torch.FloatTensor):
         if not all([isinstance(value, torch.Tensor) for value in [mean, std]]):
-            raise TypeError(f"given mean or std needs to be tensor, but is {type(mean)}{type(std)}")
+            raise TypeError(
+                f"given mean or std needs to be tensor, but is {type(mean)}{type(std)}"
+            )
 
-    def update_buffer(self, mean: torch.
-                        tensor, std: torch.tensor):
+    def update_buffer(self, mean: torch.tensor, std: torch.tensor):
         """
         Update the mean and std parameter.
 
@@ -733,21 +796,32 @@ class StandardizeLayer(torch.nn.Module):  # noqa: F811
         self.mean = mean.type_as(self.mean)
         self.std = std.type_as(self.std)
 
+
 class RotatePhiLayer(torch.nn.Module):  # noqa: F811
     def __init__(
         self,
         columns: list[str] | None,
         ref_phi_columns: list[str] | None = ("lepton1", "lepton2"),
-        rotate_columns: list[str] | None = ("bjet1", "bjet2", "fatjet", "lepton1", "lepton2"),
+        rotate_columns: list[str] | None = (
+            "bjet1",
+            "bjet2",
+            "fatjet",
+            "lepton1",
+            "lepton2",
+        ),
         separator="_",
     ):
         """
         Rotate specific *columns* given in *rotate_columns* relative to reference in *ref_phi_columns*.
         """
         super().__init__()
-        self.separator=separator
-        self.ref_indices = torch.nn.Buffer(self.find_indices_of(columns, ref_phi_columns, True), persistent=True)
-        self.rotate_indices = torch.nn.Buffer(self.find_indices_of(columns, rotate_columns, True), persistent=True)
+        self.separator = separator
+        self.ref_indices = torch.nn.Buffer(
+            self.find_indices_of(columns, ref_phi_columns, True), persistent=True
+        )
+        self.rotate_indices = torch.nn.Buffer(
+            self.find_indices_of(columns, rotate_columns, True), persistent=True
+        )
 
     def load_state_dict(self, state_dict: dict, strict: bool, assign: bool):
         # overload load_state_dict to set buffer sizes to same of state dict
@@ -760,19 +834,23 @@ class RotatePhiLayer(torch.nn.Module):  # noqa: F811
         search_in: list[str],
         search_for: list[str],
         _expand: bool = False,
-
     ) -> torch.FloatTensor | None:
         if search_in is None or search_for is None:
             return None
 
         if _expand:
             search_for = self._expand(search_for, separator=self.separator)
-        return torch.tensor([tuple(map(search_in.index, particle)) for particle in search_for])
+        return torch.tensor(
+            [tuple(map(search_in.index, particle)) for particle in search_for]
+        )
 
     def _expand(self, columns: list[str] | str, separator="_") -> list[tuple[str, str]]:
         # adds px, py to columns and return them as tuple
         columns = [columns] if isinstance(columns, str) else columns
-        return [tuple(f"{col}{separator}{suffix}" for suffix in ("px", "py")) for col in columns]
+        return [
+            tuple(f"{col}{separator}{suffix}" for suffix in ("px", "py"))
+            for col in columns
+        ]
 
     def calc_phi(
         self,
@@ -798,8 +876,11 @@ class RotatePhiLayer(torch.nn.Module):  # noqa: F811
             # right edge -> pi/2, left edge -> -pi/2, both 0 -> 0
             torch.where(torch.logical_and(x == 0, y > 0), (pi / 2), phis, out=phis)
             torch.where(torch.logical_and(x == 0, y < 0), -(pi / 2), phis, out=phis)
-            torch.where(torch.logical_and(x == 0, y == 0), torch.tensor(0), phis, out=phis)
+            torch.where(
+                torch.logical_and(x == 0, y == 0), torch.tensor(0), phis, out=phis
+            )
             return phis + phi_shift
+
         return arctan2(x=x, y=y)
 
     def rotate_pt_to_phi(
@@ -836,7 +917,9 @@ class RotatePhiLayer(torch.nn.Module):  # noqa: F811
         x, y = ref_indices
         return array[:, x], array[:, y]
 
-    def rotate_columns(self, array: torch.FloatTensor, ref_phi: torch.FloatTensor) -> torch.FloatTensor:
+    def rotate_columns(
+        self, array: torch.FloatTensor, ref_phi: torch.FloatTensor
+    ) -> torch.FloatTensor:
         # px, py pairs in fixed order
         for rotate_indice in self.rotate_indices:
             px, py = self.get_kinematics(array, rotate_indice)
@@ -862,9 +945,16 @@ class LBN(torch.nn.Module):
     """
 
     KNOWN_FEATURES = [
-        "e", "px", "py", "pz",
-        "pt", "eta", "phi", "m",
-        "pair_cos", "pair_dr",
+        "e",
+        "px",
+        "py",
+        "pz",
+        "pt",
+        "eta",
+        "phi",
+        "m",
+        "pair_cos",
+        "pair_dr",
     ]
 
     DEFAULT_FEATURES = ["e", "pt", "eta", "phi", "m", "pair_cos"]
@@ -881,13 +971,14 @@ class LBN(torch.nn.Module):
     ) -> None:
         super().__init__()
 
-
         # validate features
         if features is None:
             features = self.DEFAULT_FEATURES
         for f in features:
             if f not in self.KNOWN_FEATURES:
-                raise ValueError(f"unknown feature '{f}', known features are: {self.KNOWN_FEATURES}")
+                raise ValueError(
+                    f"unknown feature '{f}', known features are: {self.KNOWN_FEATURES}"
+                )
 
         # store settings
         self.N = N
@@ -899,11 +990,18 @@ class LBN(torch.nn.Module):
 
         # constants
         self.register_buffer("I4", torch.eye(4, dtype=torch.float32))  # (4, 4)
-        self.register_buffer("U", torch.tensor([[-1, 0, 0, 0], *(3 * [[0, -1, -1, -1]])], dtype=torch.float32))
+        self.register_buffer(
+            "U",
+            torch.tensor(
+                [[-1, 0, 0, 0], *(3 * [[0, -1, -1, -1]])], dtype=torch.float32
+            ),
+        )
         self.register_buffer("U1", self.U + 1)
         self.register_buffer(
             "lower_tril_indices",
-            torch.arange(M**2).reshape((M, M))[torch.tril(torch.ones(M, M, dtype=torch.bool), -1)],
+            torch.arange(M**2).reshape((M, M))[
+                torch.tril(torch.ones(M, M, dtype=torch.bool), -1)
+            ],
         )
 
         # randomly initialized weights for projections
@@ -916,19 +1014,19 @@ class LBN(torch.nn.Module):
         n_pair = sum(1 for f in self.features if f.startswith("pair_"))
 
         # compute output dimension
-        n = (
-            (
-            len(self.features) - n_pair) * self.M +
-            n_pair * (self.M**2 - self.M) // 2
-        )
+        n = (len(self.features) - n_pair) * self.M + n_pair * (self.M**2 - self.M) // 2
         return n
 
     def ndim(self):
         # dim normal features: m * 4
-        non_pair_features_dim = len([f for f in self.features if "pair" not in f]) * self.M
+        non_pair_features_dim = (
+            len([f for f in self.features if "pair" not in f]) * self.M
+        )
 
         # dim pair-wise features is MxM Matrix, which diagonal = 0, and symmetric: (M^2 - M)/2
-        pair_features_dim = len([f for f in self.features if "pair" in f]) * ((self.M**2 - self.M) / 2)
+        pair_features_dim = len([f for f in self.features if "pair" in f]) * (
+            (self.M**2 - self.M) / 2
+        )
         num = int(non_pair_features_dim + pair_features_dim)
         return num
 
@@ -967,35 +1065,47 @@ class LBN(torch.nn.Module):
         restframe_vecs = restframe_vecs.permute(0, 2, 1)
 
         # regularize vectors such that e > p
-        particle_p = torch.sum(particle_vecs[..., PX:]**2, dim=-1)**0.5  # (B, M)
+        particle_p = torch.sum(particle_vecs[..., PX:] ** 2, dim=-1) ** 0.5  # (B, M)
         # avoid in-place modifications which break autograd when tensors are used in multiple
         # places; construct a new tensor with the adjusted energy component
         new_particle_E = torch.maximum(particle_vecs[..., E], particle_p + self.eps)
         particle_vecs = torch.stack(
-            [new_particle_E, particle_vecs[..., PX], particle_vecs[..., PY], particle_vecs[..., PZ]],
+            [
+                new_particle_E,
+                particle_vecs[..., PX],
+                particle_vecs[..., PY],
+                particle_vecs[..., PZ],
+            ],
             dim=-1,
         )
 
-        restframe_p = torch.sum(restframe_vecs[..., PX:]**2, dim=-1)**0.5  # (B, M)
+        restframe_p = torch.sum(restframe_vecs[..., PX:] ** 2, dim=-1) ** 0.5  # (B, M)
         new_restframe_E = torch.maximum(restframe_vecs[..., E], restframe_p + self.eps)
         restframe_vecs = torch.stack(
-            [new_restframe_E, restframe_vecs[..., PX], restframe_vecs[..., PY], restframe_vecs[..., PZ]],
+            [
+                new_restframe_E,
+                restframe_vecs[..., PX],
+                restframe_vecs[..., PY],
+                restframe_vecs[..., PZ],
+            ],
             dim=-1,
         )
 
         # create boost objects
-        restframe_m = (restframe_vecs[..., E]**2 - restframe_p**2)**0.5  # (B, M)
-        gamma = restframe_vecs[..., E] / (restframe_m + self.eps) # (B, M)
+        restframe_m = (restframe_vecs[..., E] ** 2 - restframe_p**2) ** 0.5  # (B, M)
+        gamma = restframe_vecs[..., E] / (restframe_m + self.eps)  # (B, M)
         beta = restframe_p / restframe_vecs[..., E]  # (B, M)
         beta_vecs = restframe_vecs[..., PX:] / restframe_vecs[..., E, None]  # (B, M, 3)
         n_vecs = beta_vecs / beta[..., None]  # (B, M, 3)
-        e_vecs = torch.cat([torch.ones_like(n_vecs[..., :1]), -n_vecs], dim=-1)  # (B, M, 4)
+        e_vecs = torch.cat(
+            [torch.ones_like(n_vecs[..., :1]), -n_vecs], dim=-1
+        )  # (B, M, 4)
 
         # build Lambda
         Lambda = self.I4 + (
-            (self.U + gamma[..., None, None]) *
-            (self.U1 * beta[..., None, None] - self.U) *
-            (e_vecs[..., None] * e_vecs[..., None, :])
+            (self.U + gamma[..., None, None])
+            * (self.U1 * beta[..., None, None] - self.U)
+            * (e_vecs[..., None] * e_vecs[..., None, :])
         )  # (B, M, 4, 4)
 
         # apply boosting
@@ -1006,6 +1116,7 @@ class LBN(torch.nn.Module):
 
         # cached feature provision
         cache = {}
+
         def get(feature: str) -> torch.Tensor:
             # check cache first
             if feature in cache:
@@ -1021,37 +1132,51 @@ class LBN(torch.nn.Module):
                 return boosted_vecs[..., PZ]
             # cached  access
             if feature == "pt2":
-                f = get("px")**2 + get("py")**2
+                f = get("px") ** 2 + get("py") ** 2
             elif feature == "pt":
-                f = get("pt2")**0.5
+                f = get("pt2") ** 0.5
             elif feature == "p2":
-                f = get("pt2") + get("pz")**2
+                f = get("pt2") + get("pz") ** 2
             elif feature == "p":
-                f = get("p2")**0.5
+                f = get("p2") ** 0.5
             elif feature == "eta":
                 # clamp when near -1 or 1
-                ratio = torch.clip(get("pz") / get("p"), min = -1 + self.eps, max = 1 - self.eps)
+                ratio = torch.clip(
+                    get("pz") / get("p"), min=-1 + self.eps, max=1 - self.eps
+                )
                 f = torch.atanh(ratio)
             elif feature == "phi":
                 f = torch.atan2(get("py"), get("px"))
             elif feature == "m":
-                f = (torch.maximum(get("e")**2, get("p2")) - get("p"))**0.5
+                f = (torch.maximum(get("e") ** 2, get("p2")) - get("p")) ** 0.5
             elif feature == "pair_cos":
                 boosted_pvecs = boosted_vecs[..., PX:]  # (B, M, 3)
                 boosted_p = get("p")
                 f = (
-                    (boosted_pvecs @ boosted_pvecs.transpose(1, 2)) /
-                    (boosted_p[..., None] @ boosted_p[:, None, :])
-                ).flatten(start_dim=1)[..., self.lower_tril_indices]  # (B, (M**2-M)/2)
+                    (boosted_pvecs @ boosted_pvecs.transpose(1, 2))
+                    / (boosted_p[..., None] @ boosted_p[:, None, :])
+                ).flatten(start_dim=1)[
+                    ..., self.lower_tril_indices
+                ]  # (B, (M**2-M)/2)
             elif feature == "pair_dr":
                 boosted_phi = get("phi")
                 boosted_eta = get("eta")
-                boosted_dphi = abs(boosted_phi[..., None] - boosted_phi[:, None, :])  # (B, M, M)
-                boosted_dphi = boosted_dphi.flatten(start_dim=1)[..., self.lower_tril_indices]  # (B, (M**2-M)/2)
-                boosted_dphi = torch.where(boosted_dphi > torch.pi, 2 * torch.pi - boosted_dphi, boosted_dphi)
-                boosted_deta = boosted_eta[..., None] - boosted_eta[:, None, :]  # (B, M, M)
-                boosted_deta = boosted_deta.flatten(start_dim=1)[..., self.lower_tril_indices]  # (B, (M**2-M)/2)
-                f = (boosted_dphi**2 + boosted_deta**2)**0.5
+                boosted_dphi = abs(
+                    boosted_phi[..., None] - boosted_phi[:, None, :]
+                )  # (B, M, M)
+                boosted_dphi = boosted_dphi.flatten(start_dim=1)[
+                    ..., self.lower_tril_indices
+                ]  # (B, (M**2-M)/2)
+                boosted_dphi = torch.where(
+                    boosted_dphi > torch.pi, 2 * torch.pi - boosted_dphi, boosted_dphi
+                )
+                boosted_deta = (
+                    boosted_eta[..., None] - boosted_eta[:, None, :]
+                )  # (B, M, M)
+                boosted_deta = boosted_deta.flatten(start_dim=1)[
+                    ..., self.lower_tril_indices
+                ]  # (B, (M**2-M)/2)
+                f = (boosted_dphi**2 + boosted_deta**2) ** 0.5
             else:
                 raise RuntimeError(f"unknown feature '{feature}'")
             # cache and return
@@ -1062,12 +1187,19 @@ class LBN(torch.nn.Module):
         if not self.clip_weights:
             new_boosted_E = torch.maximum(boosted_vecs[..., E], get("p") + self.eps)
             boosted_vecs = torch.stack(
-                [new_boosted_E, boosted_vecs[..., PX], boosted_vecs[..., PY], boosted_vecs[..., PZ]],
+                [
+                    new_boosted_E,
+                    boosted_vecs[..., PX],
+                    boosted_vecs[..., PY],
+                    boosted_vecs[..., PZ],
+                ],
                 dim=-1,
             )
 
         # collect and combine features
-        features = torch.cat([get(feature) for feature in self.features], dim=1)  # (B, F)
+        features = torch.cat(
+            [get(feature) for feature in self.features], dim=1
+        )  # (B, F)
         return features
 
 
@@ -1108,10 +1240,14 @@ class LBNFeaturerExtractor(torch.nn.Module):
                     particle_components[component] = idx
             return particle_components
 
-        particles_components = {particle: find_components(particle) for particle in self._particles}
+        particles_components = {
+            particle: find_components(particle) for particle in self._particles
+        }
 
         # filter the indices
-        indicies = lambda particle, features : [particles_components[particle][f] for f in features]
+        indicies = lambda particle, features: [
+            particles_components[particle][f] for f in features
+        ]
         particles = {}
 
         for f in self._particles[:-3]:
@@ -1130,23 +1266,29 @@ class LBNFeaturerExtractor(torch.nn.Module):
         # met is special, since we need to reconstruct it: (pt, px, py ,0)
         met_kinematics = tensor[:, self.particles["met"]]
 
-        met_pt = torch.sqrt(torch.sum(met_kinematics**2, axis=1)) # TODO float64?
+        met_pt = torch.sqrt(torch.sum(met_kinematics**2, axis=1))  # TODO float64?
         met_pz = torch.zeros_like(met_pt)
-        met = torch.stack((met_pt, met_kinematics[:, 0], met_kinematics[:, 1], met_pz), axis=1)
+        met = torch.stack(
+            (met_pt, met_kinematics[:, 0], met_kinematics[:, 1], met_pz), axis=1
+        )
         t.append(met)
         # add nu, separetley since pt = e: (pt, px, py, pz)
         for num in (1, 2):
             nu_kinematics = tensor[:, self.particles[f"nu{num}"]]
             nu_e = torch.sqrt(torch.sum(nu_kinematics**2, axis=1))
-            nu = torch.stack((nu_e, nu_kinematics[:, 0], nu_kinematics[:, 1], nu_kinematics[:, 2]), axis=1)
+            nu = torch.stack(
+                (nu_e, nu_kinematics[:, 0], nu_kinematics[:, 1], nu_kinematics[:, 2]),
+                axis=1,
+            )
             t.append(nu)
         # combine everything
-        t = torch.stack(t, axis=-1) # B, FEATURES (4), particles (7)
+        t = torch.stack(t, axis=-1)  # B, FEATURES (4), particles (7)
         return t
 
     def forward(self, x):
         return self.slice_particles_from_tensor(x)
         # return the indices of all particle features so the layer can slice them from tensors
+
 
 class LBN_DNN(torch.nn.Module):
     def __init__(
@@ -1161,11 +1303,18 @@ class LBN_DNN(torch.nn.Module):
         **kwargs,
     ):
         super().__init__()
-        self.lbn_feature_extractor = LBNFeaturerExtractor(continuous_features=continuous_features)
+        self.lbn_feature_extractor = LBNFeaturerExtractor(
+            continuous_features=continuous_features
+        )
 
-        self.lbn = LBN(M=M, N=self.lbn_feature_extractor.num_particles, clip_weights=clip_weights, eps=eps, weight_init_scale=weight_init_scale)
+        self.lbn = LBN(
+            M=M,
+            N=self.lbn_feature_extractor.num_particles,
+            clip_weights=clip_weights,
+            eps=eps,
+            weight_init_scale=weight_init_scale,
+        )
         self.lbn_batch_norm = torch.nn.BatchNorm1d(self.lbn.ndim())
-
 
     @property
     def ndim(self):
@@ -1180,13 +1329,8 @@ class LBN_DNN(torch.nn.Module):
 
 class BinningLayerV1(torch.nn.Module):
     def __init__(
-        self,
-        init_edges: list[float],
-        kernel_cls,
-        kernel_cfg,
-        *args,
-        **kwargs
-        ):
+        self, init_edges: list[float], kernel_cls, kernel_cfg, *args, **kwargs
+    ):
         """
         Args:
             init_edges (list[float]): _description_
@@ -1207,7 +1351,7 @@ class BinningLayerV1(torch.nn.Module):
     def get_edges(self):
         e = self.edges.detach()
         low, up = e[:-1], e[1:]
-        return [(l,u) for l,u in zip(low,up)]
+        return [(l, u) for l, u in zip(low, up)]
 
     def build_cfg(self, base_cfg):
         config = {}
@@ -1251,10 +1395,10 @@ class BinningLayerV1(torch.nn.Module):
     #     return kernels
     def __repr__(self):
         edges = self.get_edges()
-        edges = [(float(l), float(u)) for l,u in edges]
+        edges = [(float(l), float(u)) for l, u in edges]
 
         msg = "Bin Index | Edge Value\n"
-        msg+="\n".join([f"{idx}:{edge}" for idx, edge in enumerate(edges)])
+        msg += "\n".join([f"{idx}:{edge}" for idx, edge in enumerate(edges)])
         return msg
 
     @property
@@ -1280,10 +1424,10 @@ class BinningLayerV2(torch.nn.Module):
         num_bins: int,
         lower_bound: float,
         upper_bound: float,
-        space_fn: callable, # like linspace or logspace to create initial edges
+        space_fn: callable,  # like linspace or logspace to create initial edges
         *args,
-        **kwargs
-        ):
+        **kwargs,
+    ):
         """
         Args:
             init_edges (list[float]): _description_
@@ -1295,12 +1439,15 @@ class BinningLayerV2(torch.nn.Module):
         self.lower_bound = lower_bound
         self.upper_bound = upper_bound
 
-        self.bin_lengths = torch.nn.Parameter(self.init_learnable_edges(space_fn=space_fn), requires_grad=True)
-
+        self.bin_lengths = torch.nn.Parameter(
+            self.init_learnable_edges(space_fn=space_fn), requires_grad=True
+        )
 
     def init_learnable_edges(self, space_fn):
         # create initial edges with space fn, then create learnable edges by taking the difference of the initial edges
-        space_intervalls = space_fn(self.lower_bound, self.upper_bound, self.num_bins + 1)
+        space_intervalls = space_fn(
+            self.lower_bound, self.upper_bound, self.num_bins + 1
+        )
         differences = space_intervalls[1:] - space_intervalls[:-1]
         return differences
 
@@ -1323,8 +1470,8 @@ class BinningLayerV2(torch.nn.Module):
         """
 
         # prepare edges and function
-        start, end = 0, 0 # TODO
-        gaussian_fn = lambda x, shift, std: torch.exp(-((x - shift) / (2* std))**2)
+        start, end = 0, 0  # TODO
+        gaussian_fn = lambda x, shift, std: torch.exp(-(((x - shift) / (2 * std)) ** 2))
         # set values depending on the bin type
         if bin_type == "overflow":
             f = torch.where(x < start, gaussian_fn(x, shift=start), 1)
@@ -1334,8 +1481,6 @@ class BinningLayerV2(torch.nn.Module):
             f = torch.where(x < start, gaussian_fn(x, shift=start), 1)
             f = torch.where(x > end, gaussian_fn(x, shift=end), f)
         return f
-
-
 
     def forward(self, x):
         scaled_x = []
@@ -1351,13 +1496,12 @@ class BinningLayerRight(torch.nn.Module):
         self,
         num_bins: int,
         bounds: tuple[float],
-
-        binning_fn: callable, # like linspace or logspace to create initial edges
+        binning_fn: callable,  # like linspace or logspace to create initial edges
         kernel_cls,
         kernel_cfg,
         *args,
-        **kwargs
-        ):
+        **kwargs,
+    ):
         """
         Creates *num_bins* kernel instances of *kernel_cls* with configuration defined in *kernel_cfg*.
         The initial edge are defined by a given binning function *binning_fn*.
@@ -1381,8 +1525,6 @@ class BinningLayerRight(torch.nn.Module):
         self.kernel_cls = kernel_cls
         self.kernel_cfg = kernel_cfg
         self.kernel_cache = None
-
-
 
     @property
     def lower_edge(self):
@@ -1408,7 +1550,7 @@ class BinningLayerRight(torch.nn.Module):
         shift = self.lower_edge
         right_edge = shift + torch.cumsum(abs_width, dim=0)
         left_edge = right_edge - abs_width
-        return torch.stack((left_edge, right_edge), dim = 1)
+        return torch.stack((left_edge, right_edge), dim=1)
 
     def init_learnable_edges(self, space_fn):
         """
@@ -1425,9 +1567,11 @@ class BinningLayerRight(torch.nn.Module):
         relative_width = (intervalls[1:] - intervalls[:-1]) / self.interval
 
         self.relative_bin_width = torch.nn.Buffer(relative_width)
-        parametrize.register_parametrization(self, "relative_bin_width", torch.nn.Softmax(dim=0))
+        parametrize.register_parametrization(
+            self, "relative_bin_width", torch.nn.Softmax(dim=0)
+        )
 
-    def kernels(self ,load_cache=False) -> torch.tensor:
+    def kernels(self, load_cache=False) -> torch.tensor:
         """
         Actual kernel implementation, containing 3 parts: left gaussian, horizontal 1 and right gaussian.
         A value *x* is mapped to an y value using these function.
@@ -1454,7 +1598,7 @@ class BinningLayerRight(torch.nn.Module):
                 edges=edge,
                 bin_type=bin_type,
                 **self.kernel_cfg,
-                )
+            )
             kernels.append(kernel)
         # save in cache
         self.kernel_cache = kernels

@@ -10,10 +10,11 @@ export TENSORBOARD_DIR=${STORE_DIR}/tensorboard # tensorboard storage
 export LOG_LEVEL="DEBUG"
 export FILE_LOG_LEVEL="DEBUG"
 
-# location where the input data can be found.
-export ERA=prod24                                                              # possible eras: prod14, prod20, prod24 (20 only has 22pre)
+# location where the input data can be found
+export ERA=prod24                                                              # possible eras: prod14, prod20, prod24 (20 only has 22pre
 export TRAINING_ROOT="/data/dust/user/riegerma/hh2bbtautau/run3_training_data" # normal training root
 # export TRAINING_ROOT="/data/dust/user/wiedersb/machine_learning_data" # quintus training root
+# export TRAINING_ROOT="/data/dust/user/diepholq/HH_DNN/machine_learning_data" # quintus training root for detector level
 export INPUT_DATA_DIR="${TRAINING_ROOT}/${ERA}"
 
 # virtualenv handling

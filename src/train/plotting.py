@@ -29,7 +29,7 @@ def plot_input_features(data_map, columns):
     num_features = len(columns)
     num_cols = 4
     num_row = int(np.ceil(num_features / num_cols))
-    fig_size = (5 * num_cols, 4 * num_row) # wide, tall
+    fig_size = (5 * num_cols, 4 * num_row)  # wide, tall
 
     fig, axes = plt.subplots(nrows=num_row, ncols=num_cols, figsize=fig_size)
     for ax, _route in zip(axes.flatten(), columns):
@@ -55,6 +55,7 @@ def plot_input_features(data_map, columns):
         # plot without empty values, set empty values to underflow bin
         _ = ax.hist(np.clip(data, a_min=lower_edge, a_max=None), bins=bins)
     return fig, axes
+
 
 # def network_binary_predictions(y_true, y_pred, target_map, normalize=True, single_legend=False, **kwargs):
 #     # create a figure with subplots for each node, where the score is shown
@@ -106,13 +107,13 @@ def plot_input_features(data_map, columns):
 #     return fig, axes
 
 
-
-
-def network_predictions(y_true, y_pred, target_map, normalize=True, single_legend=False, **kwargs):
+def network_predictions(
+    y_true, y_pred, target_map, normalize=True, single_legend=False, **kwargs
+):
     # create a figure with subplots for each node, where the score is shown
     # nodes are defined over target_map order
 
-    fig, axes = plt.subplots(1,len(target_map), figsize=(8 * len(target_map), 8))
+    fig, axes = plt.subplots(1, len(target_map), figsize=(8 * len(target_map), 8))
     fig.suptitle(kwargs.pop("title", None))
     weight = None
     # get events that are predicted correctly for each class
@@ -125,13 +126,14 @@ def network_predictions(y_true, y_pred, target_map, normalize=True, single_legen
                 axes[node_idx].set_ylim(top=len(y_pred))
             else:
                 axes[node_idx].set_yscale("linear")
-                axes[node_idx].set_ylim(top=1.)
+                axes[node_idx].set_ylim(top=1.0)
                 y_label += " normalized"
 
-            axes[node_idx].set_xlabel(f"{node} node", )
+            axes[node_idx].set_xlabel(
+                f"{node} node",
+            )
             axes[node_idx].set_ylabel(y_label)
             axes[node_idx].grid()
-
 
             # get events of specific cls (e.g. hh)
             correct_cls_mask = y_true[:, data_idx] == 1
@@ -139,7 +141,9 @@ def network_predictions(y_true, y_pred, target_map, normalize=True, single_legen
             filtered_predictions = y_pred[correct_cls_mask][:, node_idx]
 
             if normalize:
-                weight = np.full(filtered_predictions.shape, 1 / len(filtered_predictions))
+                weight = np.full(
+                    filtered_predictions.shape, 1 / len(filtered_predictions),
+                )
 
             _ = axes[node_idx].hist(
                 filtered_predictions,
@@ -149,7 +153,7 @@ def network_predictions(y_true, y_pred, target_map, normalize=True, single_legen
                 label=data_cls,
                 weights=weight,
                 **kwargs,
-        )
+            )
         if not single_legend:
             axes[node_idx].legend()
     if single_legend:
@@ -158,16 +162,17 @@ def network_predictions(y_true, y_pred, target_map, normalize=True, single_legen
         fig.legend(lines, labels)
     return fig, axes
 
-class BinningTimeSeries():
+
+class BinningTimeSeries:
     def __init__(self):
-        self.bin_edges_per_iteration = {} # iteration: edges
+        self.bin_edges_per_iteration = {}  # iteration: edges
 
     def __setitem__(self, key, value):
         self.bin_edges_per_iteration[key] = value
 
     def plot(self):
-        xlabel="Batch Iteration"
-        ylabel="Bin Population"
+        xlabel = "Batch Iteration"
+        ylabel = "Bin Population"
 
         bin_width = 1.0
         bottom = np.zeros(len(self.bin_edges_per_iteration.keys()))
@@ -175,47 +180,49 @@ class BinningTimeSeries():
         x = self.bin_edges_per_iteration.keys()
         # need to invert data from iteration: edges -> bins : edges
         y = np.array(self.bin_edges_per_iteration.values()).transpose()
-        bins = {_x:_y for _x,_y in zip(x,y)}
+        bins = {_x: _y for _x, _y in zip(x, y)}
         fig, ax = plt.subplots()
 
-
-    #     bottom = np.zeros(5)
-    # ...:         bins = {_x:_y for _x,_y in zip(x,y)}
-    # ...:         fig, ax = plt.subplots()
-    # ...:
-    # ...:         for iteration, bin_value in bins.items():
-    # ...:             p = ax.bar(x, bin_value, 50, bottom=bottom)
-    # ...:             bottom = bin_value
-
+        #     bottom = np.zeros(5)
+        # ...:         bins = {_x:_y for _x,_y in zip(x,y)}
+        # ...:         fig, ax = plt.subplots()
+        # ...:
+        # ...:         for iteration, bin_value in bins.items():
+        # ...:             p = ax.bar(x, bin_value, 50, bottom=bottom)
+        # ...:             bottom = bin_value
 
         for iteration, bin_value in bins.items():
             p = ax.bar(x, bin_value, bin_width, bottom=bottom)
             bottom += bin_value
 
-            ax.bar_label(p, label_type='center')
+            ax.bar_label(p, label_type="center")
 
-        ax.set_title('Number of penguins by sex')
+        ax.set_title("Number of penguins by sex")
         ax.legend()
 
         plt.show()
+
 
 def visualize_bins(kernels=None):
     fig, ax = plt.subplots(1, 1, figsize=(8, 8))
     # when no kernels exist simply return empty fig
     if kernels is None:
         return dummy_figure()
-    x = torch.linspace(-0.2,1.2,200)
+    x = torch.linspace(-0.2, 1.2, 200)
 
     for kernel in kernels:
         y = kernel(x)
-        ax.plot(x,y)
+        ax.plot(x, y)
 
     ax.set_xlabel("Kernel input", size=25)
     ax.set_ylabel("Kernel output", size=25)
     ax.grid()
     return fig, ax
 
-def network_predictions_hh(y_true, y_pred, target_map, binning_edges, normalize, current_iteration, **kwargs):
+
+def network_predictions_hh(
+    y_true, y_pred, target_map, binning_edges, normalize, current_iteration, **kwargs
+):
     # create a figure with subplots for hh node in normal and log
     signal_idx = target_map["hh"]
 
@@ -226,15 +233,22 @@ def network_predictions_hh(y_true, y_pred, target_map, binning_edges, normalize,
     # identify events uses TRUTH information to create masks
     masks = {process: (y_true[:, idx] == 1) for process, idx in target_map.items()}
     # to get node information apply index filtering on PREDICTION
-    hh_node = {process: y_pred[masks[process]][:, signal_idx] for process, idx in target_map.items()}
-    hh_node["background"] = np.concatenate([hh_node["dy"], hh_node["tt"]], axis=0)
+    hh_node = {
+        process: y_pred[masks[process]][:, signal_idx]
+        for process, idx in target_map.items()
+    }
+    hh_node["background"] = hh_node["tt"]
+    # hh_node["background"] = np.concatenate([hh_node["dy"], hh_node["tt"]], axis=0)
 
     # number of events are not evenly distributed outside of sampler
     # normalize is a factor that also shows up in the legend
     # by default weight is set to 1
     weights = {process: None for process in target_map}
     if normalize:
-        weights = {process: np.full(value.shape, 1 / len(value)) for process, value in hh_node.items()}
+        weights = {
+            process: np.full(value.shape, 1 / len(value))
+            for process, value in hh_node.items()
+        }
 
     # plotting
     # first for the 2 plots with combined background,
@@ -242,7 +256,7 @@ def network_predictions_hh(y_true, y_pred, target_map, binning_edges, normalize,
     for ax in axes[:2]:
         _ = ax.hist(
             hh_node["hh"],
-            bins=binning_edges, # needs to be given from outside, since this is a dynamic variable
+            bins=binning_edges,  # needs to be given from outside, since this is a dynamic variable
             histtype=kwargs.get("histtype", "step"),
             alpha=kwargs.get("alpha", 0.7),
             label="signal",
@@ -263,37 +277,37 @@ def network_predictions_hh(y_true, y_pred, target_map, binning_edges, normalize,
         )
 
     _ = axes[2].hist(
-            hh_node["hh"],
-            bins=binning_edges, # needs to be given from outside, since this is a dynamic variable
-            histtype=kwargs.get("histtype", "step"),
-            alpha=kwargs.get("alpha", 0.7),
-            label="hh",
-            weights=weights["hh"],
-            hatch="/",
-            **kwargs,
-        )
+        hh_node["hh"],
+        bins=binning_edges,  # needs to be given from outside, since this is a dynamic variable
+        histtype=kwargs.get("histtype", "step"),
+        alpha=kwargs.get("alpha", 0.7),
+        label="hh",
+        weights=weights["hh"],
+        hatch="/",
+        **kwargs,
+    )
+
+    # _ = axes[2].hist(
+    #         hh_node["dy"],
+    #         bins=binning_edges,
+    #         histtype=kwargs.get("histtype", "step"),
+    #         alpha=kwargs.get("alpha", 0.7),
+    #         label="dy",
+    #         weights=weights["dy"],
+    #         hatch="\\",
+    #         **kwargs,
+    #     )
 
     _ = axes[2].hist(
-            hh_node["dy"],
-            bins=binning_edges,
-            histtype=kwargs.get("histtype", "step"),
-            alpha=kwargs.get("alpha", 0.7),
-            label="dy",
-            weights=weights["dy"],
-            hatch="\\",
-            **kwargs,
-        )
-
-    _ = axes[2].hist(
-            hh_node["tt"],
-            bins=binning_edges,
-            histtype=kwargs.get("histtype", "step"),
-            alpha=kwargs.get("alpha", 0.7),
-            label="tt",
-            weights=weights["tt"],
-            hatch="*",
-            **kwargs,
-            )
+        hh_node["tt"],
+        bins=binning_edges,
+        histtype=kwargs.get("histtype", "step"),
+        alpha=kwargs.get("alpha", 0.7),
+        label="tt",
+        weights=weights["tt"],
+        hatch="*",
+        **kwargs,
+    )
 
     # settings
     for ax in axes:
@@ -305,7 +319,11 @@ def network_predictions_hh(y_true, y_pred, target_map, binning_edges, normalize,
         labels.append(f"batch: {current_iteration}")
         # number of events
         lines.append(dummy_line)
-        labels.append("\n".join([f"{process}: {len(hh_node[process])}" for process in target_map.keys()]))
+        labels.append(
+            "\n".join(
+                [f"{process}: {len(hh_node[process])}" for process in target_map.keys()]
+            )
+        )
         ax.legend(lines, labels)
 
         y_label = "frequency"
@@ -313,8 +331,8 @@ def network_predictions_hh(y_true, y_pred, target_map, binning_edges, normalize,
 
         ax.set_xlabel(x_label, size=25)
         ax.set_ylabel(y_label, size=25)
-        ax.set_ylim((-0.1,1.1))
-        ax.set_xlim((-0.1,1.1))
+        ax.set_ylim((-0.1, 1.1))
+        ax.set_xlim((-0.1, 1.1))
         ax.grid()
 
     axes[0].set_ylim(None, 1.1)
@@ -322,7 +340,15 @@ def network_predictions_hh(y_true, y_pred, target_map, binning_edges, normalize,
     return fig, axes
 
 
-def confusion_matrix(y_true, y_pred, target_map, sample_weight=None, normalized="true", cmap="Blues", **kwargs):
+def confusion_matrix(
+    y_true,
+    y_pred,
+    target_map,
+    sample_weight=None,
+    normalized="true",
+    cmap="Blues",
+    **kwargs,
+):
     """
     Calculates a Confusion Matrix using the truth *y_true* and prediction *y_pred* of the model.
     The categories are defined using *target_map* and to weight give *sample_weight*. Styles are
@@ -350,12 +376,14 @@ def confusion_matrix(y_true, y_pred, target_map, sample_weight=None, normalized=
         normalize=normalized,  # normalize to get probabilities
     )
     disp = sklearn.metrics.ConfusionMatrixDisplay(
-        confusion_matrix=cm, display_labels=list(target_map.keys()),
+        confusion_matrix=cm,
+        display_labels=list(target_map.keys()),
     )
     disp.plot(cmap=cmap)
     disp.figure_.suptitle(kwargs.pop("title", None))
 
     return disp.figure_, disp.ax_, disp.confusion_matrix
+
 
 def roc_curve(target, pred, sample_weight=None, labels=None, **kwargs):
     fig, ax = plt.subplots(figsize=(6, 6))
@@ -375,7 +403,7 @@ def roc_curve(target, pred, sample_weight=None, labels=None, **kwargs):
             name=name,
             # curve_kwargs={"color": col},
             color=col,
-            )
+        )
     _ = ax.set(xlabel="False Positive Rate", ylabel="True Positive Rate")
     return disp.figure_, disp.ax_
 
@@ -395,6 +423,7 @@ def plot_2D(x, y, bins=10, **kwargs):
     if kwargs.get("savepath"):
         fig.savefig(kwargs.get("savepath"))
     return fig, ax
+
 
 def plot_1D(x, annotations=None, **kwargs):
     fig, ax = plt.subplots()
@@ -435,9 +464,12 @@ def plot_1D(x, annotations=None, **kwargs):
         sensitivity = tp / (tp + fn)
 
         ax.annotate(f"accuracy: {accuracy:.2f}", (0.5, 0.50), xycoords="axes fraction")
-        ax.annotate(f"sensitivity: {sensitivity:.2f}", (0.5, 0.45), xycoords="axes fraction")
+        ax.annotate(
+            f"sensitivity: {sensitivity:.2f}", (0.5, 0.45), xycoords="axes fraction"
+        )
 
     return fig, ax
+
 
 def control_plot_1d(train_loader, dataset_handler):
     d = {}
@@ -461,13 +493,18 @@ def plot_batch(self, input, target, loss, iteration, target_map=None, labels=Non
     input_per_feature = input.to("cpu").transpose(0, 1).detach().numpy()
     input, target = input.to("cpu").detach().numpy(), target.to("cpu").detach().numpy()
 
-    fig, ax = plt.subplots(1, len(self.categorical_inputs), figsize=(8 * len(self.categorical_inputs), 8))
+    fig, ax = plt.subplots(
+        1, len(self.categorical_inputs), figsize=(8 * len(self.categorical_inputs), 8)
+    )
     fig.tight_layout()
 
     for ind, cat in enumerate(self.categorical_inputs):
         signal_target = target[:, self.categorical_target_map["hh"]]
 
-        background_mask, signal_mask = signal_target.flatten() == 0, signal_target.flatten() == 1
+        background_mask, signal_mask = (
+            signal_target.flatten() == 0,
+            signal_target.flatten() == 1,
+        )
         # background_prediction = detach_pred[zero_s_mask]
         # signal_prediction = detach_pred[zero_s_mask]
         _input = input_per_feature[ind]
@@ -480,7 +517,8 @@ def plot_batch(self, input, target, loss, iteration, target_map=None, labels=Non
             bins=10,
             histtype="barstacked",
             alpha=0.5,
-            label=["tt & dy", "hh"],
+            # label=["tt & dy", "hh"],
+            label=["tt", "hh"],
             density=True,
         )
         cax.set_xlabel(cat)

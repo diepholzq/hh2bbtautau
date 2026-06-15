@@ -11,43 +11,53 @@ if TYPE_CHECKING:
 functions = {}
 logger_inst = logger.get_logger(__name__)
 
+
 def register_loop(name):
     # add markers to function for later registration in loop registry
     def decorator(fn):
         fn._is_loop_method = True
         fn._loop_name = name
         return fn
+
     return decorator
 
-class BaseLoop():
+
+class BaseLoop:
     """
     Base Class that implements are registry where registered loops are cateogrized
     as training and validation loops.
     The registry is used to check if a given loop function exists and to call the correct function in the training script.
     """
+
     REGISTERED_LOOPS = {}
-    MODE = None # is overwitten by child class
+    MODE = None  # is overwitten by child class
 
     def __init__(self, full_config):
         self.which_fn = (
             full_config.training_config.training_fn
             if self.MODE == "training"
             else full_config.training_config.validation_fn
-            )
+        )
         # these column are always necessary for the loops
-        self.necessary_columns = {"continuous","categorical","targets",}
+        self.necessary_columns = {
+            "continuous",
+            "categorical",
+            "targets",
+        }
 
     def __init_subclass__(cls):
         for name, fn in cls.__dict__.items():
             # only add methods if is part of self
             if getattr(fn, "_is_loop_method", False):
-                cls.REGISTERED_LOOPS.setdefault(cls.MODE, {}) # make sure that dict for mode exists
+                cls.REGISTERED_LOOPS.setdefault(
+                    cls.MODE, {}
+                )  # make sure that dict for mode exists
                 cls.REGISTERED_LOOPS[cls.MODE][fn._loop_name] = fn
 
     def separate_prediction(
         self,
         pred: torch.tensor | tuple[torch.tensor],
-        ) -> tuple[torch.tensor, torch.tensor]:
+    ) -> tuple[torch.tensor, torch.tensor]:
         """
         Depending on the network architecture the output can either be a tuple of prediction and binned prediction
         or just the prediction. To have a uniform interface the singular output uses a dummy value.
@@ -67,7 +77,6 @@ class BaseLoop():
             logging_pred, optimization_pred = pred, pred
 
         return logging_pred, optimization_pred
-
 
     def __call__(self, *args, **kwargs):
         # registered loop is just an unbound function
@@ -113,19 +122,17 @@ class TrainingLoop(BaseLoop):
         sampler,
         sample_columns,
         device,
-        scheduler_inst=None
-        ):
+        scheduler_inst=None,
+    ):
         # this loss never uses a binning network thus, a single prediction is expected
-
         optimizer.zero_grad()
 
         events = sampler.sample_batch(sample_from=self.necessary_columns, device=device)
-        targets = events["targets"].reshape(-1,3)
-
+        targets = events["targets"].reshape(-1, 3)
         predictions = model(
             categorical_inputs=events.pop("categorical"),
-            continuous_inputs=events.pop("continuous")
-            )
+            continuous_inputs=events.pop("continuous"),
+        )
 
         # training does not need event weights. The oversampling algorithm takes care of this
         loss = loss_fn(predictions, targets, event_weights=None)
@@ -145,25 +152,25 @@ class TrainingLoop(BaseLoop):
         sampler,
         sample_columns,
         device,
-        scheduler_inst=None
-        ):
+        scheduler_inst=None,
+    ):
         optimizer.zero_grad()
 
         events = sampler.sample_batch(sample_from=sample_columns, device=device)
         pred = model(
             categorical_inputs=events.pop("categorical"),
             continuous_inputs=events.pop("continuous"),
-            )
+        )
 
-        _ , optimization_pred = self.separate_prediction(pred)
+        _, optimization_pred = self.separate_prediction(pred)
 
         targets = events.pop("targets")
         loss = loss_fn(
             prediction=optimization_pred,
-            truth=targets.reshape(-1,3),
+            truth=targets.reshape(-1, 3),
             product_of_weights=events["product_of_weights"],
             evaluation_mask=events["evaluation_space_mask"],
-            )
+        )
         loss.backward()
         optimizer.step()
         if scheduler_inst is not None:
@@ -173,6 +180,7 @@ class TrainingLoop(BaseLoop):
 
 class ValidationLoop(BaseLoop):
     MODE = "validation"
+
     def __init__(self, full_config, *args, **kwargs):
         super().__init__(full_config=full_config, *args, **kwargs)
 
@@ -182,8 +190,8 @@ class ValidationLoop(BaseLoop):
         sampler_inst: ProcessSampler,
         sample_columns: list[str],
         skip_concatenate_columns: tuple[str] = ("",),
-        device: torch.device =torch.device("cpu"),
-        ) -> dict[torch.tensors]:
+        device: torch.device = torch.device("cpu"),
+    ) -> dict[torch.tensors]:
         """
         During Validation no sampling is used, instead we loop over all unsampeled Datasets.
         The *model_inst* is the DNN you want to use, while *sampler_inst* should be a ValidationSampler.
@@ -203,16 +211,18 @@ class ValidationLoop(BaseLoop):
         """
         model_inst.eval()
         collected_data = {
-            "class_predictions" : [],
-            "targets" : [],
-            "sample_weights" : [],
-            "loss_predictions" : [],
-            "relative_weights" : [],
-
+            "class_predictions": [],
+            "targets": [],
+            "sample_weights": [],
+            "loss_predictions": [],
+            "relative_weights": [],
             # "dataset_id" : [], # TODO add ID to enable filtering by dataset
-            }
+        }
 
-        dynamic_data = {dynamic_d : [] for dynamic_d in tuple(sample_columns - self.necessary_columns)}
+        dynamic_data = {
+            dynamic_d: []
+            for dynamic_d in tuple(sample_columns - self.necessary_columns)
+        }
 
         with torch.no_grad():
             # sample over all dataset generator and run network
@@ -220,14 +230,14 @@ class ValidationLoop(BaseLoop):
             for uid, validation_batch_generator in sampler_inst.create_sample_generator(
                 batch_size=sampler_inst.batch_size,
                 sample_from=sample_columns,
-                device=device
-                ).items():
+                device=device,
+            ).items():
                 # hold data for current dataset, saved in loop to avoid memory issues
                 for events in validation_batch_generator:
                     pred = model_inst(
                         categorical_inputs=events.pop("categorical"),
-                        continuous_inputs=events.pop("continuous")
-                        )
+                        continuous_inputs=events.pop("continuous"),
+                    )
                     # network can output either binned or non binned predictions
                     # depending on model architecture, separate_prediction gives us a uniform interface to handle both cases
                     class_pred, loss_pred = self.separate_prediction(pred)
@@ -235,10 +245,15 @@ class ValidationLoop(BaseLoop):
                     # -- collect data that is always done --
 
                     collected_data["targets"].append(events.pop("targets"))
-                    collected_data["sample_weights"].append(events.pop("sample_weights"))
+                    collected_data["sample_weights"].append(
+                        events.pop("sample_weights")
+                    )
                     collected_data["relative_weights"].append(
-                        torch.full(size=(class_pred.shape[0], 1), fill_value=sampler_inst[uid].relative_weight)
+                        torch.full(
+                            size=(class_pred.shape[0], 1),
+                            fill_value=sampler_inst[uid].relative_weight,
                         )
+                    )
 
                     if not model_inst.use_last_activation:
                         # TODO if sigmoid is necessary add switch case
@@ -264,19 +279,14 @@ class ValidationLoop(BaseLoop):
                 event_dim = len(value[0].shape) - 2
                 # for whatever reason maybe want to skip concatenate?
                 if k not in skip_concatenate_columns:
-                    value = torch.concatenate(value, dim = event_dim)
+                    value = torch.concatenate(value, dim=event_dim)
                 collected_data[k] = value
         return collected_data
 
     @register_loop(name="cross_entropy")
     def cross_entropy_loop(
-        self,
-        model_inst,
-        loss_fn_inst,
-        sampler_inst,
-        sample_columns,
-        device
-        ):
+        self, model_inst, loss_fn_inst, sampler_inst, sample_columns, device
+    ):
         """
         Used for normal loss functions like Crossentropy.
         """
@@ -287,7 +297,7 @@ class ValidationLoop(BaseLoop):
             sample_columns=to_sample_columns,
             skip_concatenate_columns=("",),
             device=device,
-            )
+        )
 
         # validation needs to be reweightes by sample weights
         loss = loss_fn_inst(
@@ -295,20 +305,20 @@ class ValidationLoop(BaseLoop):
             tensors["targets"],
             tensors["sample_weights"],
         )
-        return loss, (tensors["class_predictions"], tensors["targets"], tensors["sample_weights"])
+        return loss, (
+            tensors["class_predictions"],
+            tensors["targets"],
+            tensors["sample_weights"],
+        )
 
     @register_loop(name="signal_efficiency")
     def signal_efficiency_loop(
-        self,
-        model_inst,
-        loss_fn_inst,
-        sampler_inst,
-        sample_columns,
-        device
-        ):
+        self, model_inst, loss_fn_inst, sampler_inst, sample_columns, device
+    ):
         loss_columns = {"product_of_weights", "evaluation_space_mask"}
-        to_sample_columns = self.necessary_columns.union(loss_columns).union(sample_columns)
-
+        to_sample_columns = self.necessary_columns.union(loss_columns).union(
+            sample_columns
+        )
 
         tensors = self.collect_from_generators(
             model_inst=model_inst,
@@ -316,14 +326,18 @@ class ValidationLoop(BaseLoop):
             sample_columns=to_sample_columns,
             skip_concatenate_columns=("",),
             device=device,
-            )
+        )
 
         loss = loss_fn_inst(
             tensors["loss_predictions"],
-            tensors["targets"].reshape(-1,3),
+            tensors["targets"].reshape(-1, 3),
             tensors["product_of_weights"],
-            tensors["evaluation_space_mask"]
+            tensors["evaluation_space_mask"],
             # TODO  sampler weight is not used, but maybe should ?
-            )
+        )
 
-        return loss, (tensors["class_predictions"], tensors["targets"], tensors["sample_weights"])
+        return loss, (
+            tensors["class_predictions"],
+            tensors["targets"],
+            tensors["sample_weights"],
+        )

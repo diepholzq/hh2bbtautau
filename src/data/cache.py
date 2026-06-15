@@ -8,13 +8,15 @@ from utils.logger import get_logger
 
 logger_inst = get_logger(__name__)
 
+
 def hash_dictionary(config):
     hashable_dict = sorted(config.items(), key=lambda item: item[0])
     h = tuple(hashable_dict)
     h = hashlib.sha256(str(h).encode("utf-8")).hexdigest()[:10]
     return h
 
-class DataCacher():
+
+class DataCacher:
     def __init__(self, config):
         if dataclasses.is_dataclass(config):
             config = dataclasses.asdict(config)
@@ -26,8 +28,8 @@ class DataCacher():
 
         target = p / h
         # create dir if not exist
-        if not target.exists():
-            target.mkdir(parents=False)
+        if not p.exists():
+            p.mkdir(parents=False)
         return target
 
     def save_cache(self, data):
