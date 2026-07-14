@@ -433,6 +433,8 @@ def handle_weights_and_convert_to_torch(
                 np.stack([arr[feature] for feature in continuous_features], axis=1)
             )
         else:
+            from IPython import embed
+            embed(header="load data")
             continuous_tensor, categorical_tensor = [
                 torch.from_numpy(
                     np.stack([arr[feature] for feature in features], axis=1)

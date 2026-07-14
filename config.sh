@@ -11,7 +11,7 @@ export LOG_LEVEL="DEBUG"
 export FILE_LOG_LEVEL="DEBUG"
 
 # flag to toggle if Bogdans inputs should be used or mine
-export BOGDANS=0
+export BOGDANS=1
 
 # location where the input data can be found
 export ERA=prod24 # possible eras: prod14, prod20, prod24 (20 only has 22pre
@@ -34,4 +34,7 @@ export PYENV_ROOT="/afs/desy.de/user/w/${USER}/.pyenv"       # root of pyenv ins
 export SETUP_DIRS_DONE=1
 
 # Name under which model is saved:
-export SAVE_MODEL_NAME="detector_inputs_without_ratio"
+# export SAVE_MODEL_NAME="detector_inputs_without_ratio"
+export SAVE_MODEL_NAME="training_a_without_ratio"
+export LD_LIBRARY_PATH=/data/dust/user/diepholq/pyenv_virtualenvs/ml_torch/lib/python3.9/site-packages/nvidia/cudnn/lib:$LD_LIBRARY_PATH
+export LD_LIBRARY_PATH=/data/dust/user/diepholq/pyenv_virtualenvs/ml_torch/lib/python3.9/site-packages/nvidia/nccl/lib:$LD_LIBRARY_PATH

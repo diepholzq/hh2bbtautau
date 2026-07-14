@@ -28,7 +28,8 @@ class EmptyLayer(torch.nn.Module):
         self.ndim = 0
 
     def forward(self, *args, **kwargs):
-        return torch.tensor([])
+        device = args[0].device if args else "cpu"
+        return torch.tensor([], device=device)
 
 
 def dummy_empty(condition, layer: torch.nn.Module | None) -> torch.nn.Module:
@@ -82,6 +83,8 @@ class PaddingLayer(torch.nn.Module):  # noqa: F811
     def forward(self, x):
         x = x.to(torch.float32)
         mask = x == self.mask_value
+        mask = mask.clone()
+        x = x.clone()
         x[mask] = self.padding_value
         return x
 

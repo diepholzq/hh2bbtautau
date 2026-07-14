@@ -394,7 +394,7 @@ class DenseNet(BaseModel):
         x = self.dense_block_5(x)
         x = self.last_linear(x)
         if self.use_last_activation:
-            self.last_activaton_fn(x)
+            x = self.last_activaton_fn(x)
         return x
 
 

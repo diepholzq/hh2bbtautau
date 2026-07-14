@@ -148,10 +148,12 @@ def feature(feature):
     return tuple(feature)
 
 
-def feature_vanilla(feature):
+def feature_vanilla(feature, categorical: bool = False):
     """For Bogdan's original version"""
     data_prefix = prefix_map()
     feature = [add_prefix(f, f"{data_prefix}_", ignore_code="_") for f in feature]
+    if not categorical:
+        feature.append("likelihood_ratio")
     return tuple(feature)
 
 
@@ -166,6 +168,7 @@ categorical_features = feature_vanilla(
         "has_jet_pair",
         "has_fatjet",
     ],
+    categorical=True,
 )
 
 
@@ -228,7 +231,7 @@ continuous_features_vanilla = feature_vanilla(
         "nu2_pz",
     ],
 )
-continuous_features_detector_observables = feature(
+continuous_features_training_a = feature(
     [
         "pdf_input_vars_reco_higgs_b1_pt",
         "pdf_input_vars_reco_higgs_b1_eta",
@@ -262,9 +265,10 @@ continuous_features_detector_observables = feature(
         "pdf_input_vars_reco_top_tau2_eta",
         "pdf_input_vars_reco_top_tau2_phi",
         "pdf_input_vars_reco_top_tau2_mass",
+        # "likelihood_ratio",
     ]
 )
-continuous_features_hard_scattering = feature(
+continuous_features_training_b = feature(
     [
         "pdf_input_vars_reco_higgs_constr_term_b",
         "pdf_input_vars_reco_higgs_constr_term_tau",
@@ -292,11 +296,44 @@ continuous_features_hard_scattering = feature(
         "pdf_input_vars_reco_top_tt_vis_system_phi",
         "pdf_input_vars_reco_top_tt_vis_system_pt",
         "pdf_input_vars_reco_top_tt_vis_system_pz",
-        # "likelihood_ratio",
+        "pdf_input_vars_reco_higgs_b1_pt",
+        "pdf_input_vars_reco_higgs_b1_eta",
+        "pdf_input_vars_reco_higgs_b1_phi",
+        "pdf_input_vars_reco_higgs_b1_mass",
+        "pdf_input_vars_reco_higgs_b2_pt",
+        "pdf_input_vars_reco_higgs_b2_eta",
+        "pdf_input_vars_reco_higgs_b2_phi",
+        "pdf_input_vars_reco_higgs_b2_mass",
+        "pdf_input_vars_reco_higgs_tau1_pt",
+        "pdf_input_vars_reco_higgs_tau1_eta",
+        "pdf_input_vars_reco_higgs_tau1_phi",
+        "pdf_input_vars_reco_higgs_tau1_mass",
+        "pdf_input_vars_reco_higgs_tau2_pt",
+        "pdf_input_vars_reco_higgs_tau2_eta",
+        "pdf_input_vars_reco_higgs_tau2_phi",
+        "pdf_input_vars_reco_higgs_tau2_mass",
+        "pdf_input_vars_reco_top_b1_pt",
+        "pdf_input_vars_reco_top_b1_eta",
+        "pdf_input_vars_reco_top_b1_phi",
+        "pdf_input_vars_reco_top_b1_mass",
+        "pdf_input_vars_reco_top_b2_pt",
+        "pdf_input_vars_reco_top_b2_eta",
+        "pdf_input_vars_reco_top_b2_phi",
+        "pdf_input_vars_reco_top_b2_mass",
+        "pdf_input_vars_reco_top_tau1_pt",
+        "pdf_input_vars_reco_top_tau1_eta",
+        "pdf_input_vars_reco_top_tau1_phi",
+        "pdf_input_vars_reco_top_tau1_mass",
+        "pdf_input_vars_reco_top_tau2_pt",
+        "pdf_input_vars_reco_top_tau2_eta",
+        "pdf_input_vars_reco_top_tau2_phi",
+        "pdf_input_vars_reco_top_tau2_mass",
+        "likelihood_ratio",
     ],
 )
-continuous_features = continuous_features_detector_observables
-# continuous_features = continuous_features_hard_scattering
+# continuous_features = continuous_features_detector_observables
+continuous_features = continuous_features_training_a
 if int(os.environ["BOGDANS"]):
     continuous_features = continuous_features_vanilla
-categorical_features = tuple([])
+else:
+    categorical_features = tuple([])

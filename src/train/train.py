@@ -2,6 +2,7 @@ from __future__ import annotations
 
 # standard imports
 import dataclasses
+import os
 
 # package imports
 import numpy as np
@@ -18,6 +19,7 @@ from models.utils import init_model
 from train.train_config import full_config
 from train.loops import TrainingLoop, ValidationLoop
 from train.train_utils import log_metrics
+from utils import EMPTY_FLOAT
 
 CPU = torch.device("cpu")
 CUDA = torch.device("cuda")
@@ -44,7 +46,7 @@ def main(**kwargs):
             f"Trainings fold: {current_fold}/{full_config.training_config.k_fold - 1}"
         )
         # -----
-        ### data loading and preprocessing
+        # data loading and preprocessing
         # -----
         # HINT: order matters, due to memory constraints views are moved in and out of dictionaries
         # load data from cache is necessary or from root files
@@ -54,9 +56,30 @@ def main(**kwargs):
             ignore_cache=kwargs["ignore_cache"],
             _save_cache=kwargs["save_cache"],
         )
+        empty_uids = np.array([])  # empty:= < 10 events
+        # from IPython import embed
+        #
+        # embed(header="uid removal loop")
         for uid, arrays in events.items():
-            l = len(arrays["continuous"])
-            arrays["categorical"] = torch.zeros((l, 1))
+            empty_mask = arrays["continuous"] != EMPTY_FLOAT  # 1 if event not padded
+            empty_mask.to(int)
+            empty_mask = torch.sum(empty_mask, axis=0)
+            if torch.any(empty_mask < 10):
+                empty_uids = np.append(empty_uids, uid)
+        idx = 0
+        while idx < len(empty_uids) - 1:
+            uid = (str(empty_uids[idx]), int(empty_uids[idx + 1]))
+            print(uid)
+            events.pop(uid)
+            print(
+                f"Removed uid: {uid}: Only padded values / less then 10 surviving events"
+            )
+            idx += 2
+
+        for uid, arrays in events.items():
+            le = len(arrays["continuous"])
+            if not int(os.environ["BOGDANS"]):
+                arrays["categorical"] = torch.zeros((le, 1))
         fold_split_coordinator = preprocessing.FoldAndSplitCoordinator(
             events=events,
             c_fold=current_fold,
@@ -108,7 +131,7 @@ def main(**kwargs):
             full_config.model_building_config.std,
         ) = preprocessing.get_batch_statistics_from_sampler(
             training_sampler,
-            padding_values=-99999.9,
+            padding_values=-99999.0,
             features=full_config.dataset_config.continuous_features,
             return_dummy=full_config.debug_config.get_batch_statistic_return_dummy,
         )

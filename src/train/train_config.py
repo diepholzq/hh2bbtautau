@@ -174,7 +174,9 @@ class TrainingConfig:
     t_batch_size: int = 4096 * 10
     v_batch_size: int = -1  # validation batch size, -1 = full set,
     if int(os.environ["BOGDANS"]):
-        save_model_name: str = "vanilla_bogdan"  # name of the model used to save
+        save_model_name: str = (
+            "vanilla_bogdan_with_likelihood_ratio"  # name of the model used to save
+        )
     else:
         save_model_name: str = os.environ["SAVE_MODEL_NAME"]
 
@@ -283,7 +285,7 @@ class SchedulerConfig:
 
     @dataclass
     class CosineAnnealingLRConfig:
-        T_max: int = 10000  # maximum number of iterations
+        T_max: int = 15000  # maximum number of iterations
         eta_min: float = 1e-7  # minimum learning rate
 
     @dataclass

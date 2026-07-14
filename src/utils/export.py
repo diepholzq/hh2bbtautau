@@ -13,8 +13,9 @@ def torch_export(
     model_inst: torch.nn.Module,
     name: str,
     fold: str,
-    base_dir: str | None=None,
-    activation_fn_name: str =None) -> str:
+    base_dir: str | None = None,
+    activation_fn_name: str = None,
+) -> str:
     """
     Takes *model*
 
@@ -29,7 +30,7 @@ def torch_export(
         str: Path to exported pt2 model.
     """
     # by default set CPU device, to enable most compatible export.
-    DEVICE=torch.device("cpu")
+    DEVICE = torch.device("cpu")
 
     if activation_fn_name is not None:
         model_inst = create_model.utils.AddActFnToModel(model_inst, activation_fn_name)
@@ -48,8 +49,8 @@ def torch_export(
 
     dim = torch.export.Dim("batch")
     dynamic_shapes = {
-        "categorical_inputs": {0:dim, 1:categorical_input.shape[-1]},
-        "continuous_inputs" : {0:dim, 1:continuous_inputs.shape[-1]},
+        "categorical_inputs": {0: dim, 1: categorical_input.shape[-1]},
+        "continuous_inputs": {0: dim, 1: continuous_inputs.shape[-1]},
     }
 
     # do actual export and saving
@@ -63,15 +64,13 @@ def torch_export(
         base_dir = os.environ["MODELS_DIR"]
 
     dst = (pathlib.Path(base_dir) / f"{name}_fold{fold}").with_suffix(".pt2")
-    torch.export.save(exp, dst, pickle_protocol=4)
+    torch.export.save(exp, dst)
     return dst
 
 
 def torch_save(
-    model: torch.nn.Module,
-    name: str,
-    fold: str,
-    base_dir: str | None) -> None:
+    model: torch.nn.Module, name: str, fold: str, base_dir: str | None
+) -> None:
     """
     Small wrapper to save *model_inst* with *name* and *fold* number in *base_dir*.
     If *base_dir* is None a default location defined in MODELS_DIR environment is used.
@@ -88,9 +87,8 @@ def torch_save(
 
 
 def run_exported_tensor_model(
-    pt2_path: str,
-    cat: torch.tensor,
-    cont: torch.tensor) -> torch.tensor:
+    pt2_path: str, cat: torch.tensor, cont: torch.tensor
+) -> torch.tensor:
     """
     Run a given model stored at *pt2_path* with *cat* and *cont* tensors.
     This is a method to check if exporting the model resulted in same results.
@@ -107,6 +105,7 @@ def run_exported_tensor_model(
     scores = exp.module()(cat, cont)
     return scores
 
+
 def resolve_models_path(path):
     models_path = pathlib.Path(path)
     is_only_model_name = len(path.parts) == 1
@@ -114,6 +113,7 @@ def resolve_models_path(path):
         models_root = pathlib.Path(os.environ["MODELS_DIR"])
         models_path = models_root / models_path.stem
     return models_path.with_suffix(".pt2"), models_path.with_suffix(".pt")
+
 
 def build_model(path):
     checkpoint = torch.load(str(path), weights_only=False, map_location="cpu")
@@ -130,17 +130,22 @@ def build_model(path):
     model_inst.eval()
     return model_inst
 
+
 if __name__ == "__main__":
-    p = argparse.ArgumentParser(description="Export model to torch-export (.pt2) with dynamic batch dim")
-    p.add_argument("--checkpoint_path", "-m", required=True, help="Path to checkpoint file to load")
+    p = argparse.ArgumentParser(
+        description="Export model to torch-export (.pt2) with dynamic batch dim"
+    )
+    p.add_argument(
+        "--checkpoint_path", "-m", required=True, help="Path to checkpoint file to load"
+    )
     p.add_argument("--fold", "-f", required=True, help="Fold number", default=0)
     p.add_argument(
         "--add_activation",
         required=False,
         help="If value is given, get activation function and add at end of network",
         default=None,
-        choices=["sigmoid", "softmax"]
-        )
+        choices=["sigmoid", "softmax"],
+    )
     args = p.parse_args()
 
     pt2_path, pt_path = resolve_models_path(pathlib.Path(args.checkpoint_path))

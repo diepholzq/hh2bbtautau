@@ -268,7 +268,10 @@ def map_categorical_features(expected_inputs, feature_array, categorical_feature
 
 
 def get_batch_statistics_from_sampler(
-    sampler=None, padding_values=None, features=None, return_dummy=False,
+    sampler=None,
+    padding_values=None,
+    features=None,
+    return_dummy=False,
 ):
     """
     Calculates the weighted mean and standard deviation over all subphase spaces of a process in *sampler*.
