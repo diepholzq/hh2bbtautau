@@ -37,7 +37,7 @@ class default(HBTInferenceModel):
 
     # settings defined by HBTInferenceModel
     fake_data = True
-    add_qcd = True
+    add_qcd = False
 
     # the default variable to use in all categories
     # (see get_category_variable for more details)
@@ -49,8 +49,7 @@ class default(HBTInferenceModel):
 
     def create_category_combinations(self) -> list[DotDict[str, str]]:
         return [
-            DotDict(zip(["channel", "phasespace"], comb))
-            for comb in itertools.product(self.channels, self.phasespaces)
+            DotDict(zip(["channel", "phasespace"], comb)) for comb in itertools.product(self.channels, self.phasespaces)
         ]
 
     def create_category_info(self, *, channel: str, phasespace: str) -> HBTInferenceModel.CategoryInfo:
@@ -75,10 +74,7 @@ class default(HBTInferenceModel):
     def create_proc_name_map(self) -> None:
         # mapping of process names in the datacard ("combine name") to configs and process names in a dict
         proc_name_map = {
-            **{
-                f"ggHH_kl_{kl}_kt_1_13p6TeV_hbbhtt": f"hh_ggf_hbb_htt_kl{kl}_kt1"
-                for kl in ["1", "0", "2p45", "5"]
-            },
+            **{f"ggHH_kl_{kl}_kt_1_13p6TeV_hbbhtt": f"hh_ggf_hbb_htt_kl{kl}_kt1" for kl in ["1", "0", "2p45", "5"]},
             **{
                 f"qqHH_CV_{kv}_C2V_{k2v}_kl_{kl}_13p6TeV_hbbhtt": f"hh_vbf_hbb_htt_kv{kv}_k2v{k2v}_kl{kl}"
                 for kv, k2v, kl in [
@@ -238,8 +234,7 @@ class default(HBTInferenceModel):
             "CMS_top_pT_reweighting",
             type=ParameterType.shape,
             config_data={
-                config_inst.name: self.parameter_config_spec(shift_source="top_pt")
-                for config_inst in self.config_insts
+                config_inst.name: self.parameter_config_spec(shift_source="top_pt") for config_inst in self.config_insts
             },
             process=self.inject_all_eras("ttbar"),
             group=["experiment", "shape_nuisances"],
@@ -250,8 +245,7 @@ class default(HBTInferenceModel):
             "pdf_shape",
             type=ParameterType.shape,
             config_data={
-                config_inst.name: self.parameter_config_spec(shift_source="pdf")
-                for config_inst in self.config_insts
+                config_inst.name: self.parameter_config_spec(shift_source="pdf") for config_inst in self.config_insts
             },
             process=self.processes_with_lhe_weights,
             group=["theory", "shape_nuisances"],
@@ -262,8 +256,7 @@ class default(HBTInferenceModel):
             "scale_shape",
             type=ParameterType.shape,
             config_data={
-                config_inst.name: self.parameter_config_spec(shift_source="murmuf")
-                for config_inst in self.config_insts
+                config_inst.name: self.parameter_config_spec(shift_source="murmuf") for config_inst in self.config_insts
             },
             process=self.processes_with_lhe_weights,
             group=["theory", "shape_nuisances"],
@@ -468,9 +461,8 @@ class default(HBTInferenceModel):
 def remove_shift_parameters(model: default) -> None:
     # remove all parameters that require a shift source other than nominal
     for category_name, process_name, parameter in model.iter_parameters():
-        remove = (
-            (parameter.type.is_shape and not parameter.transformations.any_from_rate) or
-            (parameter.type.is_rate and parameter.transformations.any_from_shape)
+        remove = (parameter.type.is_shape and not parameter.transformations.any_from_rate) or (
+            parameter.type.is_rate and parameter.transformations.any_from_shape
         )
         if remove:
             model.remove_parameter(parameter.name, process=process_name, category=category_name)
@@ -504,6 +496,38 @@ for kl in ["kl1", "kl0", "allkl"]:
 default_no_shifts_simple_5k = default_no_shifts.derive(
     "default_no_shifts_simple_5k",
     cls_dict={"variable": "run3_dnn_moe_hh_fine_5k"},
+)
+
+default_no_shifts_training_c = default_no_shifts.derive(
+    "default_no_shifts_training_c",
+    cls_dict={
+        "variable": "training_c_hh",
+        "channels": ["tautau"],
+    },
+)
+
+default_no_shifts_training_c_fine = default_no_shifts.derive(
+    "default_no_shifts_training_c_fine",
+    cls_dict={
+        "variable": "training_c_hh_fine",
+        "channels": ["tautau"],
+    },
+)
+
+default_no_shifts_bogdan_vanilla_without_ratio = default_no_shifts.derive(
+    "default_no_shifts_bogdan_vanilla_without_ratio",
+    cls_dict={
+        "variable": "bogdan_vanilla_without_ratio_hh",
+        "channels": ["tautau"],
+    },
+)
+
+default_no_shifts_bogdan_vanilla_without_ratio_fine = default_no_shifts.derive(
+    "default_no_shifts_bogdan_vanilla_without_ratio_fine",
+    cls_dict={
+        "variable": "bogdan_vanilla_without_ratio_hh_fine",
+        "channels": ["tautau"],
+    },
 )
 
 

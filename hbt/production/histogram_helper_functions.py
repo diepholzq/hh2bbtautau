@@ -1,6 +1,7 @@
 from columnflow.util import maybe_import
 import pickle
 from sympy.utilities.iterables import variations
+from columnflow.columnar_util import EMPTY_FLOAT
 from glob import glob
 
 ak = maybe_import("awkward")
@@ -26,13 +27,13 @@ def error_formula(value_names: np.array, uncert_names: np.array) -> str:
     num_fact_steps: int = len(value_names)
     formula_string = "np.sqrt("
     idx_arr = np.arange(0, num_fact_steps, 1)
-    for idx, fact_step in enumerate(value_names):
-        uncert_arr_step: np.array = uncert_names[idx_arr[idx_arr != idx]]
-        uncert_str = multiply_string_arr(uncert_arr_step)
+    for idx, uncert_step in enumerate(uncert_names):
+        value_arr_step: np.array = value_names[idx_arr[idx_arr != idx]]
+        value_str = multiply_string_arr(value_arr_step)
         if idx != idx_arr[-1]:
-            to_append = f"({fact_step} * {uncert_str})**2 + "
+            to_append = f"({uncert_step} * {value_str})**2 + "
         else:
-            to_append = f"({fact_step} * {uncert_str})**2)"
+            to_append = f"({uncert_step} * {value_str})**2)"
         formula_string = f"{formula_string}{to_append}"
     return formula_string
 
@@ -53,11 +54,11 @@ def roc_auc_std(A: float, n_p: float, n_n: float) -> str:
 
 
 def get_data(
-        parquet_file_path: str,
-        column_name: str,
-        drop_nones: bool = False,
+    parquet_file_path: str,
+    column_name: str,
+    drop_nones: bool = False,
 ) -> ak.Array:
-    """Extracts the relevant fields from input data (meaning signal genlvl MC)
+    """Extracts the relevant fields from input data
     Args:
         parquet_file_path (str): Path where the parquet input file is located
         column_name (str): Name of the column containing the inputs
@@ -69,15 +70,22 @@ def get_data(
     objects = objects
     data = eval(f"objects.{column_name}")
     if drop_nones:
-        data = ak.drop_none(data, axis=0)
-    return data
+        ch_id_mask = data["channel_id"] == 3
+        data2 = {}
+        for field in data.fields:
+            if field != "channel_id":
+                data2[field] = data[field][ch_id_mask]
+        data2 = ak.zip(data2)
+        return data2
+    else:
+        return data
 
 
 def flat_binning(x: np.array, n_bins: int):
     """Computes bin edges to histogram x, where there is the same amount of entries in each bin
     Args:
         x (np.array): Data to be binned
-        NBins (int): Number of bins
+        n_bins (int): Number of bins
     Returns:
         edges (np.array): Bin edges
         entries (np.array): Entries per bin
@@ -88,10 +96,25 @@ def flat_binning(x: np.array, n_bins: int):
     return edges, entries
 
 
+def linear_binning(x: np.array, n_bins: int):
+    """Computes bin edges to histogram x, bins are linspace between min and max value
+    Args:
+        x (np.array): Data to be binned
+        n_bins (int): Number of bins
+    Returns:
+        edges (np.array): Bin edges
+        entries (np.array): Entries per bin
+    """
+    bins = np.linspace(min(x), max(x), n_bins)
+    entries, edges = np.histogram(x, bins=bins)
+    return edges, entries
+
+
 def create_multidim_hist(
     data: ak.Array,
     field_list: np.ndarray,
     bins_per_dim: np.ndarray,
+    statistical_binning: bool = True,
 ) -> dict:
     """Build a multidimensional (2 or 3 dim.) histogram from the input data and the fields provided, with a given number
     of bins per dimension. The histogram is normalized so that the n-d area integrates to 1. The binning is such that
@@ -103,6 +126,7 @@ def create_multidim_hist(
         bins_per_dim (np.ndarray): A list containing the number of bins per dimension. Dimensions will be assigned
                                    according to field_list, i.e. bins_per_dim[0] will assign number of bins together
                                    field_list[0]
+        statistical_binning (bool): If percentile binning should be used in 1D histogram creation
     Returns:
         hist_returns (dict): Dictionary containing the nd-'histogram' and a list of np.ndarray containing the edges for
         each dimension, together with an nd-histogram with the same binning, containing the statistical uncerainties per
@@ -131,7 +155,11 @@ def create_multidim_hist(
     edges1, entries1 = flat_binning(data_x, bins_per_dim[0])
     d_edges1 = np.diff(edges1)
     edges_dim1[:] = edges1
-
+    # LINEAR BINNING
+    # if n_dims == 1 and not statistical_binning:
+    #     edges1, entries1 = linear_binning(data_x, bins_per_dim[0])
+    #     d_edges1 = np.diff(edges1)
+    #     edges_dim1[:] = edges1
     # Loop through bins of first dimension: For each bin, select all events from other dimensions (y and possibly z)
     # with x-values that fall into that bin. Go iteratively through these dimensions and caclulate the statistical
     # binning.
@@ -141,7 +169,8 @@ def create_multidim_hist(
         left_edge = edges1[idx1]
         right_edge = edges1[idx1 + 1]
         # select entries in other dims that fall into this bin
-        entries_dim_2 = data_y[(data_x >= left_edge) * (data_x < right_edge)]
+        # Rightmost bin also includes last value
+        entries_dim_2 = data_y[(data_x >= left_edge) & ((data_x < right_edge) | (idx1 == bins_per_dim[0] - 1))]
 
         # Calculate stat. bin edges for this x-bin
         edges2, entries2 = flat_binning(entries_dim_2, bins_per_dim[1])
@@ -153,13 +182,15 @@ def create_multidim_hist(
         # plt.hist(entries_dim_2, bins=edges2, histtype='step')
 
         if n_dims == 3:
-            entries_dim_3 = data_z[(data_x >= left_edge) * (data_x < right_edge)]
+            entries_dim_3 = data_z[(data_x >= left_edge) & ((data_x < right_edge) | (idx1 == bins_per_dim[0] - 1))]
             for idx2 in range(bins_per_dim[1]):
                 # Same logic as above
                 left_edge = edges2[idx2]
                 right_edge = edges2[idx2 + 1]
                 # Select entries in dim 3 that fall into current dim 2 bin
-                entries_from_3_in_2 = entries_dim_3[(entries_dim_2 >= left_edge) * (entries_dim_2 < right_edge)]
+                entries_from_3_in_2 = entries_dim_3[
+                    (entries_dim_2 >= left_edge) & ((entries_dim_2 < right_edge) | (idx2 == bins_per_dim[1] - 1))
+                ]
                 edges3, entries3 = flat_binning(entries_from_3_in_2, bins_per_dim[2])
                 edges_dim3[idx1, idx2, :] = edges3
                 d_edges3 = np.diff(edges3)
@@ -185,7 +216,7 @@ def create_multidim_hist(
     if n_dims == 3:
         edges_dict["edges_dim3"] = edges_dim3
 
-    norm_factor_hist = np.nan_to_num(pdf / entries, posinf=0.0, neginf=0.0)   # bin contents: 1/(n_events * bin_volume)
+    norm_factor_hist = np.nan_to_num(pdf / entries, posinf=0.0, neginf=0.0)  # bin contents: 1/(n_events * bin_volume)
     uncertainty_hist = abs(norm_factor_hist * np.sqrt(entries))
 
     hist_returns: dict = {
@@ -218,7 +249,7 @@ def create_any_hist(
         bin_filling (bool): If empty bins should be filled by mean of neighbouring values
     Returns:
         hist_returns (dict): Dictionary containing the nd-histogram and a list of np.ndarray containing the edges for
-        each dimension, together with an nd-histogram with the same binning, containing the statistical uncerainties per
+        each dimension, together with an nd-histogram with the same binning, containing the statistical uncertainties per
         bin, and the number of empty bins
     """
     # Build coordinate_list as input for hist
@@ -229,7 +260,8 @@ def create_any_hist(
     #     divider = 100 / bins
     #     percentile_divider = np.arange(0, 100 + divider, divider)
     # else:
-    percentile_divider = np.concatenate([[0], np.linspace(5, 95, bins - 1), [100]], axis=0)
+    # percentile_divider = np.concatenate([[0], np.linspace(0, 100, bins - 1), [100]], axis=0)
+    percentile_divider = np.linspace(0, 100, bins + 1)
     idx = 0
     for field in field_list:
         coordinate_list[:, idx] = data[field]
@@ -249,6 +281,7 @@ def create_any_hist(
 
     # fill empty bins with average of neighbouring values
     # step 1: find empty bins and store their coordinates
+    # not used anymore
     if bin_filling:
         empty_mask = hist == 0
         tr = True
@@ -272,7 +305,8 @@ def create_any_hist(
                 # else:
                 #     variation_arr[nb_idx] = dim_var
         neighbour_coords = np.reshape(
-            np.repeat(empty_coordinates, num_neighbours, axis=0), (n_empty, num_neighbours, n_dims),
+            np.repeat(empty_coordinates, num_neighbours, axis=0),
+            (n_empty, num_neighbours, n_dims),
         )
         variation_arr = np.resize(variation_arr, (n_empty, num_neighbours, n_dims))
         neighbour_coords = neighbour_coords + variation_arr
@@ -286,17 +320,17 @@ def create_any_hist(
 
     # Calculate statistical uncerainties per bin
     if statistical_binning:
-        N_i, _ = np.histogramdd(coordinate_list, bins=bin_list, density=False)         # bin_contents = N_i
+        N_i, _ = np.histogramdd(coordinate_list, bins=bin_list, density=False)  # bin_contents = N_i
     else:
-        N_i, _ = np.histogramdd(coordinate_list, bins=bins, density=False)         # bin_contents = N_i
+        N_i, _ = np.histogramdd(coordinate_list, bins=bins, density=False)  # bin_contents = N_i
         print("\nNot using statistical binning\n")
 
     if bin_filling:
         for empty_bin, coord in enumerate(empty_coordinates):
             neighbour_avg = np.mean(hist[tuple(neighbour_coords[empty_bin].T)])
             N_i[tuple(coord)] = neighbour_avg
-    norm_factor_hist = np.nan_to_num(hist / N_i, nan=0, posinf=0)                  # bin_contents = 1/(N*V_i)
-    uncertainty_hist = np.sqrt((norm_factor_hist * np.sqrt(N_i))**2)
+    norm_factor_hist = np.nan_to_num(hist / N_i, nan=0, posinf=0)  # bin_contents = 1/(N*V_i)
+    uncertainty_hist = np.sqrt((norm_factor_hist * np.sqrt(N_i)) ** 2)
 
     # Count emtpy bins:
     empty_mask = N_i == 0
@@ -314,57 +348,6 @@ def create_any_hist(
     return hist_returns
 
 
-def get_event_likelihood_1d(
-    events: ak.Array,
-    hist: np.ndarray,
-    edges: list,
-    uncertainty_hist: np.ndarray,
-    fields: np.ndarray,
-    bin_nr: int = 10,
-) -> np.ndarray:
-    """Evaluates the likelihood (hist) on the provided events. Used for evaluating one factorization step
-    Args:
-        events (ak.Array): The data the likelihood is to be evaluated on
-        hist (np.ndarray): The multidimensional histogram
-        edges (list): The list of np.ndarrays containing the bin edges along each dimension
-        uncertainty_hist (np.ndarray): The multidimensional histogram of the stat. err.
-        fields (list): The fields of data
-        bin_nr (int): Number of bins per dimension
-    Returns:
-        Tuple(np.ndarray, np.ndarray): The evaluated histogram, i.e. the likelihood score for each event,
-        together with event-wise uncerainties in a second array
-    """
-
-    # This would be a normalization of the eval output per factorization step
-    # normalize hist:
-    # hist = hist / np.sum(hist)
-    # Normalize histogram and divide by the product of bin widths (for density)
-    # bin_widths = np.array([edges[i][1] - edges[i][0] for i in range(len(edges))])
-    # bin_volume = np.prod(bin_widths)
-    # print(bin_volume)
-    # hist = hist / np.prod(bin_widths)
-    # print(np.sum(hist))
-
-    # get bin indices for event
-    num_fields = len(fields)
-    if len(fields) == 0:
-        raise ValueError("No fields provided")
-
-    bin_indices = np.empty((len(events), num_fields))
-    idx = 0
-    for field in fields:
-        bin_indices[:, idx] = np.digitize(events[field],
-                                          edges[idx][1:],
-                                          right=True)  # type: ignore
-        idx += 1
-    bin_indices[bin_indices == bin_nr] = bin_nr - 1
-    bin_indices = bin_indices.astype(dtype=np.int32)
-    bin_indices = bin_indices.T
-
-    # return bin values for each event, they are a measure of the prob. of that event being signal-like at that step
-    return hist[tuple(bin_indices)], uncertainty_hist[tuple(bin_indices)]
-
-
 def get_event_likelihood_nd(
     data: ak.Array,
     hist: np.ndarray,
@@ -373,8 +356,7 @@ def get_event_likelihood_nd(
     field_list: np.ndarray,
     bins_per_dim: np.ndarray,
 ):
-    """
-    """
+    """ """
     n_dims = len(field_list)
     data_dim1 = ak.to_numpy(data[field_list[0]])
     bin_indices_dim1 = np.zeros(len(data[field_list[0]]), dtype=np.int32)
@@ -393,11 +375,15 @@ def get_event_likelihood_nd(
     if n_dims > 1:
         print(f"Evaluating... fields: {field_list}")
         for ev in range(len(data_dim2)):
-            bin_index = np.digitize(
-                data_dim2[ev],
-                edges_dict["edges_dim2"][bin_indices_dim1[ev]],
-                right=True,
-            ) - 1
+            bin_index = (
+                np.digitize(
+                    data_dim2[ev],
+                    edges_dict["edges_dim2"][bin_indices_dim1[ev]],
+                    right=True,
+                )
+                - 1
+            )
+            # underflow / overflow handling
             bin_index = min(bin_index, bins_per_dim[1] - 1)
             bin_index = max(bin_index, 0)
 
@@ -405,8 +391,7 @@ def get_event_likelihood_nd(
             if n_dims == 3:
                 bin_index_dim3 = np.digitize(
                     data_dim3[ev],
-                    edges_dict["edges_dim3"][bin_indices_dim1[ev],
-                    bin_indices_dim2[ev]],
+                    edges_dict["edges_dim3"][bin_indices_dim1[ev], bin_indices_dim2[ev]],
                     right=True,
                 )
                 bin_index_dim3 = min(bin_index_dim3, bins_per_dim[2] - 1)
@@ -426,22 +411,28 @@ def get_event_likelihood_nd(
     #     lis[lis == -1] = 0
     #     lis[lis > n_bins - 1] = n_bins - 1
     if n_dims == 3:
-        bin_indices = np.concatenate([
-            bin_indices_dim1[:, None],
-            bin_indices_dim2[:, None],
-            bin_indices_dim3[:, None],
-        ], axis=1,
+        bin_indices = np.concatenate(
+            [
+                bin_indices_dim1[:, None],
+                bin_indices_dim2[:, None],
+                bin_indices_dim3[:, None],
+            ],
+            axis=1,
         )
     elif n_dims == 2:
-        bin_indices = np.concatenate([
-            bin_indices_dim1[:, None],
-            bin_indices_dim2[:, None],
-        ], axis=1,
+        bin_indices = np.concatenate(
+            [
+                bin_indices_dim1[:, None],
+                bin_indices_dim2[:, None],
+            ],
+            axis=1,
         )
     elif n_dims == 1:
-        bin_indices = np.concatenate([
-            bin_indices_dim1[:, None],
-        ], axis=1,
+        bin_indices = np.concatenate(
+            [
+                bin_indices_dim1[:, None],
+            ],
+            axis=1,
         )
     else:
         raise Exception("Wrong number of dimensions")
@@ -485,13 +476,17 @@ def create_top_likelihood_hists(
     step2_dict = create_any_hist(
         data,
         field_list=np.array(["tt_vis_system_pt"]),
-        bins=bin_nr, statistical_binning=statistical_binning, bin_filling=bin_filling,
+        bins=bin_nr,
+        statistical_binning=statistical_binning,
+        bin_filling=bin_filling,
     )
 
     step3_dict = create_any_hist(
         data,
         field_list=np.array(["tt_vis_system_pz"]),
-        bins=bin_nr, statistical_binning=statistical_binning, bin_filling=bin_filling,
+        bins=bin_nr,
+        statistical_binning=statistical_binning,
+        bin_filling=bin_filling,
     )
 
     step4_dict = create_any_hist(
@@ -503,13 +498,17 @@ def create_top_likelihood_hists(
     step5_dict = create_any_hist(
         data,
         field_list=np.array(["tau1_cos_theta_star_cms_t1_vis"]),
-        bins=bin_nr, statistical_binning=statistical_binning, bin_filling=bin_filling,
+        bins=bin_nr,
+        statistical_binning=statistical_binning,
+        bin_filling=bin_filling,
     )
 
     step6_dict = create_any_hist(
         data,
         field_list=np.array(["tau2_cos_theta_star_cms_t2_vis"]),
-        bins=bin_nr, statistical_binning=statistical_binning, bin_filling=bin_filling,
+        bins=bin_nr,
+        statistical_binning=statistical_binning,
+        bin_filling=bin_filling,
     )
     hist_dict = {
         "step1_dict": step1_dict,
@@ -520,7 +519,9 @@ def create_top_likelihood_hists(
         "step6_dict": step6_dict,
     }
     with open(
-        f"{hist_path}top_hists_bpd{bins_per_dim}_nbins{bin_nr}.pkl", "wb",
+        # f"{hist_path}top_hists_bpd{bins_per_dim}_nbins{bin_nr}_statbin{statistical_binning}.pkl",
+        f"{hist_path}top_hists_bpd{bins_per_dim}_nbins{bin_nr}_statbin-{statistical_binning}.pkl",
+        "wb",
     ) as hist_file:
         pickle.dump(hist_dict, hist_file)
 
@@ -548,28 +549,53 @@ def create_higgs_likelihood_hists(
     """
     data = higgs_data
 
-    step1_dict = create_multidim_hist(data,
-        np.array([
-            "dihiggs_mass",
-            "dihiggs_system_pt",
-        ]), bins_per_dim=bins_per_dim)
+    step1_dict = create_multidim_hist(
+        data,
+        np.array(
+            [
+                "dihiggs_mass",
+                "dihiggs_system_pt",
+            ]
+        ),
+        bins_per_dim=bins_per_dim,
+        statistical_binning=statistical_binning,
+    )
 
-    step2_dict = create_any_hist(data,
-        field_list=np.array([
-            "dihiggs_system_pz",
-        ]), bins=bin_nr, statistical_binning=statistical_binning, bin_filling=bin_filling)
+    step2_dict = create_any_hist(
+        data,
+        field_list=np.array(
+            [
+                "dihiggs_system_pz",
+            ]
+        ),
+        bins=bin_nr,
+        statistical_binning=statistical_binning,
+        bin_filling=bin_filling,
+    )
 
-    step3_dict = create_any_hist(data,
+    step3_dict = create_any_hist(
+        data,
         field_list=np.array(["cos_theta_cms_h1_b1"]),
-        bins=bin_nr, statistical_binning=statistical_binning, bin_filling=bin_filling)
+        bins=bin_nr,
+        statistical_binning=statistical_binning,
+        bin_filling=bin_filling,
+    )
 
-    step4_dict = create_any_hist(data,
+    step4_dict = create_any_hist(
+        data,
         field_list=np.array(["cos_theta_h1"]),
-        bins=bin_nr, statistical_binning=statistical_binning, bin_filling=bin_filling)
+        bins=bin_nr,
+        statistical_binning=statistical_binning,
+        bin_filling=bin_filling,
+    )
 
-    step5_dict = create_any_hist(data,
+    step5_dict = create_any_hist(
+        data,
         field_list=np.array(["cos_theta_cms_h2_tau_vis1"]),
-        bins=bin_nr, statistical_binning=statistical_binning, bin_filling=bin_filling)
+        bins=bin_nr,
+        statistical_binning=statistical_binning,
+        bin_filling=bin_filling,
+    )
 
     hist_dict = {
         "step1_dict": step1_dict,
@@ -579,7 +605,8 @@ def create_higgs_likelihood_hists(
         "step5_dict": step5_dict,
     }
     with open(
-        f"{hist_path}higgs_hists_bpd{bins_per_dim}_nbins{bin_nr}.pkl", "wb",
+        f"{hist_path}higgs_hists_bpd{bins_per_dim}_nbins{bin_nr}_statbin-{statistical_binning}.pkl",
+        "wb",
     ) as hist_file:
         pickle.dump(hist_dict, hist_file)
 
@@ -590,23 +617,59 @@ def create_signal_hist(
     bins_per_dim: str,
     hist_path: str = "/data/dust/user/diepholq/hh2bbtautau/hist_files/",
     statistical_binning: bool = True,
+    check_files_higgs: bool = True,
 ) -> ak.Array:
     """Creates likelihood histograms for the signal likelihood with the desired options.
     Options need to be set manually below atm.
+    Args:
+        check_files_higgs (bool): If existence of combined parquet files should be checked
     """
     # Check if hist already exists
-    hist_file_path: str = f"{hist_path}higgs_hists_bpd{bins_per_dim}_nbins{bin_nr}.pkl"
+    hist_file_path: str = f"{hist_path}higgs_hists_bpd{bins_per_dim}_nbins{bin_nr}_statbin-{statistical_binning}.pkl"
     try:
         with open(hist_file_path, "rb") as hist_file:
             _ = pickle.load(hist_file)
     except:
-        # Get signal events and input column:
-        parquet_file_path_signal = (
-            "/data/dust/user/diepholq/hh2bbtautau/hbt_store/analysis_hbt/cf.ProduceColumns/22pre_v14/"
-            "hh_ggf_hbb_htt_kl1_kt1_powheg/nominal/calib__default/sel__default/red__default/prod__pdf_inputs/"
-            "dev_likelihood_ratio/columns_0.parquet"
+        try:
+            parquet_file_path_signal = "/data/dust/user/diepholq/hh2bbtautau/hist_input_data/twoboost/higgs/"
+            signal_data = get_data(
+                f"{parquet_file_path_signal}columns_all.parquet",
+                "pdf_input_vars_reco_higgs",
+                drop_nones=True,
+            )
+        except:
+            print(f"No united 22pre and 22post file found at {parquet_file_path_signal}, creating one...")
+            file_list = glob(f"{parquet_file_path_signal}*.parquet")
+            result = ak.concatenate([ak.from_parquet(file_list[0]), ak.from_parquet(file_list[1])], axis=0)
+            column_dict = {}
+            for column in result.fields:
+                # ch_id_mask = result[column][result[column].fields[0]] != EMPTY_FLOAT
+                ch_id_mask = result[column]["channel_id"] == 3
+                column_dict[column] = result[column][ch_id_mask]
+                for idx in range(2, len(file_list)):
+                    imported = ak.from_parquet(file_list[idx])[column]
+                    # ch_id_mask = imported[imported.fields[0]] != EMPTY_FLOAT
+                    ch_id_mask = imported["channel_id"] == 3
+                    column_dict[column] = ak.to_packed(
+                        ak.concatenate([column_dict[column], imported[ch_id_mask]], axis=0)
+                    )
+            result = ak.zip(
+                {
+                    "pdf_input_vars_reco_higgs": column_dict["pdf_input_vars_reco_higgs"],
+                    "pdf_input_vars_reco_top": column_dict["pdf_input_vars_reco_top"],
+                }
+            )
+            ak.to_parquet(result, f"{parquet_file_path_signal}columns_all.parquet")
+
+        signal_data = get_data(
+            f"{parquet_file_path_signal}columns_all.parquet",
+            "pdf_input_vars_reco_higgs",
+            drop_nones=True,
         )
-        signal_data = get_data(parquet_file_path_signal, "pdf_input_vars_reco_higgs", drop_nones=True)
+
+        # # Get signal events and input column:
+        # parquet_file_path_signal = "/data/dust/user/diepholq/hh2bbtautau/hist_input_data/higgs/columns_0.parquet"
+        # signal_data = get_data(parquet_file_path_signal, "pdf_input_vars_reco_higgs", drop_nones=False)
 
         # Create hist
         create_higgs_likelihood_hists(
@@ -627,16 +690,16 @@ def create_background_hist(
     bins_per_dim: str,
     hist_path: str = "/data/dust/user/diepholq/hh2bbtautau/hist_files/",
     statistical_binning: bool = True,
+    check_files_top: bool = True,
 ) -> ak.Array:
     """Creates likelihood histograms for the background likelihood with the desired options.
     Options need to be set manually below atm.
+    Args:
+        check_files_top (bool): If existence of combined parquet files should be checked
     """
     # Check if hist already exists
-    hist_file_path: str = f"{hist_path}top_hists_bpd{bins_per_dim}_nbins{bin_nr}.pkl"
-    parquet_file_path_bg = (
-        "/data/dust/user/diepholq/hh2bbtautau/hbt_store/analysis_hbt/cf.ProduceColumns/22pre_v14/tt_dl_powheg/"
-        "nominal/calib__default/sel__default/red__default/prod__pdf_inputs/dev_likelihood_ratio/"
-    )
+    hist_file_path: str = f"{hist_path}top_hists_bpd{bins_per_dim}_nbins{bin_nr}_statbin-{statistical_binning}.pkl"
+    parquet_file_path_bg = "/data/dust/user/diepholq/hh2bbtautau/hist_input_data/twoboost/top/"
     try:
         with open(hist_file_path, "rb") as hist_file:
             _ = pickle.load(hist_file)
@@ -645,20 +708,39 @@ def create_background_hist(
         # Check if individual files are already added together:
         try:
             bg_data = get_data(
-                f"{parquet_file_path_bg}columns_all.parquet", "pdf_input_vars_reco_top", drop_nones=True,
+                f"{parquet_file_path_bg}columns_all.parquet",
+                "pdf_input_vars_reco_top",
+                drop_nones=True,
             )
         except:
+            print(f"No united 22pre and 22post file found at {parquet_file_path_signal}, creating one...")
             file_list = glob(f"{parquet_file_path_bg}*.parquet")
-            result = ak.concatenate(
-                [ak.from_parquet(file_list[0]),
-                ak.from_parquet(file_list[1])], axis=0)
-            for idx in range(2, len(file_list)):
-                result = ak.concatenate([result, ak.from_parquet(file_list[idx])], axis=0)
-                ak.to_parquet(result, f"{parquet_file_path_bg}columns_all.parquet")
-
-            bg_data = get_data(
-                f"{parquet_file_path_bg}columns_all.parquet", "pdf_input_vars_reco_top", drop_nones=True,
+            result = ak.concatenate([ak.from_parquet(file_list[0]), ak.from_parquet(file_list[1])], axis=0)
+            column_dict = {}
+            for column in result.fields:
+                # ch_id_mask = result[column][result[column].fields[0]] != EMPTY_FLOAT
+                ch_id_mask = result[column]["channel_id"] == 3
+                column_dict[column] = result[column][ch_id_mask]
+                for idx in range(2, len(file_list)):
+                    imported = ak.from_parquet(file_list[idx])[column]
+                    # ch_id_mask = imported[imported.fields[0]] != EMPTY_FLOAT
+                    ch_id_mask = imported["channel_id"] == 3
+                    column_dict[column] = ak.to_packed(
+                        ak.concatenate([column_dict[column], imported[ch_id_mask]], axis=0)
+                    )
+            result = ak.zip(
+                {
+                    "pdf_input_vars_reco_higgs": column_dict["pdf_input_vars_reco_higgs"],
+                    "pdf_input_vars_reco_top": column_dict["pdf_input_vars_reco_top"],
+                }
             )
+            ak.to_parquet(result, f"{parquet_file_path_bg}columns_all.parquet")
+
+        bg_data = get_data(
+            f"{parquet_file_path_bg}columns_all.parquet",
+            "pdf_input_vars_reco_top",
+            drop_nones=True,
+        )
 
         # Create hist
         create_top_likelihood_hists(
@@ -682,15 +764,17 @@ def eval_top_likelihood_hists(
     bin_filling: bool = False,
     do_constr: bool = True,
     hist_file_path: str = "/data/dust/user/diepholq/hh2bbtautau/hist_files/top_hists.pkl",
+    check_files_top: bool = True,
 ):
     """Evaluates given data on the top likelihood histograms and returns L_hists
     Args:
         hist_file_path (str): Path to the pickle file containting the filled histogram dictionary
         bins_per_dim (np.ndarray): A list containing the number of bins per dimension of the multidim. fact. step
+        check_files_top (bool): If existence of combined parquet files should be checked
     """
     hist_file_path = (
         f"/data/dust/user/diepholq/hh2bbtautau/hist_files/"
-        f"top_hists_bpd{bins_per_dim}_nbins{bin_nr}.pkl"
+        f"top_hists_bpd{bins_per_dim}_nbins{bin_nr}_statbin-{statistical_binning}.pkl"
     )
     try:
         with open(hist_file_path, "rb") as hist_file:
@@ -699,16 +783,16 @@ def eval_top_likelihood_hists(
         if not allow_hist_creation:
             raise Exception(f"Histogram {hist_file_path} not found, please create first")
         else:
-            parquet_file_path_bg = (
-                "/data/dust/user/diepholq/hh2bbtautau/hbt_store/analysis_hbt/cf.ProduceColumns/22pre_v14/tt_dl_powheg/"
-                "nominal/calib__default/sel__default/red__default/prod__pdf_inputs/dev_likelihood_ratio/"
-            )
+            parquet_file_path_bg = "/data/dust/user/diepholq/hh2bbtautau/hist_input_data/twoboost/top/"
             print("\nCreating background hist...\n")
             create_background_hist(
                 parquet_file_path_bg,
                 bin_nr,
                 bins_per_dim,
+                statistical_binning=statistical_binning,
+                check_files_top=check_files_top,
             )
+    finally:
         with open(hist_file_path, "rb") as hist_file:
             hist_dict = pickle.load(hist_file)
     step1_dict = hist_dict["step1_dict"]
@@ -797,18 +881,20 @@ def eval_higgs_likelihood_hists(
     bin_filling: bool = False,
     do_constr: bool = True,
     hist_file_path: str = "/data/dust/user/diepholq/hh2bbtautau/hist_files/higgs_hists.pkl",
+    check_files_higgs: bool = True,
 ):
     """Evaluates given data on the higgs likelihood histograms and return L_hists
-        eval_data (ak.Array): Data to evaluate the likelihood on
-        bin_nr (int): Number of bins for each n-d hist
-        bins_per_dim (np.ndarray): A list containing the number of bins per dimension of the multidim. fact. step
-        statistical_binning (bool): If the statistical_binning tweak should be used
-        bin_filling (bool): If empty bins should be filled w/ mean of neighb. vals
-        hist_file_path (str): Path to the pickle file containting the filled histogram dictionary
+    eval_data (ak.Array): Data to evaluate the likelihood on
+    bin_nr (int): Number of bins for each n-d hist
+    bins_per_dim (np.ndarray): A list containing the number of bins per dimension of the multidim. fact. step
+    statistical_binning (bool): If the statistical_binning tweak should be used
+    bin_filling (bool): If empty bins should be filled w/ mean of neighb. vals
+    hist_file_path (str): Path to the pickle file containting the filled histogram dictionary
+    check_files_higgs (bool): If existence of combined parquet files should be checked
     """
     hist_file_path = (
         f"/data/dust/user/diepholq/hh2bbtautau/hist_files/"
-        f"higgs_hists_bpd{bins_per_dim}_nbins{bin_nr}.pkl"
+        f"higgs_hists_bpd{bins_per_dim}_nbins{bin_nr}_statbin-{statistical_binning}.pkl"
     )
     try:
         with open(hist_file_path, "rb") as hist_file:
@@ -818,16 +904,16 @@ def eval_higgs_likelihood_hists(
             raise Exception(f"Histogram {hist_file_path} not found, please create first")
         else:
             parquet_file_path_signal = (
-                "/data/dust/user/diepholq/hh2bbtautau/hbt_store/analysis_hbt/cf.ProduceColumns/22pre_v14/"
-                "hh_ggf_hbb_htt_kl1_kt1_powheg/nominal/calib__default/sel__default/red__default/prod__pdf_inputs/"
-                "dev_likelihood_ratio/columns_0.parquet"
+                "/data/dust/user/diepholq/hh2bbtautau/hist_input_data/twoboost/higgs/columns_all.parquet"
             )
             print("\nCreating signal hist...\n")
             create_signal_hist(
                 parquet_file_path_signal,
                 bin_nr,
                 bins_per_dim,
+                statistical_binning=statistical_binning,
             )
+    finally:
         with open(hist_file_path, "rb") as hist_file:
             hist_dict = pickle.load(hist_file)
     step1_dict = hist_dict["step1_dict"]
@@ -847,10 +933,12 @@ def eval_higgs_likelihood_hists(
         hist_step1,
         edges_step1,
         uncert_hist_step1,
-        np.array([
-            "dihiggs_mass",
-            "dihiggs_system_pt",
-        ]),
+        np.array(
+            [
+                "dihiggs_mass",
+                "dihiggs_system_pt",
+            ]
+        ),
         bins_per_dim,
     )
     bin_nr = np.array([bin_nr])
@@ -859,9 +947,11 @@ def eval_higgs_likelihood_hists(
         hist_step2,
         edges_step2,
         uncert_hist_step2,
-        np.array([
-            "dihiggs_system_pz",
-        ]),
+        np.array(
+            [
+                "dihiggs_system_pz",
+            ]
+        ),
         bin_nr,
     )
 

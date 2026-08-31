@@ -4,16 +4,19 @@ with statistical uncertainties.
 
 import hbt.production.histogram_helper_functions as hhf
 from columnflow.util import maybe_import
+from columnflow.columnar_util import EMPTY_FLOAT
+
 ak = maybe_import("awkward")
 np = maybe_import("numpy")
 
-LINES_STRING = "------------------------------------------------------------------------------------------------------\n"
+LINES_STRING = (
+    "------------------------------------------------------------------------------------------------------\n"
+)
 
 
 def log_err_prop(res_dict: dict, p_string, err_string):
-    """Gaussian error propagation for log likelihood
-    """
-    res = np.sqrt(((1 / res_dict[p_string]) * res_dict[err_string])**2)
+    """Gaussian error propagation for log likelihood"""
+    res = np.sqrt(((1 / res_dict[p_string]) * res_dict[err_string]) ** 2)
     return res
 
 
@@ -27,6 +30,8 @@ def calculate_reco_score_higgs(
     return_log: bool = True,
     bin_filling: bool = False,
     do_jacobian: bool = False,
+    check_files_higgs: bool = True,
+    check_files_top: bool = True,
 ):
     """Calculates likelihood scores for events being signal-like.
     Args:
@@ -39,6 +44,8 @@ def calculate_reco_score_higgs(
         return_log (bool): If the probabilities should be returned as ln(probabilities)
         bin_filling (bool): If empty bins should be filled w/ mean of neighb. vals
         do_jacobian (bool): If jacobian determinant of transformation from detector to pdf input space should be taken
+        check_files_higgs (bool): If existence of combined parquet files should be checked
+        check_files_top (bool): If existence of combined parquet files should be checked
                             into account
     Returns:
         Tuple(np.ndarray, np.ndarray, np.ndarray): Array with the event probabilities, Array with the statistical
@@ -48,8 +55,10 @@ def calculate_reco_score_higgs(
     constr_tau: ak.Array = eval_data.constr_term_tau
 
     ev_idx: np.ndarray = np.arange(0, len(eval_data), 1)
-
-    non_msk: ak.Array = ak.is_none(eval_data) == bool(0)
+    # from IPython import embed
+    # embed(header="calc reco score higgs")
+    # non_msk: ak.Array = ak.is_none(eval_data) == bool(0)
+    non_msk: ak.Array = eval_data[eval_data.fields[0]] != EMPTY_FLOAT
 
     # ignore jacobian terms if not desired
     if do_jacobian:
@@ -57,7 +66,12 @@ def calculate_reco_score_higgs(
     else:
         jac_det = np.ones_like(ev_idx)[non_msk]
 
-    eval_data, constr_b, constr_tau, ev_idx = eval_data[non_msk], constr_b[non_msk], constr_tau[non_msk], ev_idx[non_msk]
+    eval_data, constr_b, constr_tau, ev_idx = (
+        eval_data[non_msk],
+        constr_b[non_msk],
+        constr_tau[non_msk],
+        ev_idx[non_msk],
+    )
 
     higgs_results_dict = hhf.eval_higgs_likelihood_hists(
         eval_data,
@@ -67,6 +81,7 @@ def calculate_reco_score_higgs(
         statistical_binning=statistical_binning,
         do_constr=do_constr,
         bin_filling=bin_filling,
+        check_files_higgs=check_files_higgs,
     )
     probs = higgs_results_dict["probs_higgs"]
     errors = higgs_results_dict["errors_higgs"]
@@ -75,12 +90,12 @@ def calculate_reco_score_higgs(
             probs = probs * np.exp(-(constr_b + constr_tau)) * jac_det
             return probs, errors, ev_idx
         else:
-            errors_log = np.sqrt(((1 / probs) * errors)**2)
+            errors_log = np.sqrt(((1 / probs) * errors) ** 2)
             probs = np.log(probs) - constr_b - constr_tau + np.log(jac_det)
             return probs, errors, errors_log, ev_idx
     else:
         if return_log:
-            errors_log = np.sqrt(((1 / probs) * errors)**2)
+            errors_log = np.sqrt(((1 / probs) * errors) ** 2)
             probs = np.log(probs)
             return probs, errors, errors_log, ev_idx
         else:
@@ -97,7 +112,8 @@ def calculate_reco_score_top(
     return_log: bool = True,
     bin_filling: bool = False,
     do_jacobian: bool = False,
-
+    check_files_higgs: bool = True,
+    check_files_top: bool = True,
 ):
     """Calculates likelihood scores for events being background-like.
     Args:
@@ -111,13 +127,16 @@ def calculate_reco_score_top(
         bin_filling (bool): If empty bins should be filled w/ mean of neighb. vals
         do_jacobian (bool): If jacobian determinant of transformation from detector to pdf input space should be taken
                             into account
+        check_files_higgs (bool): If existence of combined parquet files should be checked
+        check_files_top (bool): If existence of combined parquet files should be checked
     Returns:
         Tuple(np.ndarray, np.ndarray): Array with the event probabilities, Array with the statistical uncertainties per
         event, event indices that survived none dropping. If return_log, linear as well as log errors are returned
     """
     ev_idx: np.ndarray = np.arange(0, len(eval_data), 1)
 
-    non_msk: ak.Array = ak.is_none(eval_data) == bool(0)
+    non_msk: ak.Array = eval_data[eval_data.fields[0]] != EMPTY_FLOAT
+    # non_msk: ak.Array = ak.is_none(eval_data) == bool(0)
     print(f"do jacobian: {do_jacobian}")
     # ignore jacobian terms if not desired
     if do_jacobian:
@@ -135,10 +154,11 @@ def calculate_reco_score_top(
         statistical_binning=statistical_binning,
         do_constr=do_constr,
         bin_filling=bin_filling,
+        check_files_top=check_files_top,
     )
     probs, errors = top_results_dict["p_top"], top_results_dict["errors_p_top"]
     if return_log:
-        errors_log = np.sqrt(((1 / probs) * errors)**2)
+        errors_log = np.sqrt(((1 / probs) * errors) ** 2)
         probs = np.log(probs) + np.log(jac_det)
         return probs, errors, errors_log, ev_idx
     else:
@@ -155,6 +175,8 @@ def calculate_likelihood_ratio_for_plotting(
     do_constr: bool = True,
     do_jacobian: bool = False,
     bin_filling: bool = False,
+    check_files_higgs: bool = True,
+    check_files_top: bool = True,
 ):
     """Calculates the log likelihood ratio for a set of events, the events need to have the columns
     pdf_input_vars_reco_higgs and pdf_input_vars_reco_top.
@@ -168,6 +190,8 @@ def calculate_likelihood_ratio_for_plotting(
         bin_filling (bool): If empty bins should be filled w/ mean of neighb. vals
         do_jacobian (bool): If jacobian determinant of transformation from detector to pdf input space should be taken
                             into account
+        check_files_higgs (bool): If existence of combined parquet files should be checked
+        check_files_top (bool): If existence of combined parquet files should be checked
     Returns:
         Tuple(np.ndarray, np.ndarray): Array with the event likelihood ratios, Array with the statistical uncertainties
         per event
@@ -180,7 +204,7 @@ def calculate_likelihood_ratio_for_plotting(
         f"\ndo_jacobian: {do_jacobian}:"
         f"\n{LINES_STRING}\n",
     )
-    eval_data_signal = hhf.get_data(eval_data_path, "pdf_input_vars_reco_higgs", drop_nones=False)
+    eval_data_signal = hhf.get_data(eval_data_path, "pdf_input_vars_reco_higgs", drop_nones=True)
     p_is_higgs_log, err_is_higgs, err_is_higgs_log, ev_idx_higgs = calculate_reco_score_higgs(
         eval_data_signal,
         n_bins_1d,
@@ -190,9 +214,11 @@ def calculate_likelihood_ratio_for_plotting(
         do_constr=do_constr,
         bin_filling=bin_filling,
         do_jacobian=do_jacobian,
+        check_files_higgs=check_files_higgs,
+        check_files_top=check_files_top,
     )
 
-    eval_data_bg = hhf.get_data(eval_data_path, "pdf_input_vars_reco_top", drop_nones=False)
+    eval_data_bg = hhf.get_data(eval_data_path, "pdf_input_vars_reco_top", drop_nones=True)
     p_is_top_log, err_is_top, err_is_top_log, ev_idx_top = calculate_reco_score_top(
         eval_data_bg,
         n_bins_1d,
@@ -202,6 +228,8 @@ def calculate_likelihood_ratio_for_plotting(
         do_constr=do_constr,
         bin_filling=bin_filling,
         do_jacobian=do_jacobian,
+        check_files_higgs=check_files_higgs,
+        check_files_top=check_files_top,
     )
 
     ev_idx_mask = ev_idx_higgs == ev_idx_top
@@ -209,6 +237,6 @@ def calculate_likelihood_ratio_for_plotting(
     p_is_top, err_is_top = p_is_top_log[ev_idx_mask], err_is_top[ev_idx_mask]
 
     ratio = p_is_higgs - p_is_top
-    errors_ratio = np.sqrt((1 / np.exp(p_is_higgs) * err_is_higgs)**2 + (-1 / np.exp(p_is_top) * err_is_top)**2)
+    errors_ratio = np.sqrt((1 / np.exp(p_is_higgs) * err_is_higgs) ** 2 + (-1 / np.exp(p_is_top) * err_is_top) ** 2)
 
     return ratio, errors_ratio

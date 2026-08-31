@@ -64,8 +64,7 @@ class BaseEvaluator(abc.ABC):
         self.delay = 0.1
 
     @abc.abstractmethod
-    def get_model_cls(self) -> Type[BaseModel]:
-        ...
+    def get_model_cls(self) -> Type[BaseModel]: ...
 
     def __enter__(self) -> BaseEvaluator:
         self.start()
@@ -132,7 +131,6 @@ class BaseEvaluator(abc.ABC):
 
         # wait for and receive result
         res_name, res = self._pipe.recv()  # type: ignore[union-attr]
-
         # handle errors
         if res_name != name:
             raise RuntimeError(f"received result for unexpected model '{res_name}' (expected '{name}')")
@@ -233,6 +231,7 @@ def evaluation_loop(
 # TensorFlow model and evaluator
 #
 
+
 @dataclasses.dataclass
 class TFModel(BaseModel):
     signature_key: str = ""
@@ -242,6 +241,7 @@ class TFModel(BaseModel):
     def imports(cls):
         print("importing tensorflow ...", flush=True)
         import tensorflow as tf  # type: ignore[import-not-found,import-untyped]
+
         tf.config.threading.set_intra_op_parallelism_threads(1)
         tf.config.threading.set_inter_op_parallelism_threads(1)
         print("done", flush=True)
@@ -300,6 +300,7 @@ class TFEvaluator(BaseEvaluator):
 # Torch model and evaluator
 #
 
+
 @dataclasses.dataclass
 class TorchModel(BaseModel):
 
@@ -309,6 +310,7 @@ class TorchModel(BaseModel):
         print("importing torch ...", flush=True)
         import numpy as np
         import torch  # type: ignore[import-not-found,import-untyped]
+
         torch.set_num_threads(1)
         torch.set_num_interop_threads(1)
         print("done", flush=True)
@@ -380,6 +382,7 @@ class TorchEvaluator(BaseEvaluator):
 # ONNX model and evaluator
 #
 
+
 @dataclasses.dataclass
 class ONNXModel(BaseModel):
 
@@ -388,6 +391,7 @@ class ONNXModel(BaseModel):
     def imports(cls):
         print("importing onnx ...", flush=True)
         import onnxruntime as ort  # type: ignore[import-not-found,import-untyped]
+
         print("done", flush=True)
         return ort
 

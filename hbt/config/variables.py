@@ -24,6 +24,7 @@ def add_variables(config: od.Config) -> None:
     """
     Adds all variables to a *config*.
     """
+
     # helper that automatically adds null_value and under/overflow flags if not specified
     def add_variable(*args, **kwargs) -> od.Variable:
         kwargs.setdefault("null_value", EMPTY_FLOAT)
@@ -719,18 +720,249 @@ def add_variables(config: od.Config) -> None:
         binning=(66, -3.3, 3.3),
         x_title=r"Subleading muon $\phi$",
     )
-    # Likelihood ratio / hist. method classifier output
+    # Likelihood ratio / hist. method classifier output / hard scattering observables for gen & reco
     add_variable(
         name="LikelihoodRatio",
         expression="likelihood_ratio",
         binning=(100, -70, 35),
         x_title=r"$\frac{L^{HH}}{L^{t\bar{t}}}$",
     )
+    # Gen di-Higgs system
+    add_variable(
+        name="higgs_gen_hh_mass",
+        expression="pdf_input_vars_gen_higgs.dihiggs_mass",
+        binning=(50, 0, 1250),
+        unit="GeV",
+        x_title=r"$m_{H_{bb}H_{\tau\tau}}$",
+    )
+    add_variable(
+        name="higgs_gen_hh_pt",
+        expression="pdf_input_vars_gen_higgs.dihiggs_system_pt",
+        binning=(50, 0, 1000),
+        unit="GeV",
+        x_title=r"$p_{T,H_{bb}H_{\tau\tau}}$",
+    )
+    add_variable(
+        name="higgs_gen_hh_pz",
+        expression="pdf_input_vars_gen_higgs.dihiggs_system_pz",
+        binning=(100, -1500, 1500),
+        unit="GeV",
+        x_title=r"$p_{z,H_{bb}H_{\tau\tau}}$",
+    )
+    add_variable(
+        name="higgs_gen_hh_phi",
+        expression="pdf_input_vars_gen_higgs.dihiggs_system_phi",
+        binning=(50, -3.3, 3.3),
+        unit="rad",
+        x_title=r"$\phi_{H_{bb}H_{\tau\tau}}$",
+    )
+    # Gen single Higgs system
+    add_variable(
+        name="higgs_gen_cos_theta_h1",
+        expression="pdf_input_vars_gen_higgs.cos_theta_h1",
+        binning=(50, -1, 1),
+        x_title=r"$cos(\theta^{*})_{H_{bb}}^{HH}$",
+    )
+    add_variable(
+        name="higgs_gen_phi_h1",
+        expression="pdf_input_vars_gen_higgs.phi_h1",
+        binning=(50, -3.3, 3.3),
+        unit="rad",
+        x_title=r"$\phi_{H_{bb}}^{HH}$",
+    )
+    # Gen tautau system
+    add_variable(
+        name="higgs_gen_cos_theta_cms_h2_tau_vis1",
+        expression="pdf_input_vars_gen_higgs.cos_theta_cms_h2_tau_vis1",
+        binning=(50, -1, 1),
+        x_title=r"$cos(\theta^{*})_{\tau_{1}}^{H_{\tau\tau}}$",
+    )
+    add_variable(
+        name="higgs_gen_phi_cms_h2_tau1",
+        expression="pdf_input_vars_gen_higgs.phi_cms_h2_tau_vis1",
+        binning=(50, -3.3, 3.3),
+        unit="rad",
+        x_title=r"$\phi_{\tau_{1}}^{H_{\tau\tau}}$",
+    )
+    # Gen bb system
+    add_variable(
+        name="higgs_gen_phi_cms_h1_b1",
+        expression="pdf_input_vars_gen_higgs.phi_cms_h1_b1",
+        binning=(50, -3.3, 3.3),
+        unit="rad",
+        x_title=r"$\phi_{b_{1}}^{H_{bb}}$",
+    )
+    add_variable(
+        name="higgs_gen_cos_theta_cms_h1_b1",
+        expression="pdf_input_vars_gen_higgs.cos_theta_cms_h1_b1",
+        binning=(50, -1, 1),
+        x_title=r"$cos(\theta^{*})_{b_{1}}^{H_{bb}}$",
+    )
+    # Gen ttbar system
+
+    # Reco di-Higgs system
+    add_variable(
+        name="higgs_reco_hh_mass",
+        expression="pdf_input_vars_reco_higgs.dihiggs_mass",
+        binning=(50, 0, 1250),
+        unit="GeV",
+        x_title=r"$m_{inv}(H_{bb}, H_{\tau\tau})$",
+    )
+    add_variable(
+        name="higgs_reco_hh_pt",
+        expression="pdf_input_vars_reco_higgs.dihiggs_system_pt",
+        binning=(50, 0, 1000),
+        unit="GeV",
+        x_title=r"$p_{T}(H_{bb}, H_{\tau\tau})$",
+    )
+    add_variable(
+        name="higgs_reco_hh_pz",
+        expression="pdf_input_vars_reco_higgs.dihiggs_system_pz",
+        binning=(100, -1500, 1500),
+        unit="GeV",
+        x_title=r"$p_{z}(H_{bb}, H_{\tau\tau})$",
+    )
+    add_variable(
+        name="higgs_reco_hh_phi",
+        expression="pdf_input_vars_reco_higgs.dihiggs_system_phi",
+        binning=(50, -3.3, 3.3),
+        unit="GeV",
+        x_title=r"$\phi(H_{bb}, H_{\tau\tau})$",
+    )
+    add_variable(
+        name="higgs_reco_h1_cos_theta",
+        expression="pdf_input_vars_reco_higgs.cos_theta_h1",
+        binning=(50, -1, 1),
+        x_title=r"$cos(\theta(H_1^{HH}))$",
+    )
+    add_variable(
+        name="higgs_reco_phi_cms_hh_h_1",
+        expression="pdf_input_vars_reco_higgs.phi_h1",
+        binning=(50, -3.14, 3.14),
+        unit="rad",
+        x_title=r"$\phi(H_1^{HH})$",
+    )
+    add_variable(
+        name="higgs_reco_cos_theta_cms_h_2_tau_vis1",
+        expression="pdf_input_vars_reco_higgs.cos_theta_cms_h2_tau_vis1",
+        binning=(50, -1, 1),
+        x_title=r"$cos(\theta(\tau_{vis,1}^{H_2})$",
+    )
+    add_variable(
+        name="higgs_reco_phi_cms_h_2_tau_vis1",
+        expression="pdf_input_vars_reco_higgs.phi_cms_h2_tau_vis1",
+        binning=(50, -3.14, 3.14),
+        unit="rad",
+        x_title=r"$\phi(\tau_{vis,1}^{H_2})$",
+    )
+    add_variable(
+        name="higgs_reco_cos_theta_cms_h1_b1",
+        expression="pdf_input_vars_reco_higgs.cos_theta_cms_h1_b1",
+        binning=(50, -1, 1),
+        x_title=r"$cos(\theta(b_1^{H_1}))$",
+    )
+    add_variable(
+        name="higgs_reco_phi_cms_h_1_b_1",
+        expression="pdf_input_vars_reco_higgs.phi_cms_h1_b1",
+        binning=(50, -3.14, 3.14),
+        unit="rad",
+        x_title=r"$\phi(b_1^{H_1})$",
+    )
+    add_variable(
+        aux={"overflow": True, "underflow": False},
+        name="higgs_reco_constr_term_b",
+        expression="pdf_input_vars_reco_higgs.constr_term_b",
+        binning=(200, 0, 4),
+        x_title=r"constraint term $b\bar{b}$",
+    )
+    add_variable(
+        aux={"overflow": True, "underflow": False},
+        name="higgs_reco_constr_term_tau",
+        expression="pdf_input_vars_reco_higgs.constr_term_tau",
+        binning=(200, 0, 4),
+        x_title=r"constraint term $\tau\bar{\tau}$",
+    )
+    add_variable(
+        name="top_reco_tt_vis_system_mass",
+        expression="pdf_input_vars_reco_top.tt_vis_system_mass",
+        binning=(100, 60, 1600),
+        x_title=r"$m_{t_{vis}\bar{t}_{vis}}$",
+    )
+    add_variable(
+        name="top_reco_tt_vis_system_pt",
+        expression="pdf_input_vars_reco_top.tt_vis_system_pt",
+        binning=(100, 0, 680),
+        x_title=r"$p_{T_{t_{vis}\bar{t}_{vis}}}$",
+    )
+    add_variable(
+        name="top_reco_tt_vis_system_pz",
+        expression="pdf_input_vars_reco_top.tt_vis_system_pz",
+        binning=(100, -2000, 1500),
+        x_title=r"$p_{z_{ t_{vis} \bar{t}_{vis} }}$",
+    )
+    add_variable(
+        name="top_reco_tt_vis_system_phi",
+        expression="pdf_input_vars_reco_top.tt_vis_system_phi",
+        binning=(100, -np.pi, np.pi),
+        unit="rad",
+        x_title=r"$\phi_{t_{vis}\bar{t}_{vis}}$",
+    )
+    add_variable(
+        name="top_reco_t_vis_y_diff",
+        expression="pdf_input_vars_reco_top.t_vis_y_diff",
+        binning=(100, -2.5, 2.7),
+        x_title=r"$\delta \ y(t_{vis}\bar{t}_{vis})$",
+    )
+    add_variable(
+        name="top_reco_t1_vis_phi",
+        expression="pdf_input_vars_reco_top.t1_vis_phi",
+        binning=(100, -np.pi, np.pi),
+        x_title=r"$\phi_{\bar{t}_{vis}}$",
+    )
+    add_variable(
+        name="top_reco_tau1_cos_theta_star_cms_t1_vis",
+        expression="pdf_input_vars_reco_top.tau1_cos_theta_star_cms_t1_vis",
+        binning=(50, -1, 1),
+        x_title=r"$cos(\theta^*(\tau_1^{t_{vis,1}}))$",
+    )
+    add_variable(
+        name="top_reco_tau1_phi",
+        expression="pdf_input_vars_reco_top.tau1_phi",
+        binning=(50, -3.14, 3.14),
+        unit="rad",
+        x_title=r"$\phi(\tau_1^{t_{vis,1}})$",
+    )
+    add_variable(
+        name="top_reco_tau2_cos_theta_star_cms_t2_vis",
+        expression="pdf_input_vars_reco_top.tau2_cos_theta_star_cms_t2_vis",
+        binning=(50, -1, 1),
+        x_title=r"$cos(\theta^*(\tau_2^{t_{vis,2}}))$",
+    )
+    add_variable(
+        name="top_reco_tau2_phi",
+        expression="pdf_input_vars_reco_top.tau2_phi",
+        binning=(50, -3.14, 3.14),
+        unit="rad",
+        x_title=r"$\phi(\tau_2^{t_{vis,2}})$",
+    )
+    add_variable(
+        name="top_reco_tau1_cos_theta_star_cms_wplus",
+        expression="pdf_input_vars_reco_top.tau1_cos_theta_star_cms_wplus",
+        binning=(50, -1, 10),
+        x_title=r"$cos(\theta^*(\tau_1^{W^+}))$",
+    )
+    add_variable(
+        name="top_reco_tau2_cos_theta_star_cms_wminus",
+        expression="pdf_input_vars_reco_top.tau2_cos_theta_star_cms_wminus",
+        binning=(50, -1, 10),
+        x_title=r"$cos(\theta^*(\tau_2^{W^-}))$",
+    )
 
     # helper for logit-conversion of (e.g.) dnn outputs into a less-compressed target space
     def logit(events: ak.Array, col: str, eps: float = 1e-6) -> ak.Array | np.ndarray:
         # eps confines the range of the transformed values to approx. [-13.8, 13.8] for x in [0, 1]
         import numpy as np
+
         x = events[col]
         return np.log((x + eps) / (1 - x + eps))
 
@@ -886,11 +1118,99 @@ def add_variables(config: od.Config) -> None:
         x_title="E2E latent space bins",
         aux={"inputs": ["e2e_model1_bin*"]},
     )
+    # Variables for comparison with histogram method
+    add_variable(
+        name="hs_and_lr_hh",
+        expression="parametrized_binning_fold0_tt",
+        binning=(100, 0, 1),
+        x_title="NN with hs and lr, tt",
+    )
+    add_variable(
+        name="hs_and_lr_tt",
+        expression="parametrized_binning_fold0_hh",
+        binning=(100, 0, 1),
+        x_title="NN with hs and lr, hh",
+    )
+    add_variable(
+        name="only_hs_observables_tt",
+        expression="unknown_features_tt",
+        binning=(100, 0, 1),
+        x_title="NN trained only with hard scattering observables, tt",
+    )
+    add_variable(
+        name="only_hs_observables_hh",
+        expression="unknown_features_hh",
+        binning=(100, 0, 1),
+        x_title="NN trained only with hard scattering observables, hh",
+    )
+    add_variable(
+        name="only_detector_observables_tt",
+        expression="detector_inputs_tt",
+        binning=(100, 0, 1),
+        x_title="NN trained only with detector level observables, tt",
+    )
+    add_variable(
+        name="only_detector_observables_hh",
+        expression="detector_inputs_hh",
+        binning=(100, 0, 1),
+        x_title="NN trained only with detector level observables, hh",
+    )
+    add_variable(
+        name="training_c_hh",
+        expression="training_c_hh",
+        binning=(25, 0.0, 1.0),
+        x_title=r"Training 'C', $HH$ node",
+    )
+    add_variable(
+        name="training_c_hh_fine",
+        expression="training_c_hh",
+        binning=np.linspace(0.0, 0.8, 801).tolist() + np.linspace(0.8, 1.0, 1001)[1:].tolist(),
+        x_title=r"Training 'C', $HH$ node",
+        aux={"x_transformations": "equal_distance_with_indices"},
+    )
+    add_variable(
+        name="training_c_tt",
+        expression="training_c_tt",
+        binning=(100, 0, 1),
+        x_title=r"Training 'C', $\bar{t}t$ node",
+    )
+    add_variable(
+        name="training_c_dy",
+        expression="training_c_dy",
+        binning=(100, 0, 1),
+        x_title=r"Training 'C', $DY$ node",
+    )
+    add_variable(
+        name="bogdan_vanilla_without_ratio_hh",
+        expression="bogdan_vanilla_without_ratio_hh",
+        binning=(25, 0.0, 1.0),
+        x_title=r"Training 'D', $HH$ node",
+    )
+    add_variable(
+        name="bogdan_vanilla_without_ratio_hh_fine",
+        expression="bogdan_vanilla_without_ratio_hh",
+        binning=np.linspace(0.0, 0.8, 801).tolist() + np.linspace(0.8, 1.0, 1001)[1:].tolist(),
+        x_title=r"Training 'D', $HH$ node",
+        aux={"x_transformations": "equal_distance_with_indices"},
+    )
+    add_variable(
+        name="bogdan_vanilla_without_ratio_tt",
+        expression="bogdan_vanilla_without_ratio_tt",
+        binning=(100, 0, 1),
+        x_title=r"Training 'D', $\bar{t}t$ node",
+    )
+    add_variable(
+        name="bogdan_vanilla_without_ratio_dy",
+        expression="bogdan_vanilla_without_ratio_dy",
+        binning=(100, 0, 1),
+        x_title=r"Training 'D', $DY$ node",
+    )
 
 
 #
 # tools for defining variable functions
 #
+
 
 class VarExp:
 
@@ -933,6 +1253,7 @@ class VarExp:
 #
 # advanced variables
 #
+
 
 class VarHt(VarExp):
 

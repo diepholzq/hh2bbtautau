@@ -40,20 +40,31 @@ def create_pdf_input_vars_higgs(self: Producer, events: ak.Array, **kwargs) -> a
     # Get higgs_family column and attach coffea behavior
     # events = self[attach_coffea_behavior](events, collections={"higgs_family": {"type_name": "GenParticle",
     #     "check_attr": "metric_table", "skip_fields": "*Idx*G"}}, **kwargs)
-    gen_higgs = attach_coffea_behavior_fn(events.gen_higgs, collections={
-        "h": {
-            "type_name": "GenParticle", "check_attr": "metric_table", "skip_fields": "*Idx*G",
+    gen_higgs = attach_coffea_behavior_fn(
+        events.gen_higgs,
+        collections={
+            "h": {
+                "type_name": "GenParticle",
+                "check_attr": "metric_table",
+                "skip_fields": "*Idx*G",
+            },
+            "h_children": {
+                "type_name": "GenParticle",
+                "check_attr": "metric_table",
+                "skip_fields": "*Idx*G",
+            },
+            "tau_children": {
+                "type_name": "GenParticle",
+                "check_attr": "metric_table",
+                "skip_fields": "*Idx*G",
+            },
+            "tau_w_children": {
+                "type_name": "GenParticle",
+                "check_attr": "metric_table",
+                "skip_fields": "*Idx*G",
+            },
         },
-        "h_children": {
-            "type_name": "GenParticle", "check_attr": "metric_table", "skip_fields": "*Idx*G",
-        },
-        "tau_children": {
-            "type_name": "GenParticle", "check_attr": "metric_table", "skip_fields": "*Idx*G",
-        },
-        "tau_w_children": {
-            "type_name": "GenParticle", "check_attr": "metric_table", "skip_fields": "*Idx*G",
-        },
-    })
+    )
     # Only use full hadronic tau decays for now:
     # Mask is probably generator specific, may need to change that (no quarks present)
     tau1 = gen_higgs.h_children[:, 1, 1]
@@ -82,7 +93,7 @@ def create_pdf_input_vars_higgs(self: Producer, events: ak.Array, **kwargs) -> a
     tau_vis1_cms_h2 = tau_vis1.boostCM_of(h2.boostvec)
     # theta_cms_h2_tau_vis1 = h2.deltaangle(tau_vis1_cms_h2)   # angle between tau_vis1 in cms of h2 and h2 in lab system
     cos_theta_cms_h2_tau_vis1 = signed_cos_deltaangle(tau_vis1_cms_h2, h2)
-    phi_cms_h2_tau_vis1 = tau_vis1_cms_h2.phi   # phi of tau_vis1 in h2's cms
+    phi_cms_h2_tau_vis1 = tau_vis1_cms_h2.phi  # phi of tau_vis1 in h2's cms
 
     # boost b1 into cms of hbb
     rng = np.random.default_rng()
@@ -95,21 +106,26 @@ def create_pdf_input_vars_higgs(self: Producer, events: ak.Array, **kwargs) -> a
     # angle between b1 in cms of h1 and h1 in lab system
     cos_theta_cms_h1_b1 = signed_cos_deltaangle(b1_cms_h1, h1)
     cos_theta_cms_h1_b2 = signed_cos_deltaangle(b2_cms_h1, h1)
-    phi_cms_h1_b1 = b1_cms_h1.phi   # phi of b1 in h1's cms
+    phi_cms_h1_b1 = b1_cms_h1.phi  # phi of b1 in h1's cms
     # assorted_channels = ak.where(full_hadr_mask, events.channel_id, EMPTY_FLOAT)
 
-    pdf_input_vars = ak.zip({"dihiggs_mass": dihiggs_mass,
-                             "dihiggs_system_pt": dihiggs_system_pt,
-                             "dihiggs_system_pz": dihiggs_system_pz,
-                             "dihiggs_system_phi": dihiggs_system_phi,
-                             "cos_theta_h1": cos_theta_h1,
-                             "phi_h1": phi_h1,
-                             "cos_theta_cms_h2_tau_vis1": cos_theta_cms_h2_tau_vis1,
-                             "phi_cms_h2_tau_vis1": phi_cms_h2_tau_vis1,
-                             "cos_theta_cms_h1_b1": cos_theta_cms_h1_b1,
-                             "cos_theta_cms_h1_b2": cos_theta_cms_h1_b2,
-                             # "assorted_channels": assorted_channels,
-                             "phi_cms_h1_b1": phi_cms_h1_b1}, with_name="pdf_input_vars")
+    pdf_input_vars = ak.zip(
+        {
+            "dihiggs_mass": dihiggs_mass,
+            "dihiggs_system_pt": dihiggs_system_pt,
+            "dihiggs_system_pz": dihiggs_system_pz,
+            "dihiggs_system_phi": dihiggs_system_phi,
+            "cos_theta_h1": cos_theta_h1,
+            "phi_h1": phi_h1,
+            "cos_theta_cms_h2_tau_vis1": cos_theta_cms_h2_tau_vis1,
+            "phi_cms_h2_tau_vis1": phi_cms_h2_tau_vis1,
+            "cos_theta_cms_h1_b1": cos_theta_cms_h1_b1,
+            "cos_theta_cms_h1_b2": cos_theta_cms_h1_b2,
+            # "assorted_channels": assorted_channels,
+            "phi_cms_h1_b1": phi_cms_h1_b1,
+        },
+        with_name="pdf_input_vars",
+    )
     pdf_input_vars = ak.mask(pdf_input_vars, full_hadr_mask)
 
     events = set_ak_column(events, "pdf_input_vars", pdf_input_vars)
@@ -118,7 +134,7 @@ def create_pdf_input_vars_higgs(self: Producer, events: ak.Array, **kwargs) -> a
 
 
 @producer(
-    uses={"gen_higgs.*", attach_coffea_behavior, "channel_id"},
+    uses={"gen_higgs.*.*", attach_coffea_behavior, "channel_id"},
     produces={"pdf_input_vars_gen_higgs.*"},
 )
 def create_pdf_input_vars_higgs_gen(self: Producer, events: ak.Array, **kwargs) -> ak.Array:
@@ -128,20 +144,31 @@ def create_pdf_input_vars_higgs_gen(self: Producer, events: ak.Array, **kwargs) 
     # Get higgs_family column and attach coffea behavior
     # events = self[attach_coffea_behavior](events, collections={"higgs_family": {"type_name": "GenParticle",
     #     "check_attr": "metric_table", "skip_fields": "*Idx*G"}}, **kwargs)
-    gen_higgs = attach_coffea_behavior_fn(events.gen_higgs, collections={
-        "h": {
-            "type_name": "GenParticle", "check_attr": "metric_table", "skip_fields": "*Idx*G",
+    gen_higgs = attach_coffea_behavior_fn(
+        events.gen_higgs,
+        collections={
+            "h": {
+                "type_name": "GenParticle",
+                "check_attr": "metric_table",
+                "skip_fields": "*Idx*G",
+            },
+            "h_children": {
+                "type_name": "GenParticle",
+                "check_attr": "metric_table",
+                "skip_fields": "*Idx*G",
+            },
+            "tau_children": {
+                "type_name": "GenParticle",
+                "check_attr": "metric_table",
+                "skip_fields": "*Idx*G",
+            },
+            "tau_w_children": {
+                "type_name": "GenParticle",
+                "check_attr": "metric_table",
+                "skip_fields": "*Idx*G",
+            },
         },
-        "h_children": {
-            "type_name": "GenParticle", "check_attr": "metric_table", "skip_fields": "*Idx*G",
-        },
-        "tau_children": {
-            "type_name": "GenParticle", "check_attr": "metric_table", "skip_fields": "*Idx*G",
-        },
-        "tau_w_children": {
-            "type_name": "GenParticle", "check_attr": "metric_table", "skip_fields": "*Idx*G",
-        },
-    })
+    )
     # Only use full hadronic tau decays for now:
     # Mask is probably generator specific, may need to change that (no quarks present)
     tau1 = gen_higgs.h_children[:, 1, 1]
@@ -166,11 +193,14 @@ def create_pdf_input_vars_higgs_gen(self: Producer, events: ak.Array, **kwargs) 
     h2 = gen_higgs.h[:, 1]
     # Use only visible tau
     tau_nu1 = gen_higgs.tau_children[:, 1, 1, 0]
-    tau_vis1 = tau1 - tau_nu1
+
+    # Toggle between tau_vis and tau
+    # tau_vis1 = tau1 - tau_nu1
+    tau_vis1 = tau1
     tau_vis1_cms_h2 = tau_vis1.boostCM_of(h2.boostvec)
     # theta_cms_h2_tau_vis1 = h2.deltaangle(tau_vis1_cms_h2)   # angle between tau_vis1 in cms of h2 and h2 in lab system
     cos_theta_cms_h2_tau_vis1 = signed_cos_deltaangle(tau_vis1_cms_h2, h2)
-    phi_cms_h2_tau_vis1 = tau_vis1_cms_h2.phi   # phi of tau_vis1 in h2's cms
+    phi_cms_h2_tau_vis1 = tau_vis1_cms_h2.phi  # phi of tau_vis1 in h2's cms
 
     # boost b1 into cms of hbb
     b1 = gen_higgs.h_children[:, 0, 1]
@@ -181,20 +211,25 @@ def create_pdf_input_vars_higgs_gen(self: Producer, events: ak.Array, **kwargs) 
     # angle between b1 in cms of h1 and h1 in lab system
     cos_theta_cms_h1_b1 = signed_cos_deltaangle(b1_cms_h1, h1)
     cos_theta_cms_h1_b2 = signed_cos_deltaangle(b2_cms_h1, h1)
-    phi_cms_h1_b1 = b1_cms_h1.phi   # phi of b1 in h1's cms
+    phi_cms_h1_b1 = b1_cms_h1.phi  # phi of b1 in h1's cms
     # assorted_channels = ak.where(full_hadr_mask, events.channel_id, EMPTY_FLOAT)
 
-    pdf_input_vars_gen_higgs = ak.zip({"dihiggs_mass": dihiggs_mass,
-                             "dihiggs_system_pt": dihiggs_system_pt,
-                             "dihiggs_system_pz": dihiggs_system_pz,
-                             "dihiggs_system_phi": dihiggs_system_phi,
-                             "cos_theta_h1": cos_theta_h1,
-                             "phi_h1": phi_h1,
-                             "cos_theta_cms_h2_tau_vis1": cos_theta_cms_h2_tau_vis1,
-                             "phi_cms_h2_tau_vis1": phi_cms_h2_tau_vis1,
-                             "cos_theta_cms_h1_b1": cos_theta_cms_h1_b1,
-                             "cos_theta_cms_h1_b2": cos_theta_cms_h1_b2,
-                             "phi_cms_h1_b1": phi_cms_h1_b1}, with_name="pdf_input_vars")
+    pdf_input_vars_gen_higgs = ak.zip(
+        {
+            "dihiggs_mass": dihiggs_mass,
+            "dihiggs_system_pt": dihiggs_system_pt,
+            "dihiggs_system_pz": dihiggs_system_pz,
+            "dihiggs_system_phi": dihiggs_system_phi,
+            "cos_theta_h1": cos_theta_h1,
+            "phi_h1": phi_h1,
+            "cos_theta_cms_h2_tau_vis1": cos_theta_cms_h2_tau_vis1,
+            "phi_cms_h2_tau_vis1": phi_cms_h2_tau_vis1,
+            "cos_theta_cms_h1_b1": cos_theta_cms_h1_b1,
+            "cos_theta_cms_h1_b2": cos_theta_cms_h1_b2,
+            "phi_cms_h1_b1": phi_cms_h1_b1,
+        },
+        with_name="pdf_input_vars_gen_higgs",
+    )
     pdf_input_vars_gen_higgs = ak.mask(pdf_input_vars_gen_higgs, full_hadr_mask)
 
     events = set_ak_column(events, "pdf_input_vars_gen_higgs", pdf_input_vars_gen_higgs)
@@ -211,8 +246,11 @@ def create_pdf_input_vars_top(self: Producer, events: ak.Array, **kwargs) -> ak.
     Creates a new column "pdf_input_vars" that stores the PDF input variables for the Higgs decay products.
     """
     # Get top_family column and attach coffea behavior
-    events = self[attach_coffea_behavior](events, collections={"top_family": {"type_name": "GenParticle",
-        "check_attr": "metric_table", "skip_fields": "*Idx*G"}}, **kwargs)
+    events = self[attach_coffea_behavior](
+        events,
+        collections={"top_family": {"type_name": "GenParticle", "check_attr": "metric_table", "skip_fields": "*Idx*G"}},
+        **kwargs,
+    )
     top_family = events.top_family
 
     input_vars_dict = {}
@@ -267,20 +305,31 @@ def create_pdf_input_vars_top_ditau(self: Producer, events: ak.Array, **kwargs) 
     """
 
     # Get top_family column and attach coffea behaviour
-    gen_top = attach_coffea_behavior_fn(events.gen_top, collections={
-        "b": {
-            "type_name": "GenParticle", "check_attr": "metric_table", "skip_fields": "*Idx*G",
+    gen_top = attach_coffea_behavior_fn(
+        events.gen_top,
+        collections={
+            "b": {
+                "type_name": "GenParticle",
+                "check_attr": "metric_table",
+                "skip_fields": "*Idx*G",
+            },
+            "t": {
+                "type_name": "GenParticle",
+                "check_attr": "metric_table",
+                "skip_fields": "*Idx*G",
+            },
+            "w": {
+                "type_name": "GenParticle",
+                "check_attr": "metric_table",
+                "skip_fields": "*Idx*G",
+            },
+            "w_children": {
+                "type_name": "GenParticle",
+                "check_attr": "metric_table",
+                "skip_fields": "*Idx*G",
+            },
         },
-        "t": {
-            "type_name": "GenParticle", "check_attr": "metric_table", "skip_fields": "*Idx*G",
-        },
-        "w": {
-            "type_name": "GenParticle", "check_attr": "metric_table", "skip_fields": "*Idx*G",
-        },
-        "w_children": {
-            "type_name": "GenParticle", "check_attr": "metric_table", "skip_fields": "*Idx*G",
-        },
-    })
+    )
     # Extract relevant particles
     ditau_mask = ak.all(ak.any(abs(gen_top.w_children.pdgId) == 15, axis=2), axis=1)
     # ditau_decays = ak.mask(top_family, ditau_mask)
@@ -289,7 +338,7 @@ def create_pdf_input_vars_top_ditau(self: Producer, events: ak.Array, **kwargs) 
     # bs = ditau_decays.bottoms[:, 0][:, None]
     bs = ak.mask(gen_top, ditau_mask).b[:, 0][:, None]
     antibs = ak.mask(gen_top, ditau_mask).b[:, 1][:, None]
-    tau_vis = ak.mask(gen_top, ditau_mask).w_children[:, 1, 0]    # - ak.mask(gen_top, ditau_mask).w_children[:, 1, 1]
+    tau_vis = ak.mask(gen_top, ditau_mask).w_children[:, 1, 0]  # - ak.mask(gen_top, ditau_mask).w_children[:, 1, 1]
     antitau_vis = ak.mask(gen_top, ditau_mask).w_children[:, 0, 0]
 
     # antitau_vis = ak.mask(top_family, ditau_mask).antileps - ak.mask(top_family, ditau_mask).antineutrinos
@@ -309,12 +358,18 @@ def create_pdf_input_vars_top_ditau(self: Producer, events: ak.Array, **kwargs) 
     t_vis_cms_s_hat = t_vis.boostCM_of(tbar_vis.add(t_vis))
     tbar_vis_cms_s_hat = tbar_vis.boostCM_of(tbar_vis.add(tbar_vis))
     # Calculate Rapidities
-    y_tbar_vis_cms_s_hat = 1 / 2 * np.log(
-        (tbar_vis_cms_s_hat.energy + tbar_vis_cms_s_hat.pz) / (tbar_vis_cms_s_hat.energy - tbar_vis_cms_s_hat.pz))
-    y_tbar_vis_cms_s_hat = np.nan_to_num(y_tbar_vis_cms_s_hat)    # , nan=EMPTY_FLOAT)
+    y_tbar_vis_cms_s_hat = (
+        1
+        / 2
+        * np.log(
+            (tbar_vis_cms_s_hat.energy + tbar_vis_cms_s_hat.pz) / (tbar_vis_cms_s_hat.energy - tbar_vis_cms_s_hat.pz)
+        )
+    )
+    y_tbar_vis_cms_s_hat = np.nan_to_num(y_tbar_vis_cms_s_hat)  # , nan=EMPTY_FLOAT)
     # y_tbar_vis_cms_s_hat = ak.firsts(y_tbar_vis_cms_s_hat)
-    y_t_vis_cms_s_hat = 1 / 2 * np.log((t_vis_cms_s_hat.energy + t_vis_cms_s_hat.pz) /
-        (t_vis_cms_s_hat.energy - t_vis_cms_s_hat.pz))
+    y_t_vis_cms_s_hat = (
+        1 / 2 * np.log((t_vis_cms_s_hat.energy + t_vis_cms_s_hat.pz) / (t_vis_cms_s_hat.energy - t_vis_cms_s_hat.pz))
+    )
     y_t_vis_cms_s_hat = np.nan_to_num(y_t_vis_cms_s_hat)
     # y_t_vis_cms_s_hat = ak.firsts(np.nan_to_num(y_t_vis_cms_s_hat))
     # rapidity difference and phi
@@ -377,26 +432,29 @@ def create_pdf_input_vars_top_ditau(self: Producer, events: ak.Array, **kwargs) 
     # pt_ratio_tau = weird_conversion(pt_ratio_tau, axis=1)
     # two_part_mass_ratio_tau = weird_conversion(two_part_mass_ratio_tau, axis=1)
 
-    pdf_input_vars_top_ditau = ak.zip({
-        "M_2tau_vis_2b": M_2tau_vis_2b,
-        # "y_tbar_vis": y_tbar_vis,
-        # "y_t_vis": y_t_vis,
-        # "pt_tbar_vis": pt_tbar_vis,
-        # "pt_t_vis": pt_t_vis,
-        # "M_tbar_vis": M_tbar_vis,
-        # "M_t_vis": M_t_vis,
-        # "M_2tau_2b": M_2tau_2b,
-        # "y_tau_antib": y_tau_antib,
-        # "y_antitau_b": y_antitau_b,
-        # "pt_tau_antib": pt_tau_antib,
-        # "pt_antitau_b": pt_antitau_b,
-        # "M_tau_antib": M_tau_antib,
-        # "M_antitau_b": M_antitau_b,
-        # "four_part_mass_ratio": four_part_mass_ratio,
-        # # "rapidity_ratio_tau": rapidity_ratio_tau,
-        # "pt_ratio_tau": pt_ratio_tau,
-        # "two_part_mass_ratio_tau": two_part_mass_ratio_tau,
-    }, with_name="pdf_input_vars_top_ditau")
+    pdf_input_vars_top_ditau = ak.zip(
+        {
+            "M_2tau_vis_2b": M_2tau_vis_2b,
+            # "y_tbar_vis": y_tbar_vis,
+            # "y_t_vis": y_t_vis,
+            # "pt_tbar_vis": pt_tbar_vis,
+            # "pt_t_vis": pt_t_vis,
+            # "M_tbar_vis": M_tbar_vis,
+            # "M_t_vis": M_t_vis,
+            # "M_2tau_2b": M_2tau_2b,
+            # "y_tau_antib": y_tau_antib,
+            # "y_antitau_b": y_antitau_b,
+            # "pt_tau_antib": pt_tau_antib,
+            # "pt_antitau_b": pt_antitau_b,
+            # "M_tau_antib": M_tau_antib,
+            # "M_antitau_b": M_antitau_b,
+            # "four_part_mass_ratio": four_part_mass_ratio,
+            # # "rapidity_ratio_tau": rapidity_ratio_tau,
+            # "pt_ratio_tau": pt_ratio_tau,
+            # "two_part_mass_ratio_tau": two_part_mass_ratio_tau,
+        },
+        with_name="pdf_input_vars_top_ditau",
+    )
     events = set_ak_column(events, "pdf_input_vars_top_ditau", pdf_input_vars_top_ditau)
     return events
 
@@ -410,17 +468,26 @@ def create_pdf_input_vars_top_ditau_higgs(self: Producer, events: ak.Array, **kw
     Creates a new column "pdf_input_vars_top_ditau" that stores the PDF inputs for the top pdf in the ditau case
     """
     # attach coffea behaviour
-    higgs_family = attach_coffea_behavior_fn(events.higgs_family, collections={
-        "bottoms": {
-            "type_name": "GenParticle", "check_attr": "metric_table", "skip_fields": "*Idx*G",
+    higgs_family = attach_coffea_behavior_fn(
+        events.higgs_family,
+        collections={
+            "bottoms": {
+                "type_name": "GenParticle",
+                "check_attr": "metric_table",
+                "skip_fields": "*Idx*G",
+            },
+            "taus": {
+                "type_name": "GenParticle",
+                "check_attr": "metric_table",
+                "skip_fields": "*Idx*G",
+            },
+            "tau_leptonic_decay_products": {
+                "type_name": "GenParticle",
+                "check_attr": "metric_table",
+                "skip_fields": "*Idx*G",
+            },
         },
-        "taus": {
-            "type_name": "GenParticle", "check_attr": "metric_table", "skip_fields": "*Idx*G",
-        },
-        "tau_leptonic_decay_products": {
-            "type_name": "GenParticle", "check_attr": "metric_table", "skip_fields": "*Idx*G",
-        },
-    })
+    )
     # from IPython import embed
     # embed(header="higgs ditau stuff")
     bs = higgs_family.bottoms[:, 1][:, None]
@@ -436,12 +503,14 @@ def create_pdf_input_vars_top_ditau_higgs(self: Producer, events: ak.Array, **kw
     # Build inputs
     M_2tau_vis_2b = tau_vis_antib.add(antitau_vis_b).absolute()
 
-    y_tau_vis_antib = 1 / 2 * np.log(
-        (tau_vis_antib.energy + tau_vis_antib.pz) / (tau_vis_antib.energy - tau_vis_antib.pz))
-    y_tau_vis_antib = np.nan_to_num(y_tau_vis_antib)    # , nan=EMPTY_FLOAT)
+    y_tau_vis_antib = (
+        1 / 2 * np.log((tau_vis_antib.energy + tau_vis_antib.pz) / (tau_vis_antib.energy - tau_vis_antib.pz))
+    )
+    y_tau_vis_antib = np.nan_to_num(y_tau_vis_antib)  # , nan=EMPTY_FLOAT)
     y_tau_vis_antib = ak.firsts(y_tau_vis_antib)
-    y_antitau_vis_b = 1 / 2 * np.log((antitau_vis_b.energy + antitau_vis_b.pz) /
-        (antitau_vis_b.energy - antitau_vis_b.pz))
+    y_antitau_vis_b = (
+        1 / 2 * np.log((antitau_vis_b.energy + antitau_vis_b.pz) / (antitau_vis_b.energy - antitau_vis_b.pz))
+    )
     y_antitau_vis_b = ak.firsts(np.nan_to_num(y_antitau_vis_b))
 
     pt_tau_vis_antib = tau_vis_antib.pt
@@ -457,9 +526,11 @@ def create_pdf_input_vars_top_ditau_higgs(self: Producer, events: ak.Array, **kw
     M_2tau_2b = tau_antib.add(antitau_b).absolute()
 
     y_tau_antib = ak.firsts(
-        np.nan_to_num(1 / 2 * np.log((tau_antib.energy + tau_antib.pz) / (tau_antib.energy - tau_antib.pz))))
+        np.nan_to_num(1 / 2 * np.log((tau_antib.energy + tau_antib.pz) / (tau_antib.energy - tau_antib.pz)))
+    )
     y_antitau_b = ak.firsts(
-        np.nan_to_num(1 / 2 * np.log((antitau_b.energy + antitau_b.pz) / (antitau_b.energy - antitau_b.pz))))
+        np.nan_to_num(1 / 2 * np.log((antitau_b.energy + antitau_b.pz) / (antitau_b.energy - antitau_b.pz)))
+    )
 
     pt_tau_antib = tau_antib.pt
     pt_antitau_b = antitau_b.pt
@@ -473,26 +544,29 @@ def create_pdf_input_vars_top_ditau_higgs(self: Producer, events: ak.Array, **kw
     pt_ratio_tau = pt_tau_vis_antib / pt_tau_antib
     two_part_mass_ratio_tau = M_tau_vis_antib / M_tau_antib
 
-    pdf_input_vars_top_ditau_higgs = ak.zip({
-        "M_2tau_vis_2b": M_2tau_vis_2b,
-        "y_tau_vis_antib": y_tau_vis_antib,
-        "y_antitau_vis_b": y_antitau_vis_b,
-        "pt_tau_vis_antib": pt_tau_vis_antib,
-        "pt_antitau_vis_b": pt_antitau_vis_b,
-        "M_tau_vis_antib": M_tau_vis_antib,
-        "M_antitau_vis_b": M_antitau_vis_b,
-        "M_2tau_2b": M_2tau_2b,
-        "y_tau_antib": y_tau_antib,
-        "y_antitau_b": y_antitau_b,
-        "pt_tau_antib": pt_tau_antib,
-        "pt_antitau_b": pt_antitau_b,
-        "M_tau_antib": M_tau_antib,
-        "M_antitau_b": M_antitau_b,
-        "four_part_mass_ratio": four_part_mass_ratio,
-        # "rapidity_ratio_tau": rapidity_ratio_tau,
-        "pt_ratio_tau": pt_ratio_tau,
-        "two_part_mass_ratio_tau": two_part_mass_ratio_tau,
-    }, with_name="pdf_input_vars_top_ditau_higgs")
+    pdf_input_vars_top_ditau_higgs = ak.zip(
+        {
+            "M_2tau_vis_2b": M_2tau_vis_2b,
+            "y_tau_vis_antib": y_tau_vis_antib,
+            "y_antitau_vis_b": y_antitau_vis_b,
+            "pt_tau_vis_antib": pt_tau_vis_antib,
+            "pt_antitau_vis_b": pt_antitau_vis_b,
+            "M_tau_vis_antib": M_tau_vis_antib,
+            "M_antitau_vis_b": M_antitau_vis_b,
+            "M_2tau_2b": M_2tau_2b,
+            "y_tau_antib": y_tau_antib,
+            "y_antitau_b": y_antitau_b,
+            "pt_tau_antib": pt_tau_antib,
+            "pt_antitau_b": pt_antitau_b,
+            "M_tau_antib": M_tau_antib,
+            "M_antitau_b": M_antitau_b,
+            "four_part_mass_ratio": four_part_mass_ratio,
+            # "rapidity_ratio_tau": rapidity_ratio_tau,
+            "pt_ratio_tau": pt_ratio_tau,
+            "two_part_mass_ratio_tau": two_part_mass_ratio_tau,
+        },
+        with_name="pdf_input_vars_top_ditau_higgs",
+    )
     events = set_ak_column(events, "pdf_input_vars_top_ditau_higgs", pdf_input_vars_top_ditau_higgs)
 
     return events

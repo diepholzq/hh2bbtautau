@@ -13,7 +13,12 @@ import law
 from columnflow.production import Producer
 from columnflow.production.util import attach_coffea_behavior
 from columnflow.columnar_util import (
-    set_ak_column, attach_behavior, flat_np_view, EMPTY_FLOAT, default_coffea_collections, ak_concatenate_safe,
+    set_ak_column,
+    attach_behavior,
+    flat_np_view,
+    EMPTY_FLOAT,
+    default_coffea_collections,
+    ak_concatenate_safe,
     layout_ak_array,
 )
 from columnflow.util import maybe_import, dev_sandbox, DotDict
@@ -40,7 +45,7 @@ def rotate_to_phi(ref_phi: ak.Array, px: ak.Array, py: ak.Array) -> tuple[ak.Arr
     angle *ref_phi*. Returns the rotated px and py components in a 2-tuple.
     """
     new_phi = np.arctan2(py, px, dtype=np.float64) - ref_phi
-    pt = (px**2 + py**2)**0.5
+    pt = (px**2 + py**2) ** 0.5
     return pt * np.cos(new_phi), pt * np.sin(new_phi)
 
 
@@ -49,6 +54,7 @@ class _external_dnn(Producer):
     Base class for evaluating DNNs trained externally with PyTorch and our "standard" set of input features.
     """
 
+    require_producers = ["pdf_inputs", "calculate_likelihood_ratio"]
     uses = {
         attach_coffea_behavior,
         "channel_id",
@@ -59,6 +65,15 @@ class _external_dnn(Producer):
         "HHBJet.{pt,eta,phi,mass,hhbtag,btagPNet*,btagUParTAK4*}",
         "FatJet.{eta,phi,pt,mass}",
         MET_COLUMN("{pt,phi,covXX,covXY,covYY}"),
+        "likelihood_ratio",
+        "pdf_input_vars_reco_higgs.*",
+        "pdf_input_vars_reco_top.*",
+        "reg_dnn_moe_nu1_px",
+        "reg_dnn_moe_nu1_py",
+        "reg_dnn_moe_nu1_pz",
+        "reg_dnn_moe_nu2_px",
+        "reg_dnn_moe_nu2_py",
+        "reg_dnn_moe_nu2_pz",
     }
 
     # which type of btagging variables to use
@@ -91,6 +106,7 @@ class _external_dnn(Producer):
         return self.cls_name
 
     def init_func(self, **kwargs) -> None:
+        super().init_func(**kwargs)
         # set feature production options when requested
         if self.produce_features is None:
             self.produce_features = self.config_inst.x.sync
@@ -105,30 +121,32 @@ class _external_dnn(Producer):
 
         # update shifts dynamically
         self.shifts.add("minbias_xs_{up,down}")  # variations of minbias_xs used in met phi correction
-        self.shifts.update({  # all calibrations that change jet and lepton momenta
-            shift_inst.name
-            for shift_inst in self.config_inst.shifts
-            if shift_inst.has_tag({"jec", "jer", "tec", "eec", "eer"})
-        })
+        self.shifts.update(
+            {  # all calibrations that change jet and lepton momenta
+                shift_inst.name
+                for shift_inst in self.config_inst.shifts
+                if shift_inst.has_tag({"jec", "jer", "tec", "eec", "eer"})
+            }
+        )
 
         # output column names
         # (could be generalized to allow inheriting classes to define different targets)
-        self.output_columns = [
-            f"{self.output_prefix}_{name}"
-            for name in ["hh", "tt", "dy"]
-        ]
+        self.output_columns = [f"{self.output_prefix}_{name}" for name in ["hh", "tt", "dy"]]
 
         # update produced columns
         self.produces |= set(self.output_columns)
 
     def requires_func(self, task: law.Task, reqs: dict, **kwargs) -> None:
+        super().requires_func(task, reqs, **kwargs)
         if "external_files" in reqs:
             return
 
         from columnflow.tasks.external import BundleExternalFiles
+
         reqs["external_files"] = BundleExternalFiles.req(task)
 
     def setup_func(self, task: law.Task, reqs: dict[str, DotDict[str, Any]], **kwargs) -> None:
+        super().setup_func(task, reqs, **kwargs)
         from hbt.ml.evaluators import TorchEvaluator
 
         if not getattr(task, "taf_torch_evaluator", None):
@@ -153,15 +171,17 @@ class _external_dnn(Producer):
         }
 
     def teardown_func(self, task: law.Task, **kwargs) -> None:
+        super().teardown_func(task, **kwargs)
         """
         Stops the Torch evaluator.
         """
-        if (evaluator := getattr(task, "taf_torch_evaluator", None)):
+        if evaluator := getattr(task, "taf_torch_evaluator", None):
             evaluator.stop()
         task.taf_torch_evaluator = None
         self.evaluator = None
 
     def call_func(self, events: ak.Array, **kwargs) -> ak.Array:
+        feature_list = self.feature_list
         # start the evaluator
         if not self.evaluator.running:
             self.evaluator.start()
@@ -187,9 +207,8 @@ class _external_dnn(Producer):
             dm1[tautau_mask] = events.Tau.decayMode[tautau_mask][:, 0]
 
         # get decay mode of second lepton (also a tau, but position depends on channel)
-        leptau_mask = (
-            (events.channel_id == self.config_inst.channels.n.etau.id) |
-            (events.channel_id == self.config_inst.channels.n.mutau.id)
+        leptau_mask = (events.channel_id == self.config_inst.channels.n.etau.id) | (
+            events.channel_id == self.config_inst.channels.n.mutau.id
         )
         dm2 = -1 * np.ones(len(events), dtype=np.int32)
         if ak.any(leptau_mask):
@@ -214,12 +233,13 @@ class _external_dnn(Producer):
         # before preparing the network inputs, define a mask of events which have caregorical features
         # that are actually covered by the networks embedding layers; other events cannot be evaluated!
         event_mask = (
-            np.isin(pair_type, self.embedding_expected_inputs["pair_type"]) &
-            np.isin(dm1, self.embedding_expected_inputs["decay_mode1"]) &
-            np.isin(dm2, self.embedding_expected_inputs["decay_mode2"]) &
-            np.isin(vis_tau1.charge, self.embedding_expected_inputs["charge1"]) &
-            np.isin(vis_tau2.charge, self.embedding_expected_inputs["charge2"]) &
+            # np.isin(pair_type, self.embedding_expected_inputs["pair_type"])
+            # & np.isin(dm1, self.embedding_expected_inputs["decay_mode1"])
+            # & np.isin(dm2, self.embedding_expected_inputs["decay_mode2"])
+            # & np.isin(vis_tau1.charge, self.embedding_expected_inputs["charge1"])
+            # & np.isin(vis_tau2.charge, self.embedding_expected_inputs["charge2"])
             (has_jet_pair | has_fatjet)
+            & tautau_mask
         )
 
         # hook to update the event mask base on additional event info
@@ -227,6 +247,7 @@ class _external_dnn(Producer):
 
         # apply to all arrays needed until now
         _events = events[event_mask]
+        # _events = events
         pair_type = pair_type[event_mask]
         vis_tau1, vis_tau2 = vis_tau1[event_mask], vis_tau2[event_mask]
         tautau_mask = tautau_mask[event_mask]
@@ -340,41 +361,275 @@ class _external_dnn(Producer):
         f.has_jet_pair = has_jet_pair
         f.has_fatjet = has_fatjet
 
+        # Redefine inputs (not final)
+        f.pdf_input_vars_reco_higgs_constr_term_b = _events.pdf_input_vars_reco_higgs.constr_term_b
+        f.pdf_input_vars_reco_higgs_constr_term_tau = _events.pdf_input_vars_reco_higgs.constr_term_tau
+        f.pdf_input_vars_reco_higgs_cos_theta_cms_h1_b1 = _events.pdf_input_vars_reco_higgs.cos_theta_cms_h1_b1
+        f.pdf_input_vars_reco_higgs_cos_theta_cms_h2_tau_vis1 = (
+            _events.pdf_input_vars_reco_higgs.cos_theta_cms_h2_tau_vis1
+        )
+        f.pdf_input_vars_reco_higgs_cos_theta_h1 = _events.pdf_input_vars_reco_higgs.cos_theta_h1
+        f.pdf_input_vars_reco_higgs_dihiggs_mass = _events.pdf_input_vars_reco_higgs.dihiggs_mass
+        f.pdf_input_vars_reco_higgs_dihiggs_system_phi = _events.pdf_input_vars_reco_higgs.dihiggs_system_phi
+        f.pdf_input_vars_reco_higgs_dihiggs_system_pt = _events.pdf_input_vars_reco_higgs.dihiggs_system_pt
+        f.pdf_input_vars_reco_higgs_dihiggs_system_pz = _events.pdf_input_vars_reco_higgs.dihiggs_system_pz
+        f.pdf_input_vars_reco_higgs_jac_det = _events.pdf_input_vars_reco_higgs.jac_det
+        f.pdf_input_vars_reco_higgs_phi_cms_h1_b1 = _events.pdf_input_vars_reco_higgs.phi_cms_h1_b1
+        f.pdf_input_vars_reco_higgs_phi_cms_h2_tau_vis1 = _events.pdf_input_vars_reco_higgs.phi_cms_h2_tau_vis1
+        f.pdf_input_vars_reco_higgs_phi_h1 = _events.pdf_input_vars_reco_higgs.phi_h1
+        f.pdf_input_vars_reco_top_jac_det = _events.pdf_input_vars_reco_top.jac_det
+        f.pdf_input_vars_reco_top_t1_vis_phi = _events.pdf_input_vars_reco_top.t1_vis_phi
+        f.pdf_input_vars_reco_top_t_vis_y_diff = _events.pdf_input_vars_reco_top.t_vis_y_diff
+        f.pdf_input_vars_reco_top_tau1_cos_theta_star_cms_t1_vis = (
+            _events.pdf_input_vars_reco_top.tau1_cos_theta_star_cms_t1_vis
+        )
+        f.pdf_input_vars_reco_top_tau1_cos_theta_star_cms_wplus = (
+            _events.pdf_input_vars_reco_top.tau1_cos_theta_star_cms_wplus
+        )
+        f.pdf_input_vars_reco_top_tau1_phi = _events.pdf_input_vars_reco_top.tau1_phi
+        f.pdf_input_vars_reco_top_tau2_cos_theta_star_cms_t2_vis = (
+            _events.pdf_input_vars_reco_top.tau2_cos_theta_star_cms_t2_vis
+        )
+        f.pdf_input_vars_reco_top_tau2_cos_theta_star_cms_wminus = (
+            _events.pdf_input_vars_reco_top.tau2_cos_theta_star_cms_wminus
+        )
+        f.pdf_input_vars_reco_top_tau2_phi = _events.pdf_input_vars_reco_top.tau2_phi
+        f.pdf_input_vars_reco_top_tt_vis_system_mass = _events.pdf_input_vars_reco_top.tt_vis_system_mass
+        f.pdf_input_vars_reco_top_tt_vis_system_phi = _events.pdf_input_vars_reco_top.tt_vis_system_phi
+        f.pdf_input_vars_reco_top_tt_vis_system_pt = _events.pdf_input_vars_reco_top.tt_vis_system_pt
+        f.pdf_input_vars_reco_top_tt_vis_system_pz = _events.pdf_input_vars_reco_top.tt_vis_system_pz
+        f.likelihood_ratio = _events.likelihood_ratio
+
+        f.pdf_input_vars_reco_higgs_b1_pt = _events.pdf_input_vars_reco_higgs.b1_pt
+        f.pdf_input_vars_reco_higgs_b1_eta = _events.pdf_input_vars_reco_higgs.b1_eta
+        f.pdf_input_vars_reco_higgs_b1_phi = _events.pdf_input_vars_reco_higgs.b1_phi
+        f.pdf_input_vars_reco_higgs_b1_mass = _events.pdf_input_vars_reco_higgs.b1_mass
+        f.pdf_input_vars_reco_higgs_b2_pt = _events.pdf_input_vars_reco_higgs.b2_pt
+        f.pdf_input_vars_reco_higgs_b2_eta = _events.pdf_input_vars_reco_higgs.b2_eta
+        f.pdf_input_vars_reco_higgs_b2_phi = _events.pdf_input_vars_reco_higgs.b2_phi
+        f.pdf_input_vars_reco_higgs_b2_mass = _events.pdf_input_vars_reco_higgs.b2_mass
+        f.pdf_input_vars_reco_higgs_tau1_pt = _events.pdf_input_vars_reco_higgs.tau1_pt
+        f.pdf_input_vars_reco_higgs_tau1_eta = _events.pdf_input_vars_reco_higgs.tau1_eta
+        f.pdf_input_vars_reco_higgs_tau1_phi = _events.pdf_input_vars_reco_higgs.tau1_phi
+        f.pdf_input_vars_reco_higgs_tau1_mass = _events.pdf_input_vars_reco_higgs.tau1_mass
+        f.pdf_input_vars_reco_higgs_tau2_pt = _events.pdf_input_vars_reco_higgs.tau2_pt
+        f.pdf_input_vars_reco_higgs_tau2_eta = _events.pdf_input_vars_reco_higgs.tau2_eta
+        f.pdf_input_vars_reco_higgs_tau2_phi = _events.pdf_input_vars_reco_higgs.tau2_phi
+        f.pdf_input_vars_reco_higgs_tau2_mass = _events.pdf_input_vars_reco_higgs.tau2_mass
+        f.pdf_input_vars_reco_top_b1_pt = _events.pdf_input_vars_reco_top.b1_pt
+        f.pdf_input_vars_reco_top_b1_eta = _events.pdf_input_vars_reco_top.b1_eta
+        f.pdf_input_vars_reco_top_b1_phi = _events.pdf_input_vars_reco_top.b1_phi
+        f.pdf_input_vars_reco_top_b1_mass = _events.pdf_input_vars_reco_top.b1_mass
+        f.pdf_input_vars_reco_top_b2_pt = _events.pdf_input_vars_reco_top.b2_pt
+        f.pdf_input_vars_reco_top_b2_eta = _events.pdf_input_vars_reco_top.b2_eta
+        f.pdf_input_vars_reco_top_b2_phi = _events.pdf_input_vars_reco_top.b2_phi
+        f.pdf_input_vars_reco_top_b2_mass = _events.pdf_input_vars_reco_top.b2_mass
+        f.pdf_input_vars_reco_top_tau1_pt = _events.pdf_input_vars_reco_top.tau1_pt
+        f.pdf_input_vars_reco_top_tau1_eta = _events.pdf_input_vars_reco_top.tau1_eta
+        f.pdf_input_vars_reco_top_tau1_phi = _events.pdf_input_vars_reco_top.tau1_phi
+        f.pdf_input_vars_reco_top_tau1_mass = _events.pdf_input_vars_reco_top.tau1_mass
+        f.pdf_input_vars_reco_top_tau2_pt = _events.pdf_input_vars_reco_top.tau2_pt
+        f.pdf_input_vars_reco_top_tau2_eta = _events.pdf_input_vars_reco_top.tau2_eta
+        f.pdf_input_vars_reco_top_tau2_phi = _events.pdf_input_vars_reco_top.tau2_phi
+        f.pdf_input_vars_reco_top_tau2_mass = _events.pdf_input_vars_reco_top.tau2_mass
+
+        # Neutrinos
+        f.nu1_px = _events.reg_dnn_moe_nu1_px
+        f.nu1_py = _events.reg_dnn_moe_nu1_py
+        f.nu1_pz = _events.reg_dnn_moe_nu1_pz
+        f.nu2_px = _events.reg_dnn_moe_nu2_px
+        f.nu2_py = _events.reg_dnn_moe_nu2_py
+        f.nu2_pz = _events.reg_dnn_moe_nu2_pz
+
+        def bring_back_to_shape(field, mask):
+            mask = ak.to_numpy(mask)
+            isin_array = np.arange(0, len(mask), 1)[mask]
+            new_field = np.zeros_like(mask, dtype=np.float32)
+            new_field[isin_array] = field
+            return ak.from_numpy(new_field)
+
+        # field_list = [
+        #     "pdf_input_vars_reco_higgs_constr_term_b",
+        #     "pdf_input_vars_reco_higgs_constr_term_tau",
+        #     "pdf_input_vars_reco_higgs_cos_theta_cms_h1_b1",
+        #     "pdf_input_vars_reco_higgs_cos_theta_cms_h2_tau_vis1",
+        #     "pdf_input_vars_reco_higgs_cos_theta_h1",
+        #     "pdf_input_vars_reco_higgs_dihiggs_mass",
+        #     "pdf_input_vars_reco_higgs_dihiggs_system_phi",
+        #     "pdf_input_vars_reco_higgs_dihiggs_system_pt",
+        #     "pdf_input_vars_reco_higgs_dihiggs_system_pz",
+        #     "pdf_input_vars_reco_higgs_jac_det",
+        #     "pdf_input_vars_reco_higgs_phi_cms_h1_b1",
+        #     "pdf_input_vars_reco_higgs_phi_cms_h2_tau_vis1",
+        #     "pdf_input_vars_reco_higgs_phi_h1",
+        #     "pdf_input_vars_reco_top_jac_det",
+        #     "pdf_input_vars_reco_top_t1_vis_phi",
+        #     "pdf_input_vars_reco_top_t_vis_y_diff",
+        #     "pdf_input_vars_reco_top_tau1_cos_theta_star_cms_t1_vis",
+        #     "pdf_input_vars_reco_top_tau1_cos_theta_star_cms_wplus",
+        #     "pdf_input_vars_reco_top_tau1_phi",
+        #     "pdf_input_vars_reco_top_tau2_cos_theta_star_cms_t2_vis",
+        #     "pdf_input_vars_reco_top_tau2_cos_theta_star_cms_wminus",
+        #     "pdf_input_vars_reco_top_tau2_phi",
+        #     "pdf_input_vars_reco_top_tt_vis_system_mass",
+        #     "pdf_input_vars_reco_top_tt_vis_system_phi",
+        #     "pdf_input_vars_reco_top_tt_vis_system_pt",
+        #     "pdf_input_vars_reco_top_tt_vis_system_pz",
+        # ]
+        # for field in field_list:
+        #     mask_values(~event_mask, 0.0, field)
         # build continuous inputs
         # (order exactly as documented in link above)
-        continuous_inputs = [
-            np.asarray(t[..., None], dtype=np.float32) for t in [
-                f.met_px, f.met_py, f.met_cov00, f.met_cov01, f.met_cov11,
-                f.vis_tau1_px, f.vis_tau1_py, f.vis_tau1_pz, f.vis_tau1_e,
-                f.vis_tau2_px, f.vis_tau2_py, f.vis_tau2_pz, f.vis_tau2_e,
-                f.bjet1_px, f.bjet1_py, f.bjet1_pz, f.bjet1_e, f.bjet1_tag_b, f.bjet1_tag_cvsb, f.bjet1_tag_cvsl,
-                f.bjet1_hhbtag,
-                f.bjet2_px, f.bjet2_py, f.bjet2_pz, f.bjet2_e, f.bjet2_tag_b, f.bjet2_tag_cvsb, f.bjet2_tag_cvsl,
-                f.bjet2_hhbtag,
-                f.fatjet_px, f.fatjet_py, f.fatjet_pz, f.fatjet_e,
-                f.htt_e, f.htt_px, f.htt_py, f.htt_pz,
-                f.hbb_e, f.hbb_px, f.hbb_py, f.hbb_pz,
-                f.htthbb_e, f.htthbb_px, f.htthbb_py, f.htthbb_pz,
-                f.httfatjet_e, f.httfatjet_px, f.httfatjet_py, f.httfatjet_pz,
-            ]
-            if t is not None
-        ]
-
+        # continuous_inputs_training_b = [
+        #     np.asarray(t[..., None], dtype=np.float32)
+        #     for t in [
+        #         f.pdf_input_vars_reco_higgs_constr_term_b,
+        #         f.pdf_input_vars_reco_higgs_constr_term_tau,
+        #         f.pdf_input_vars_reco_higgs_cos_theta_cms_h1_b1,
+        #         f.pdf_input_vars_reco_higgs_cos_theta_cms_h2_tau_vis1,
+        #         f.pdf_input_vars_reco_higgs_cos_theta_h1,
+        #         f.pdf_input_vars_reco_higgs_dihiggs_mass,
+        #         f.pdf_input_vars_reco_higgs_dihiggs_system_phi,
+        #         f.pdf_input_vars_reco_higgs_dihiggs_system_pt,
+        #         f.pdf_input_vars_reco_higgs_dihiggs_system_pz,
+        #         # f.pdf_input_vars_reco_higgs_jac_det,
+        #         f.pdf_input_vars_reco_higgs_phi_cms_h1_b1,
+        #         f.pdf_input_vars_reco_higgs_phi_cms_h2_tau_vis1,
+        #         f.pdf_input_vars_reco_higgs_phi_h1,
+        #         # f.pdf_input_vars_reco_top_jac_det,
+        #         f.pdf_input_vars_reco_top_t1_vis_phi,
+        #         f.pdf_input_vars_reco_top_t_vis_y_diff,
+        #         f.pdf_input_vars_reco_top_tau1_cos_theta_star_cms_t1_vis,
+        #         f.pdf_input_vars_reco_top_tau1_cos_theta_star_cms_wplus,
+        #         f.pdf_input_vars_reco_top_tau1_phi,
+        #         f.pdf_input_vars_reco_top_tau2_cos_theta_star_cms_t2_vis,
+        #         f.pdf_input_vars_reco_top_tau2_cos_theta_star_cms_wminus,
+        #         f.pdf_input_vars_reco_top_tau2_phi,
+        #         f.pdf_input_vars_reco_top_tt_vis_system_mass,
+        #         f.pdf_input_vars_reco_top_tt_vis_system_phi,
+        #         f.pdf_input_vars_reco_top_tt_vis_system_pt,
+        #         f.pdf_input_vars_reco_top_tt_vis_system_pz,
+        #         # f.likelihood_ratio,
+        #         f.pdf_input_vars_reco_higgs_b1_pt,
+        #         f.pdf_input_vars_reco_higgs_b1_eta,
+        #         f.pdf_input_vars_reco_higgs_b1_phi,
+        #         f.pdf_input_vars_reco_higgs_b1_mass,
+        #         f.pdf_input_vars_reco_higgs_b2_pt,
+        #         f.pdf_input_vars_reco_higgs_b2_eta,
+        #         f.pdf_input_vars_reco_higgs_b2_phi,
+        #         f.pdf_input_vars_reco_higgs_b2_mass,
+        #         f.pdf_input_vars_reco_higgs_tau1_pt,
+        #         f.pdf_input_vars_reco_higgs_tau1_eta,
+        #         f.pdf_input_vars_reco_higgs_tau1_phi,
+        #         f.pdf_input_vars_reco_higgs_tau1_mass,
+        #         f.pdf_input_vars_reco_higgs_tau2_pt,
+        #         f.pdf_input_vars_reco_higgs_tau2_eta,
+        #         f.pdf_input_vars_reco_higgs_tau2_phi,
+        #         f.pdf_input_vars_reco_higgs_tau2_mass,
+        #         f.pdf_input_vars_reco_top_b1_pt,
+        #         f.pdf_input_vars_reco_top_b1_eta,
+        #         f.pdf_input_vars_reco_top_b1_phi,
+        #         f.pdf_input_vars_reco_top_b1_mass,
+        #         f.pdf_input_vars_reco_top_b2_pt,
+        #         f.pdf_input_vars_reco_top_b2_eta,
+        #         f.pdf_input_vars_reco_top_b2_phi,
+        #         f.pdf_input_vars_reco_top_b2_mass,
+        #         f.pdf_input_vars_reco_top_tau1_pt,
+        #         f.pdf_input_vars_reco_top_tau1_eta,
+        #         f.pdf_input_vars_reco_top_tau1_phi,
+        #         f.pdf_input_vars_reco_top_tau1_mass,
+        #         f.pdf_input_vars_reco_top_tau2_pt,
+        #         f.pdf_input_vars_reco_top_tau2_eta,
+        #         f.pdf_input_vars_reco_top_tau2_phi,
+        #         f.pdf_input_vars_reco_top_tau2_mass,
+        #     ]
+        #     if t is not None
+        # ]
+        # from IPython import embed
+        #
+        # embed(header="ext net")
+        continuous_inputs = [np.asarray(f[t][..., None], dtype=np.float32) for t in feature_list if f[t] is not None]
+        # continuous_inputs = [
+        #     np.asarray(t[..., None], dtype=np.float32)
+        #     for t in [
+        #         f.met_px,
+        #         f.met_py,
+        #         f.met_cov00,
+        #         f.met_cov01,
+        #         f.met_cov11,
+        #         f.vis_tau1_px,
+        #         f.vis_tau1_py,
+        #         f.vis_tau1_pz,
+        #         f.vis_tau1_e,
+        #         f.vis_tau2_px,
+        #         f.vis_tau2_py,
+        #         f.vis_tau2_pz,
+        #         f.vis_tau2_e,
+        #         f.bjet1_px,
+        #         f.bjet1_py,
+        #         f.bjet1_pz,
+        #         f.bjet1_e,
+        #         f.bjet1_tag_b,
+        #         f.bjet1_tag_cvsb,
+        #         f.bjet1_tag_cvsl,
+        #         f.bjet1_hhbtag,
+        #         f.bjet2_px,
+        #         f.bjet2_py,
+        #         f.bjet2_pz,
+        #         f.bjet2_e,
+        #         f.bjet2_tag_b,
+        #         f.bjet2_tag_cvsb,
+        #         f.bjet2_tag_cvsl,
+        #         f.bjet2_hhbtag,
+        #         f.fatjet_px,
+        #         f.fatjet_py,
+        #         f.fatjet_pz,
+        #         f.fatjet_e,
+        #         f.htt_e,
+        #         f.htt_px,
+        #         f.htt_py,
+        #         f.htt_pz,
+        #         f.hbb_e,
+        #         f.hbb_px,
+        #         f.hbb_py,
+        #         f.hbb_pz,
+        #         f.htthbb_e,
+        #         f.htthbb_px,
+        #         f.htthbb_py,
+        #         f.htthbb_pz,
+        #         f.httfatjet_e,
+        #         f.httfatjet_px,
+        #         f.httfatjet_py,
+        #         f.httfatjet_pz,
+        #         f.nu1_px,
+        #         f.nu1_py,
+        #         f.nu1_pz,
+        #         f.nu2_px,
+        #         f.nu2_py,
+        #         f.nu2_pz,
+        #     ]
+        #     if t is not None
+        # ]
         # build categorical inputs
         # (order exactly as documented in link above)
         categorical_inputs = [
-            np.asarray(t[..., None], dtype=np.int32) for t in [
+            np.asarray(t[..., None], dtype=np.int32)
+            for t in [
                 f.pair_type,
-                f.dm1, f.dm2,
-                f.vis_tau1_charge, f.vis_tau2_charge,
-                f.has_jet_pair, f.has_fatjet,
-            ] if t is not None
+                f.dm1,
+                f.dm2,
+                f.vis_tau1_charge,
+                f.vis_tau2_charge,
+                f.has_jet_pair,
+                f.has_fatjet,
+            ]
+            if t is not None
         ]
-
         # evaluate the model
         scores = self.evaluator(
             self.cls_name,
             np.concatenate(categorical_inputs, axis=1),
+            # np.zeros((len(events), 0)),
             np.concatenate(continuous_inputs, axis=1),
         )
 
@@ -384,24 +639,67 @@ class _external_dnn(Producer):
         # store scores in events
         events = self.store_scores(events, scores, event_mask)
 
+        # not needed
         if self.produce_features:
             # store input columns for sync
             cont_inputs_cols = [
-                "met_px", "met_py", "met_cov00", "met_cov01", "met_cov11",
-                "vis_tau1_px", "vis_tau1_py", "vis_tau1_pz", "vis_tau1_e",
-                "vis_tau2_px", "vis_tau2_py", "vis_tau2_pz", "vis_tau2_e",
-                "bjet1_px", "bjet1_py", "bjet1_pz", "bjet1_e", "bjet1_tag_b", "bjet1_tag_cvsb", "bjet1_tag_cvsl",
+                "met_px",
+                "met_py",
+                "met_cov00",
+                "met_cov01",
+                "met_cov11",
+                "vis_tau1_px",
+                "vis_tau1_py",
+                "vis_tau1_pz",
+                "vis_tau1_e",
+                "vis_tau2_px",
+                "vis_tau2_py",
+                "vis_tau2_pz",
+                "vis_tau2_e",
+                "bjet1_px",
+                "bjet1_py",
+                "bjet1_pz",
+                "bjet1_e",
+                "bjet1_tag_b",
+                "bjet1_tag_cvsb",
+                "bjet1_tag_cvsl",
                 "bjet1_hhbtag",
-                "bjet2_px", "bjet2_py", "bjet2_pz", "bjet2_e", "bjet2_tag_b", "bjet2_tag_cvsb", "bjet2_tag_cvsl",
+                "bjet2_px",
+                "bjet2_py",
+                "bjet2_pz",
+                "bjet2_e",
+                "bjet2_tag_b",
+                "bjet2_tag_cvsb",
+                "bjet2_tag_cvsl",
                 "bjet2_hhbtag",
-                "fatjet_px", "fatjet_py", "fatjet_pz", "fatjet_e",
-                "htt_e", "htt_px", "htt_py", "htt_pz",
-                "hbb_e", "hbb_px", "hbb_py", "hbb_pz",
-                "htthbb_e", "htthbb_px", "htthbb_py", "htthbb_pz",
-                "httfatjet_e", "httfatjet_px", "httfatjet_py", "httfatjet_pz",
+                "fatjet_px",
+                "fatjet_py",
+                "fatjet_pz",
+                "fatjet_e",
+                "htt_e",
+                "htt_px",
+                "htt_py",
+                "htt_pz",
+                "hbb_e",
+                "hbb_px",
+                "hbb_py",
+                "hbb_pz",
+                "htthbb_e",
+                "htthbb_px",
+                "htthbb_py",
+                "htthbb_pz",
+                "httfatjet_e",
+                "httfatjet_px",
+                "httfatjet_py",
+                "httfatjet_pz",
             ]
             cat_inputs_cols = [
-                "pair_type", "dm1", "dm2", "vis_tau1_charge", "vis_tau2_charge", "has_jet_pair", "has_fatjet",
+                "pair_type" "dm1",
+                "dm2",
+                "vis_tau1_charge",
+                "vis_tau2_charge",
+                "has_jet_pair",
+                "has_fatjet",
             ]
             for c in cont_inputs_cols + cat_inputs_cols:
                 values = self.empty_value * np.ones(len(events), dtype=np.float32)
@@ -448,6 +746,7 @@ class torch_simple_kl01(_external_dnn):
 # end-to-end model tests
 #
 
+
 class _e2e_dnn(_external_dnn):
 
     latent_dim = 50
@@ -456,18 +755,14 @@ class _e2e_dnn(_external_dnn):
         super(_e2e_dnn, self).init_func(**kwargs)
 
         # store names of output columns for latent scores
-        self.latent_output_columns = [
-            f"{self.output_prefix}_bin{i}"
-            for i in range(self.latent_dim)
-        ]
+        self.latent_output_columns = [f"{self.output_prefix}_bin{i}" for i in range(self.latent_dim)]
         self.produces |= set(self.latent_output_columns)
 
     def sanitize_scores(self, scores: Any) -> Any:
         # scores is a tuple of two arrays of scores that have no softmax applied yet, so apply it first, then perform
         # the usual checks
         return type(scores)(
-            super(_e2e_dnn, self).sanitize_scores(scipy.special.softmax(_scores, axis=1))
-            for _scores in scores
+            super(_e2e_dnn, self).sanitize_scores(scipy.special.softmax(_scores, axis=1)) for _scores in scores
         )
 
     def store_scores(self, events: ak.Array, scores: Any, event_mask: ak.Array) -> ak.Array:
@@ -492,4 +787,349 @@ class _e2e_dnn(_external_dnn):
 
 
 class e2e_model1(_e2e_dnn):
+    exposed = True
+
+
+class _quintus(_external_dnn):
+    # uses = _external_dnn.uses | {
+    #     "likelihood_ratio",
+    #     "pdf_input_vars_reco_higgs.*",
+    #     "pdf_input_vars_reco_top.*",
+    # }
+    require_producers = ["pdf_inputs", "calculate_likelihood_ratio"]
+
+    # def store_scores(self, events: ak.Array, scores: Any, event_mask: ak.Array) -> ak.Array:
+    #     # prepare output columns with the shape of the original events and assign values into them
+    #     for i, column in enumerate(self.output_columns):
+    #         values = self.empty_value * np.ones(len(events), dtype=np.float32)
+    #         scores = np.exp(scores) / np.sum(np.exp(scores), axis=1).reshape(-1, 1)
+    #         values[event_mask] = scores[event_mask, i]
+    #         events = set_ak_column_f32(events, column, values)
+    #
+    #     return events
+
+
+class parametrized_binning_fold0(_quintus):
+    exposed = True
+
+
+class unknown_features(_quintus):
+    exposed = True
+
+
+class detector_inputs(_quintus):
+    require_producers = ["pdf_inputs_inputs", "calculate_likelihood_ratio", "pdf_inputs"]
+    exposed = True
+
+
+class training_c(_quintus):
+    require_producers = ["pdf_inputs_inputs", "calculate_likelihood_ratio", "pdf_inputs", "reg_dnn_moe"]
+    feature_list = [
+        "met_px",
+        "met_py",
+        "met_cov00",
+        "met_cov01",
+        "met_cov11",
+        "vis_tau1_px",
+        "vis_tau1_py",
+        "vis_tau1_pz",
+        "vis_tau1_e",
+        "vis_tau2_px",
+        "vis_tau2_py",
+        "vis_tau2_pz",
+        "vis_tau2_e",
+        "bjet1_px",
+        "bjet1_py",
+        "bjet1_pz",
+        "bjet1_e",
+        "bjet1_tag_b",
+        "bjet1_tag_cvsb",
+        "bjet1_tag_cvsl",
+        "bjet1_hhbtag",
+        "bjet2_px",
+        "bjet2_py",
+        "bjet2_pz",
+        "bjet2_e",
+        "bjet2_tag_b",
+        "bjet2_tag_cvsb",
+        "bjet2_tag_cvsl",
+        "bjet2_hhbtag",
+        "fatjet_px",
+        "fatjet_py",
+        "fatjet_pz",
+        "fatjet_e",
+        "htt_e",
+        "htt_px",
+        "htt_py",
+        "htt_pz",
+        "hbb_e",
+        "hbb_px",
+        "hbb_py",
+        "hbb_pz",
+        "htthbb_e",
+        "htthbb_px",
+        "htthbb_py",
+        "htthbb_pz",
+        "httfatjet_e",
+        "httfatjet_px",
+        "httfatjet_py",
+        "httfatjet_pz",
+        "nu1_px",
+        "nu1_py",
+        "nu1_pz",
+        "nu2_px",
+        "nu2_py",
+        "nu2_pz",
+        "pdf_input_vars_reco_higgs_constr_term_b",
+        "pdf_input_vars_reco_higgs_constr_term_tau",
+        "pdf_input_vars_reco_higgs_cos_theta_cms_h1_b1",
+        "pdf_input_vars_reco_higgs_cos_theta_cms_h2_tau_vis1",
+        "pdf_input_vars_reco_higgs_cos_theta_h1",
+        "pdf_input_vars_reco_higgs_dihiggs_mass",
+        "pdf_input_vars_reco_higgs_dihiggs_system_phi",
+        "pdf_input_vars_reco_higgs_dihiggs_system_pt",
+        "pdf_input_vars_reco_higgs_dihiggs_system_pz",
+        "pdf_input_vars_reco_higgs_jac_det",
+        "pdf_input_vars_reco_higgs_phi_cms_h1_b1",
+        "pdf_input_vars_reco_higgs_phi_cms_h2_tau_vis1",
+        "pdf_input_vars_reco_higgs_phi_h1",
+        "pdf_input_vars_reco_top_jac_det",
+        "pdf_input_vars_reco_top_t1_vis_phi",
+        "pdf_input_vars_reco_top_t_vis_y_diff",
+        "pdf_input_vars_reco_top_tau1_cos_theta_star_cms_t1_vis",
+        "pdf_input_vars_reco_top_tau1_cos_theta_star_cms_wplus",
+        "pdf_input_vars_reco_top_tau1_phi",
+        "pdf_input_vars_reco_top_tau2_cos_theta_star_cms_t2_vis",
+        "pdf_input_vars_reco_top_tau2_cos_theta_star_cms_wminus",
+        "pdf_input_vars_reco_top_tau2_phi",
+        "pdf_input_vars_reco_top_tt_vis_system_mass",
+        "pdf_input_vars_reco_top_tt_vis_system_phi",
+        "pdf_input_vars_reco_top_tt_vis_system_pt",
+        "pdf_input_vars_reco_top_tt_vis_system_pz",
+        "pdf_input_vars_reco_higgs_b1_pt",
+        "pdf_input_vars_reco_higgs_b1_eta",
+        "pdf_input_vars_reco_higgs_b1_phi",
+        "pdf_input_vars_reco_higgs_b1_mass",
+        "pdf_input_vars_reco_higgs_b2_pt",
+        "pdf_input_vars_reco_higgs_b2_eta",
+        "pdf_input_vars_reco_higgs_b2_phi",
+        "pdf_input_vars_reco_higgs_b2_mass",
+        "pdf_input_vars_reco_higgs_tau1_pt",
+        "pdf_input_vars_reco_higgs_tau1_eta",
+        "pdf_input_vars_reco_higgs_tau1_phi",
+        "pdf_input_vars_reco_higgs_tau1_mass",
+        "pdf_input_vars_reco_higgs_tau2_pt",
+        "pdf_input_vars_reco_higgs_tau2_eta",
+        "pdf_input_vars_reco_higgs_tau2_phi",
+        "pdf_input_vars_reco_higgs_tau2_mass",
+        "pdf_input_vars_reco_top_b1_pt",
+        "pdf_input_vars_reco_top_b1_eta",
+        "pdf_input_vars_reco_top_b1_phi",
+        "pdf_input_vars_reco_top_b1_mass",
+        "pdf_input_vars_reco_top_b2_pt",
+        "pdf_input_vars_reco_top_b2_eta",
+        "pdf_input_vars_reco_top_b2_phi",
+        "pdf_input_vars_reco_top_b2_mass",
+        "pdf_input_vars_reco_top_tau1_pt",
+        "pdf_input_vars_reco_top_tau1_eta",
+        "pdf_input_vars_reco_top_tau1_phi",
+        "pdf_input_vars_reco_top_tau1_mass",
+        "pdf_input_vars_reco_top_tau2_pt",
+        "pdf_input_vars_reco_top_tau2_eta",
+        "pdf_input_vars_reco_top_tau2_phi",
+        "pdf_input_vars_reco_top_tau2_mass",
+        "likelihood_ratio",
+    ]
+    exposed = True
+
+
+class bogdan_vanilla_with_ratio(_quintus):
+    require_producers = ["pdf_inputs_inputs", "calculate_likelihood_ratio", "pdf_inputs", "reg_dnn_moe"]
+    feature_list = [
+        "met_px",
+        "met_py",
+        "met_cov00",
+        "met_cov01",
+        "met_cov11",
+        "vis_tau1_px",
+        "vis_tau1_py",
+        "vis_tau1_pz",
+        "vis_tau1_e",
+        "vis_tau2_px",
+        "vis_tau2_py",
+        "vis_tau2_pz",
+        "vis_tau2_e",
+        "bjet1_px",
+        "bjet1_py",
+        "bjet1_pz",
+        "bjet1_e",
+        "bjet1_tag_b",
+        "bjet1_tag_cvsb",
+        "bjet1_tag_cvsl",
+        "bjet1_hhbtag",
+        "bjet2_px",
+        "bjet2_py",
+        "bjet2_pz",
+        "bjet2_e",
+        "bjet2_tag_b",
+        "bjet2_tag_cvsb",
+        "bjet2_tag_cvsl",
+        "bjet2_hhbtag",
+        "fatjet_px",
+        "fatjet_py",
+        "fatjet_pz",
+        "fatjet_e",
+        "htt_e",
+        "htt_px",
+        "htt_py",
+        "htt_pz",
+        "hbb_e",
+        "hbb_px",
+        "hbb_py",
+        "hbb_pz",
+        "htthbb_e",
+        "htthbb_px",
+        "htthbb_py",
+        "htthbb_pz",
+        "httfatjet_e",
+        "httfatjet_px",
+        "httfatjet_py",
+        "httfatjet_pz",
+        "nu1_px",
+        "nu1_py",
+        "nu1_pz",
+        "nu2_px",
+        "nu2_py",
+        "nu2_pz",
+        "likelihood_ratio",
+    ]
+    exposed = True
+
+
+class bogdan_vanilla_without_ratio(_quintus):
+    require_producers = ["pdf_inputs_inputs", "calculate_likelihood_ratio", "pdf_inputs", "reg_dnn_moe"]
+    feature_list = [
+        "met_px",
+        "met_py",
+        "met_cov00",
+        "met_cov01",
+        "met_cov11",
+        "vis_tau1_px",
+        "vis_tau1_py",
+        "vis_tau1_pz",
+        "vis_tau1_e",
+        "vis_tau2_px",
+        "vis_tau2_py",
+        "vis_tau2_pz",
+        "vis_tau2_e",
+        "bjet1_px",
+        "bjet1_py",
+        "bjet1_pz",
+        "bjet1_e",
+        "bjet1_tag_b",
+        "bjet1_tag_cvsb",
+        "bjet1_tag_cvsl",
+        "bjet1_hhbtag",
+        "bjet2_px",
+        "bjet2_py",
+        "bjet2_pz",
+        "bjet2_e",
+        "bjet2_tag_b",
+        "bjet2_tag_cvsb",
+        "bjet2_tag_cvsl",
+        "bjet2_hhbtag",
+        "fatjet_px",
+        "fatjet_py",
+        "fatjet_pz",
+        "fatjet_e",
+        "htt_e",
+        "htt_px",
+        "htt_py",
+        "htt_pz",
+        "hbb_e",
+        "hbb_px",
+        "hbb_py",
+        "hbb_pz",
+        "htthbb_e",
+        "htthbb_px",
+        "htthbb_py",
+        "htthbb_pz",
+        "httfatjet_e",
+        "httfatjet_px",
+        "httfatjet_py",
+        "httfatjet_pz",
+        "nu1_px",
+        "nu1_py",
+        "nu1_pz",
+        "nu2_px",
+        "nu2_py",
+        "nu2_pz",
+        # "likelihood_ratio",
+    ]
+    exposed = True
+
+
+class everything_l_ratio(_quintus):
+    require_producers = ["pdf_inputs_inputs", "calculate_likelihood_ratio", "pdf_inputs", "reg_dnn_moe"]
+    feature_list = [
+        "pdf_input_vars_reco_higgs_constr_term_b",
+        "pdf_input_vars_reco_higgs_constr_term_tau",
+        "pdf_input_vars_reco_higgs_cos_theta_cms_h1_b1",
+        "pdf_input_vars_reco_higgs_cos_theta_cms_h2_tau_vis1",
+        "pdf_input_vars_reco_higgs_cos_theta_h1",
+        "pdf_input_vars_reco_higgs_dihiggs_mass",
+        "pdf_input_vars_reco_higgs_dihiggs_system_phi",
+        "pdf_input_vars_reco_higgs_dihiggs_system_pt",
+        "pdf_input_vars_reco_higgs_dihiggs_system_pz",
+        "pdf_input_vars_reco_higgs_jac_det",
+        "pdf_input_vars_reco_higgs_phi_cms_h1_b1",
+        "pdf_input_vars_reco_higgs_phi_cms_h2_tau_vis1",
+        "pdf_input_vars_reco_higgs_phi_h1",
+        "pdf_input_vars_reco_top_jac_det",
+        "pdf_input_vars_reco_top_t1_vis_phi",
+        "pdf_input_vars_reco_top_t_vis_y_diff",
+        "pdf_input_vars_reco_top_tau1_cos_theta_star_cms_t1_vis",
+        "pdf_input_vars_reco_top_tau1_cos_theta_star_cms_wplus",
+        "pdf_input_vars_reco_top_tau1_phi",
+        "pdf_input_vars_reco_top_tau2_cos_theta_star_cms_t2_vis",
+        "pdf_input_vars_reco_top_tau2_cos_theta_star_cms_wminus",
+        "pdf_input_vars_reco_top_tau2_phi",
+        "pdf_input_vars_reco_top_tt_vis_system_mass",
+        "pdf_input_vars_reco_top_tt_vis_system_phi",
+        "pdf_input_vars_reco_top_tt_vis_system_pt",
+        "pdf_input_vars_reco_top_tt_vis_system_pz",
+        "pdf_input_vars_reco_higgs_b1_pt",
+        "pdf_input_vars_reco_higgs_b1_eta",
+        "pdf_input_vars_reco_higgs_b1_phi",
+        "pdf_input_vars_reco_higgs_b1_mass",
+        "pdf_input_vars_reco_higgs_b2_pt",
+        "pdf_input_vars_reco_higgs_b2_eta",
+        "pdf_input_vars_reco_higgs_b2_phi",
+        "pdf_input_vars_reco_higgs_b2_mass",
+        "pdf_input_vars_reco_higgs_tau1_pt",
+        "pdf_input_vars_reco_higgs_tau1_eta",
+        "pdf_input_vars_reco_higgs_tau1_phi",
+        "pdf_input_vars_reco_higgs_tau1_mass",
+        "pdf_input_vars_reco_higgs_tau2_pt",
+        "pdf_input_vars_reco_higgs_tau2_eta",
+        "pdf_input_vars_reco_higgs_tau2_phi",
+        "pdf_input_vars_reco_higgs_tau2_mass",
+        "pdf_input_vars_reco_top_b1_pt",
+        "pdf_input_vars_reco_top_b1_eta",
+        "pdf_input_vars_reco_top_b1_phi",
+        "pdf_input_vars_reco_top_b1_mass",
+        "pdf_input_vars_reco_top_b2_pt",
+        "pdf_input_vars_reco_top_b2_eta",
+        "pdf_input_vars_reco_top_b2_phi",
+        "pdf_input_vars_reco_top_b2_mass",
+        "pdf_input_vars_reco_top_tau1_pt",
+        "pdf_input_vars_reco_top_tau1_eta",
+        "pdf_input_vars_reco_top_tau1_phi",
+        "pdf_input_vars_reco_top_tau1_mass",
+        "pdf_input_vars_reco_top_tau2_pt",
+        "pdf_input_vars_reco_top_tau2_eta",
+        "pdf_input_vars_reco_top_tau2_phi",
+        "pdf_input_vars_reco_top_tau2_mass",
+        "likelihood_ratio",
+    ]
     exposed = True

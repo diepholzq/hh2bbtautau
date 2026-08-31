@@ -4,7 +4,7 @@ from columnflow.columnar_util import EMPTY_FLOAT, maybe_import, EMPTY_INT
 
 import matplotlib.pyplot as plt
 from sympy import Matrix, pprint
-from sklearn.metrics import roc_curve, roc_auc_score    # , RocCurveDisplay
+from sklearn.metrics import roc_curve, roc_auc_score  # , RocCurveDisplay
 from operator import itemgetter
 from glob import glob
 
@@ -38,8 +38,7 @@ def match_events(ev_idx_a: np.array, ev_idx_b: np.array) -> list:
 
 
 def remove_nones(likelihood_distribution: np.array) -> np.array:
-    """Removes None, posinf, neginf from likelihood_distribution array
-    """
+    """Removes None, posinf, neginf from likelihood_distribution array"""
     likelihood_distribution = np.nan_to_num(
         likelihood_distribution, nan=EMPTY_FLOAT, posinf=EMPTY_FLOAT, neginf=EMPTY_FLOAT
     )
@@ -89,7 +88,6 @@ def print_correlation_matrix(eval_data_path: str, column_name: str, do_constr: b
         do_constr (bool): If the gen constraint term should be considered
     """
     plot_dir = "/afs/desy.de/user/d/diepholq/Documents/Plots/correlation_plots/"
-    pdf_inputs = hhf.get_data(parquet_file_path=eval_data_path, column_name=column_name, drop_nones=True)
     higgs_inputs = [
         "dihiggs_mass",
         "dihiggs_system_pt",
@@ -102,26 +100,41 @@ def print_correlation_matrix(eval_data_path: str, column_name: str, do_constr: b
         "cos_theta_cms_h1_b1",
         "phi_cms_h1_b1",
     ]
+    higgs_gen_inputs = [
+        "dihiggs_mass",
+        "dihiggs_system_pt",
+        "dihiggs_system_pz",
+        "dihiggs_system_phi",
+        "cos_theta_h1",
+        "phi_h1",
+        "cos_theta_cms_h2_tau_vis1",
+        "phi_cms_h2_tau_vis1",
+        "cos_theta_cms_h1_b1",
+        "phi_cms_h1_b1",
+    ]
     higgs_ticks = [
-        # r"$m_{inv}(H_{bb}, H_{\tau\tau})$",
-        r"$m_{HH}$",
-        # r"$p_{T}(H_{bb}, H_{\tau\tau})$",
-        r"$p_{T, HH}$",
-        # r"$p_{z}(H_{bb}, H_{\tau\tau})$",
-        r"$p_{z, HH}$",
-        r"$\phi_{HH}$",
-        # r"$cos(\theta(H_1^{HH}))$",
-        r"$cos(\theta^{*}_{H_{bb}})$",
-        # r"$\phi(H_1^{HH})$",
-        r"$\phi_{H_{bb}}$",
-        # r"$cos(\theta(\tau_{vis,1}^{H_2})$",
-        r"$cos(\theta^{*}_{H_{\tau\tau}})$",
-        # r"$\phi(\tau_{vis,1}^{H_2})$",
-        r"$\phi_{H_{\tau\tau}}$",
-        # r"$cos(\theta(b_1^{H_1}))$",
-        r"$cos(\theta^{*}_{b})$",
-        # r"$\phi(b_1^{H_1})$",
-        r"$\phi_{b}$",
+        r"$m_{H_{bb}H_{\tau\tau}}$",
+        r"$p_{T,H_{bb}H_{\tau\tau}}$",
+        r"$p_{z,H_{bb}H_{\tau\tau}}$",
+        r"$\phi_{H_{bb}H_{\tau\tau}}$",
+        r"$cos(\theta^{*})_{H_{bb}}^{HH}$",
+        r"$\phi_{H_{bb}}^{HH}$",
+        r"$cos(\theta^{*})_{\tau_{1}}^{H_{\tau\tau}}$",
+        r"$\phi_{\tau_{1}}^{H_{\tau\tau}}$",
+        r"$cos(\theta^{*})_{b_{1}}^{H_{bb}}$",
+        r"$\phi_{b_{1}}^{H_{bb}}$",
+    ]
+    higgs_gen_ticks = [
+        r"$m_{H_{bb}H_{\tau\tau}}$",
+        r"$p_{T,H_{bb}H_{\tau\tau}}$",
+        r"$p_{z,H_{bb}H_{\tau\tau}}$",
+        r"$\phi_{H_{bb}H_{\tau\tau}}$",
+        r"$cos(\theta^{*})_{H_{bb}}^{HH}$",
+        r"$\phi_{H_{bb}}^{HH}$",
+        r"$cos(\theta^{*})_{\tau_{1}}^{H_{\tau\tau}}$",
+        r"$\phi_{\tau_{1}}^{H_{\tau\tau}}$",
+        r"$cos(\theta^{*})_{b_{1}}^{H_{bb}}$",
+        r"$\phi_{b_{1}}^{H_{bb}}$",
     ]
     top_inputs = [
         "tt_vis_system_mass",
@@ -153,11 +166,18 @@ def print_correlation_matrix(eval_data_path: str, column_name: str, do_constr: b
     ]
 
     if np.any(column_name.split("_") == np.full_like(column_name.split("_"), "higgs", dtype=f"<U{len('higgs')}")):
-        inputs = higgs_inputs
-        ticks = higgs_ticks
+        if np.any(column_name.split("_") == np.full_like(column_name.split("_"), "gen", dtype=f"<U{len('higgs')}")):
+            inputs = higgs_gen_inputs
+            ticks = higgs_gen_ticks
+            pdf_inputs = ak.drop_none(ak.from_parquet(eval_data_path)[column_name])
+        else:
+            inputs = higgs_inputs
+            ticks = higgs_ticks
+            pdf_inputs = hhf.get_data(parquet_file_path=eval_data_path, column_name=column_name, drop_nones=True)
     elif np.any(column_name.split("_") == np.full_like(column_name.split("_"), "top", dtype=f"<U{len('top')}")):
         inputs = top_inputs
         ticks = top_ticks
+        pdf_inputs = hhf.get_data(parquet_file_path=eval_data_path, column_name=column_name, drop_nones=True)
     else:
         raise Exception("Not detected if signal or background column was provided")
     coef_arr = np.empty((len(inputs), len(pdf_inputs)))
@@ -170,7 +190,6 @@ def print_correlation_matrix(eval_data_path: str, column_name: str, do_constr: b
     corrcoef_matrix_str = Matrix(corrcoef_matrix)
     corrcoef_matrix_str = Matrix([[f"{elem:.2f}" for elem in row] for row in corrcoef_matrix_str.tolist()])
     pprint(corrcoef_matrix_str)
-
     # Plot Matrix
     fig, ax = plt.subplots(figsize=(9, 8))
     im = ax.imshow(corrcoef_matrix)
@@ -198,6 +217,8 @@ def get_likelihoods_and_ratios(
     bin_filling: bool = False,
     calculate_uncertainties: bool = True,
     do_jacobian: bool = False,
+    check_files_higgs: bool = True,
+    check_files_top: bool = True,
 ) -> dict:
     """Given the higgs and ttbar dataset paths, evaluates events as signal and background likelihoods,
     calculates ratios and returns individual likelihoods as well as ratios.
@@ -214,6 +235,8 @@ def get_likelihoods_and_ratios(
         calculate_uncertainties (bool): If statistical uncertainties should be calculated
         do_jacobian (bool): If jacobian determinant of transformation from detector to pdf input space should be taken
                             into account
+        check_files_higgs (bool): If existence of combined parquet files should be checked
+        check_files_top (bool): If existence of combined parquet files should be checked
     Returns:
         likelihood_dict (dict): Dictionary containing the likelihoods and ratios
     """
@@ -232,6 +255,8 @@ def get_likelihoods_and_ratios(
         do_constr=do_constr,
         bin_filling=bin_filling,
         do_jacobian=do_jacobian,
+        check_files_higgs=check_files_higgs,
+        check_files_top=check_files_top,
     )
     ratio_top_log, errors_ratio_top_log = calculate_likelihood_ratio(
         eval_data_path_top,
@@ -243,11 +268,13 @@ def get_likelihoods_and_ratios(
         do_constr=do_constr,
         bin_filling=bin_filling,
         do_jacobian=do_jacobian,
+        check_files_higgs=check_files_higgs,
+        check_files_top=check_files_top,
     )
 
     # Evaluate individual likelihoods for both datasets:
     # Evaluate higgs events on higgs likelihood
-    data_higgs_is_higgs = hhf.get_data(eval_data_path_higgs, "pdf_input_vars_reco_higgs", drop_nones=False)
+    data_higgs_is_higgs = hhf.get_data(eval_data_path_higgs, "pdf_input_vars_reco_higgs", drop_nones=True)
     p_higgs_is_higgs_log, err_higgs_is_higgs, err_higgs_is_higgs_log, ev_idx_higgs = calculate_reco_score_higgs(
         data_higgs_is_higgs,
         n_bins_1d,
@@ -258,7 +285,7 @@ def get_likelihoods_and_ratios(
         do_jacobian=do_jacobian,
     )
     # Evaluate higgs events on top likelihood
-    data_higgs_is_top = hhf.get_data(eval_data_path_higgs, "pdf_input_vars_reco_top", drop_nones=False)
+    data_higgs_is_top = hhf.get_data(eval_data_path_higgs, "pdf_input_vars_reco_top", drop_nones=True)
     p_higgs_is_top_log, err_higgs_is_top, err_higgs_is_top_log, ev_idx_top = calculate_reco_score_top(
         data_higgs_is_top,
         n_bins_1d,
@@ -268,7 +295,7 @@ def get_likelihoods_and_ratios(
         do_jacobian=do_jacobian,
     )
     # ...
-    data_top_is_higgs = hhf.get_data(eval_data_path_top, "pdf_input_vars_reco_higgs", drop_nones=False)
+    data_top_is_higgs = hhf.get_data(eval_data_path_top, "pdf_input_vars_reco_higgs", drop_nones=True)
     p_top_is_higgs_log, err_top_is_higgs, err_top_is_higgs_log, ev_idx_higgs = calculate_reco_score_higgs(
         data_top_is_higgs,
         n_bins_1d,
@@ -278,7 +305,7 @@ def get_likelihoods_and_ratios(
         return_log=True,
         do_jacobian=do_jacobian,
     )
-    data_top_is_top = hhf.get_data(eval_data_path_top, "pdf_input_vars_reco_top", drop_nones=False)
+    data_top_is_top = hhf.get_data(eval_data_path_top, "pdf_input_vars_reco_top", drop_nones=True)
     p_top_is_top_log, err_top_is_top, err_top_is_top_log, ev_idx_top = calculate_reco_score_top(
         data_top_is_top,
         n_bins_1d,
@@ -321,6 +348,8 @@ def plot_performance_metrics(
     do_jacobian: bool = True,
     plot_identifier: str = "",
     plot_dir: str = "",
+    check_files_higgs: bool = True,
+    check_files_top: bool = True,
 ) -> None:
     """Plots a set of performance metrics: The roc curve, roc auc value, the log likelihood ratios, the
     ROC auc + uncertainties as function of n_bins.
@@ -340,14 +369,18 @@ def plot_performance_metrics(
                             into account
         plot_identifier (str): String to add to plot name to identify it later
         plot_dir (str): String with directory where plots should be stored
+        check_files_higgs (bool): If existence of combined parquet files should be checked
+        check_files_top (bool): If existence of combined parquet files should be checked
     """
     plot_dir = plot_dir
     likelihood_plot_name = (
         f"likelihood_plots_{plot_identifier}_{n_bins_1d}_stat-bin-{statistical_binning}"
-        f"_do-constr-{do_constr}"
-        f"_bin-filling-{bin_filling}"
-        f"_uncertainties-{calculate_uncertainties}"
-        f"_jacobian-{do_jacobian}.pdf"
+        f"_bins_per_dim2d-{bins_per_dim2d}"
+        f"_bins_per_dim3d-{bins_per_dim3d}.pdf"
+        # f"_do-constr-{do_constr}"
+        # f"_bin-filling-{bin_filling}"
+        # f"_uncertainties-{calculate_uncertainties}"
+        # f"_jacobian-{do_jacobian}.pdf"
     )
 
     likelihood_dict = get_likelihoods_and_ratios(
@@ -364,18 +397,20 @@ def plot_performance_metrics(
         do_jacobian=do_jacobian,
     )
 
-    (ratio_higgs_log,
-    errors_ratio_higgs_log,
-    ratio_top_log,
-    errors_ratio_top_log,
-    p_higgs_is_higgs_log,
-    err_higgs_is_higgs_log,
-    p_higgs_is_top_log,
-    err_higgs_is_top_log,
-    p_top_is_higgs_log,
-    err_top_is_higgs_log,
-    p_top_is_top_log,
-    err_top_is_top_log) = itemgetter(
+    (
+        ratio_higgs_log,
+        errors_ratio_higgs_log,
+        ratio_top_log,
+        errors_ratio_top_log,
+        p_higgs_is_higgs_log,
+        err_higgs_is_higgs_log,
+        p_higgs_is_top_log,
+        err_higgs_is_top_log,
+        p_top_is_higgs_log,
+        err_top_is_higgs_log,
+        p_top_is_top_log,
+        err_top_is_top_log,
+    ) = itemgetter(
         "ratio_higgs_log",
         "errors_ratio_higgs_log",
         "ratio_top_log",
@@ -387,38 +422,52 @@ def plot_performance_metrics(
         "p_top_is_higgs_log",
         "err_top_is_higgs_log",
         "p_top_is_top_log",
-        "err_top_is_top_log")(likelihood_dict)
+        "err_top_is_top_log",
+    )(
+        likelihood_dict
+    )
 
     fig_roc, ax_roc = plt.subplots(figsize=(7, 7))
     roc_plot_name = (
         f"roc_plot_{plot_identifier}_{n_bins_1d}_stat-bin-{statistical_binning}"
-        f"_do-constr-{do_constr}"
-        f"_bin-filling-{bin_filling}"
-        f"_uncertainties-{calculate_uncertainties}"
-        f"_jacobian-{do_jacobian}.png"
+        f"_bins_per_dim2d-{bins_per_dim2d}"
+        f"_bins_per_dim3d-{bins_per_dim3d}.pdf"
+        # f"_do-constr-{do_constr}"
+        # f"_bin-filling-{bin_filling}"
+        # f"_uncertainties-{calculate_uncertainties}"
+        # f"_jacobian-{do_jacobian}.png"
     )
     if calculate_uncertainties:
-        smeared_ratio_higgs = np.random.normal(loc=ratio_higgs_log[:, None],
-                                            scale=errors_ratio_higgs_log[:, None],
-                                            size=(len(ratio_higgs_log), n_mc)).T
-        smeared_ratio_top = np.random.normal(loc=ratio_top_log[:, None],
-                                            scale=errors_ratio_top_log[:, None],
-                                            size=(len(ratio_top_log), n_mc)).T
+        smeared_ratio_higgs = np.random.normal(
+            loc=ratio_higgs_log[:, None], scale=errors_ratio_higgs_log[:, None], size=(len(ratio_higgs_log), n_mc)
+        ).T
+        smeared_ratio_top = np.random.normal(
+            loc=ratio_top_log[:, None], scale=errors_ratio_top_log[:, None], size=(len(ratio_top_log), n_mc)
+        ).T
 
         roc_auc_i = np.zeros(n_mc, dtype=np.float64)
         roc_std_i = np.zeros(n_mc, dtype=np.float64)
         for idx in range(n_mc):
-            progress_percentage = int((idx / n_mc) * 100)          # progress-o-meter
+            progress_percentage = int((idx / n_mc) * 100)  # progress-o-meter
             num_hashes = int(progress_percentage)
-            print(f"mc uncertainty estimation in progress - roc: [{'#' * num_hashes}{' ' * (100 - num_hashes)}] \
-                {progress_percentage}% completed", end="\r")
+            print(
+                f"mc uncertainty estimation in progress - roc: [{'#' * num_hashes}{' ' * (100 - num_hashes)}] \
+                {progress_percentage}% completed",
+                end="\r",
+            )
             ratio_higgs_cleaned = np.nan_to_num(
-                smeared_ratio_higgs[idx], nan=EMPTY_INT, posinf=EMPTY_INT, neginf=EMPTY_INT,
+                smeared_ratio_higgs[idx],
+                nan=EMPTY_INT,
+                posinf=EMPTY_INT,
+                neginf=EMPTY_INT,
             )
             # print(f"\nsampledratio higgs cleaned nans: {len(ratio_higgs_cleaned[ratio_higgs_cleaned == EMPTY_INT])}\n")
             ratio_higgs_cleaned = ak.to_packed(ratio_higgs_cleaned[ratio_higgs_cleaned != EMPTY_INT])
             ratio_top_cleaned = np.nan_to_num(
-                smeared_ratio_top[idx], nan=EMPTY_INT, posinf=EMPTY_INT, neginf=EMPTY_INT,
+                smeared_ratio_top[idx],
+                nan=EMPTY_INT,
+                posinf=EMPTY_INT,
+                neginf=EMPTY_INT,
             )
             # print(f"\nsampledratio top cleaned nans: {len(ratio_top_cleaned[ratio_top_cleaned == EMPTY_INT])}\n")
             ratio_top_cleaned = ak.to_packed(ratio_top_cleaned[ratio_top_cleaned != EMPTY_INT])
@@ -433,17 +482,25 @@ def plot_performance_metrics(
         mean_auc = np.mean(roc_auc_i)
         std_auc = np.std(roc_auc_i)
 
-        print(f"\n\n\nauc score: {mean_auc:.4f}, with std dev: {std_auc:.4f}.\n\
-        Standard error according to formula: {np.mean(roc_std_i)}")
+        print(
+            f"\n\n\nauc score: {mean_auc:.4f}, with std dev: {std_auc:.4f}.\n\
+        Standard error according to formula: {np.mean(roc_std_i)}"
+        )
 
         ratio_higgs_cleaned_nom = np.nan_to_num(
-            ratio_higgs_log, nan=EMPTY_INT, posinf=EMPTY_INT, neginf=EMPTY_INT,
+            ratio_higgs_log,
+            nan=EMPTY_INT,
+            posinf=EMPTY_INT,
+            neginf=EMPTY_INT,
         )
         n_sig_events = len(ratio_higgs_cleaned_nom) - len(ratio_higgs_cleaned_nom[ratio_higgs_cleaned_nom == EMPTY_INT])
         print(f"\nnom ratio higgs cleaned nans: {len(ratio_higgs_cleaned_nom[ratio_higgs_cleaned_nom == EMPTY_INT])}\n")
         ratio_higgs_cleaned_nom = ak.to_packed(ratio_higgs_cleaned_nom[ratio_higgs_cleaned_nom != EMPTY_INT])
         ratio_top_cleaned_nom = np.nan_to_num(
-            ratio_top_log, nan=EMPTY_INT, posinf=EMPTY_INT, neginf=EMPTY_INT,
+            ratio_top_log,
+            nan=EMPTY_INT,
+            posinf=EMPTY_INT,
+            neginf=EMPTY_INT,
         )
         print(f"\nnom ratio top cleaned nans: {len(ratio_top_cleaned_nom[ratio_top_cleaned_nom == EMPTY_INT])}\n")
         n_bg_events = len(ratio_top_cleaned_nom) - len(ratio_top_cleaned_nom[ratio_top_cleaned_nom == EMPTY_INT])
@@ -458,7 +515,9 @@ def plot_performance_metrics(
             signal_sens_nom,
             bg_rej_nom,
             label=f"ROC auc: {roc_auc_nom:.4f}",
-            linestyle="--", color="black", linewidth="1.5",
+            linestyle="--",
+            color="black",
+            linewidth="1.5",
         )
         ax_roc.legend()
         ax_roc.set_ylabel("Signal sensitivity")
@@ -475,11 +534,17 @@ def plot_performance_metrics(
         ax_roc.text(0.07, 0.07, roc_plot_text)
     else:
         ratio_higgs_cleaned = np.nan_to_num(
-            ratio_higgs_log, nan=EMPTY_INT, posinf=EMPTY_INT, neginf=EMPTY_INT,
+            ratio_higgs_log,
+            nan=EMPTY_INT,
+            posinf=EMPTY_INT,
+            neginf=EMPTY_INT,
         )
         ratio_higgs_cleaned = ak.to_packed(ratio_higgs_cleaned[ratio_higgs_cleaned != EMPTY_INT])
         ratio_top_cleaned = np.nan_to_num(
-            ratio_top_log, nan=EMPTY_INT, posinf=EMPTY_INT, neginf=EMPTY_INT,
+            ratio_top_log,
+            nan=EMPTY_INT,
+            posinf=EMPTY_INT,
+            neginf=EMPTY_INT,
         )
         ratio_top_cleaned = ak.to_packed(ratio_top_cleaned[ratio_top_cleaned != EMPTY_INT])
         roc_values_nom = calculate_roc_values(ratio_higgs_cleaned, ratio_top_cleaned)
@@ -491,7 +556,9 @@ def plot_performance_metrics(
             signal_sens_nom,
             bg_rej_nom,
             label=f"ROC auc: {roc_auc_nom:.4f}",
-            linestyle="--", color="black", linewidth="1.5",
+            linestyle="--",
+            color="black",
+            linewidth="1.5",
         )
         ax_roc.set_ylabel("Signal sensitivity")
         ax_roc.set_xlabel("background rejection")
@@ -503,48 +570,37 @@ def plot_performance_metrics(
 
     # Likelihood and ratio comparison plots
     fig_l, ax_l = plt.subplot_mosaic(
-        [["sig", "bg"],
-        ["ratios", "ratios"]],
+        [["sig", "bg"], ["ratios", "ratios"]],
         gridspec_kw={"wspace": 0.3},
         figsize=(9, 9),
     )
     if calculate_uncertainties:
         create_smeared_hists = hhf.create_smeared_hists
         # Likelihood plots - mc smearing
-        (mean_higgs_is_higgs,
-        std_higgs_is_higgs,
-        bin_centers_higgs_is_higgs,
-        bin_width_higgs_is_higgs) = create_smeared_hists(
-            p_higgs_is_higgs_log,
-            err_higgs_is_higgs_log,
-            n_mc,
-            bins="np.linspace(np.percentile(counts[counts < 99999], [0.5])[0], \
+        (mean_higgs_is_higgs, std_higgs_is_higgs, bin_centers_higgs_is_higgs, bin_width_higgs_is_higgs) = (
+            create_smeared_hists(
+                p_higgs_is_higgs_log,
+                err_higgs_is_higgs_log,
+                n_mc,
+                bins="np.linspace(np.percentile(counts[counts < 99999], [0.5])[0], \
                             np.percentile(counts[counts < 99999], [99])[0], 300)",
+            )
         )
-        (mean_higgs_is_top,
-        std_higgs_is_top,
-        bin_centers_higgs_is_top,
-        bin_width_higgs_is_top) = create_smeared_hists(
+        (mean_higgs_is_top, std_higgs_is_top, bin_centers_higgs_is_top, bin_width_higgs_is_top) = create_smeared_hists(
             p_higgs_is_top_log,
             err_higgs_is_top_log,
             n_mc,
             bins="np.linspace(np.percentile(counts[counts < 99999], [0.5])[0], \
                             np.percentile(counts[counts < 99999], [99])[0], 300)",
         )
-        (mean_top_is_higgs,
-        std_top_is_higgs,
-        bin_centers_top_is_higgs,
-        bin_width_top_is_higgs) = create_smeared_hists(
+        (mean_top_is_higgs, std_top_is_higgs, bin_centers_top_is_higgs, bin_width_top_is_higgs) = create_smeared_hists(
             p_top_is_higgs_log,
             err_top_is_higgs_log,
             n_mc,
             bins="np.linspace(np.percentile(counts[counts < 99999], [0.5])[0], \
                             np.percentile(counts[counts < 99999], [99])[0], 300)",
         )
-        (mean_top_is_top,
-        std_top_is_top,
-        bin_centers_top_is_top,
-        bin_width_top_is_top) = create_smeared_hists(
+        (mean_top_is_top, std_top_is_top, bin_centers_top_is_top, bin_width_top_is_top) = create_smeared_hists(
             p_top_is_top_log,
             err_top_is_top_log,
             n_mc,
@@ -553,54 +609,75 @@ def plot_performance_metrics(
         )
 
         # Prepare data for plt.stairs
-        edges_higgs_is_higgs = np.concatenate([bin_centers_higgs_is_higgs - bin_width_higgs_is_higgs /
-        2, [bin_centers_higgs_is_higgs[-1] + bin_width_higgs_is_higgs / 2]])
-        edges_higgs_is_top = np.concatenate([bin_centers_higgs_is_top - bin_width_higgs_is_top /
-            2, [bin_centers_higgs_is_top[-1] + bin_width_higgs_is_top / 2]])
-        edges_top_is_higgs = np.concatenate([bin_centers_top_is_higgs - bin_width_top_is_higgs /
-            2, [bin_centers_top_is_higgs[-1] + bin_width_top_is_higgs / 2]])
-        edges_top_is_top = np.concatenate([bin_centers_top_is_top - bin_width_top_is_top /
-            2, [bin_centers_top_is_top[-1] + bin_width_top_is_top / 2]])
+        edges_higgs_is_higgs = np.concatenate(
+            [
+                bin_centers_higgs_is_higgs - bin_width_higgs_is_higgs / 2,
+                [bin_centers_higgs_is_higgs[-1] + bin_width_higgs_is_higgs / 2],
+            ]
+        )
+        edges_higgs_is_top = np.concatenate(
+            [
+                bin_centers_higgs_is_top - bin_width_higgs_is_top / 2,
+                [bin_centers_higgs_is_top[-1] + bin_width_higgs_is_top / 2],
+            ]
+        )
+        edges_top_is_higgs = np.concatenate(
+            [
+                bin_centers_top_is_higgs - bin_width_top_is_higgs / 2,
+                [bin_centers_top_is_higgs[-1] + bin_width_top_is_higgs / 2],
+            ]
+        )
+        edges_top_is_top = np.concatenate(
+            [bin_centers_top_is_top - bin_width_top_is_top / 2, [bin_centers_top_is_top[-1] + bin_width_top_is_top / 2]]
+        )
 
         # Likelihood plots:
-        ax_l["sig"].bar(bin_centers_higgs_is_higgs,
-                    mean_higgs_is_higgs,
-                    width=bin_width_higgs_is_higgs,
-                    yerr=std_higgs_is_higgs,
-                    color="none",
-                    edgecolor="none",
-                    alpha=0.6,
-                    ecolor="b")
+        ax_l["sig"].bar(
+            bin_centers_higgs_is_higgs,
+            mean_higgs_is_higgs,
+            width=bin_width_higgs_is_higgs,
+            yerr=std_higgs_is_higgs,
+            color="none",
+            edgecolor="none",
+            alpha=0.6,
+            ecolor="b",
+        )
         ax_l["sig"].stairs(mean_higgs_is_higgs, edges_higgs_is_higgs, color="b", label=r"$H$ dataset")
-        ax_l["sig"].bar(bin_centers_top_is_higgs,
-                    mean_top_is_higgs,
-                    width=bin_width_top_is_higgs,
-                    yerr=std_top_is_higgs,
-                    color="none",
-                    edgecolor="none",
-                    alpha=0.6,
-                    ecolor="r")
+        ax_l["sig"].bar(
+            bin_centers_top_is_higgs,
+            mean_top_is_higgs,
+            width=bin_width_top_is_higgs,
+            yerr=std_top_is_higgs,
+            color="none",
+            edgecolor="none",
+            alpha=0.6,
+            ecolor="r",
+        )
         ax_l["sig"].stairs(mean_top_is_higgs, edges_top_is_higgs, color="r", label=r"$t\bar{t}$ dataset")
         ax_l["sig"].set_title(r"$H$ dataset")
         ax_l["sig"].set_title(r"$\text{L}(HH\rightarrow bb\tau\tau)$")
         ax_l["sig"].legend()
-        ax_l["bg"].bar(bin_centers_higgs_is_top,
-                    mean_higgs_is_top,
-                    width=bin_width_higgs_is_top,
-                    yerr=std_higgs_is_top,
-                    color="none",
-                    edgecolor="none",
-                    alpha=0.6,
-                    ecolor="b")
+        ax_l["bg"].bar(
+            bin_centers_higgs_is_top,
+            mean_higgs_is_top,
+            width=bin_width_higgs_is_top,
+            yerr=std_higgs_is_top,
+            color="none",
+            edgecolor="none",
+            alpha=0.6,
+            ecolor="b",
+        )
         ax_l["bg"].stairs(mean_higgs_is_top, edges_higgs_is_top, color="b", label=r"$H$ dataset")
-        ax_l["bg"].bar(bin_centers_top_is_top,
-                    mean_top_is_top,
-                    width=bin_width_top_is_top,
-                    yerr=std_top_is_top,
-                    color="none",
-                    edgecolor="none",
-                    alpha=0.6,
-                    ecolor="r")
+        ax_l["bg"].bar(
+            bin_centers_top_is_top,
+            mean_top_is_top,
+            width=bin_width_top_is_top,
+            yerr=std_top_is_top,
+            color="none",
+            edgecolor="none",
+            alpha=0.6,
+            ecolor="r",
+        )
         ax_l["bg"].stairs(mean_top_is_top, edges_top_is_top, color="r", label=r"$t\bar{t}$ dataset")
         ax_l["bg"].set_title(r"$\text{L}(t\bar{t})$")
         ax_l["bg"].legend()
@@ -622,35 +699,47 @@ def plot_performance_metrics(
         )
 
         # Preparation for plt.stairs:
-        edges_ratio_higgs = np.concatenate([bin_centers_ratio_higgs - bin_width_ratio_higgs /
-        2, [bin_centers_ratio_higgs[-1] + bin_width_ratio_higgs / 2]])
-        edges_ratio_top = np.concatenate([bin_centers_ratio_top - bin_width_ratio_top /
-        2, [bin_centers_ratio_top[-1] + bin_width_ratio_top / 2]])
+        edges_ratio_higgs = np.concatenate(
+            [
+                bin_centers_ratio_higgs - bin_width_ratio_higgs / 2,
+                [bin_centers_ratio_higgs[-1] + bin_width_ratio_higgs / 2],
+            ]
+        )
+        edges_ratio_top = np.concatenate(
+            [bin_centers_ratio_top - bin_width_ratio_top / 2, [bin_centers_ratio_top[-1] + bin_width_ratio_top / 2]]
+        )
 
-        ax_l["ratios"].bar(bin_centers_ratio_higgs,
-                    mean_ratio_higgs,
-                    width=bin_width_ratio_higgs,
-                    yerr=std_ratio_higgs,
-                    color="none",
-                    edgecolor="none",
-                    ecolor="b",
-                    alpha=0.5)
+        ax_l["ratios"].bar(
+            bin_centers_ratio_higgs,
+            mean_ratio_higgs,
+            width=bin_width_ratio_higgs,
+            yerr=std_ratio_higgs,
+            color="none",
+            edgecolor="none",
+            ecolor="b",
+            alpha=0.5,
+        )
         ax_l["ratios"].stairs(mean_ratio_higgs, edges_ratio_higgs, color="b", label=r"$H$ dataset")
-        ax_l["ratios"].bar(bin_centers_ratio_top,
-                    mean_ratio_top,
-                    width=bin_width_ratio_top,
-                    yerr=std_ratio_top,
-                    color="none",
-                    edgecolor="none",
-                    ecolor="r",
-                    alpha=0.5)
+        ax_l["ratios"].bar(
+            bin_centers_ratio_top,
+            mean_ratio_top,
+            width=bin_width_ratio_top,
+            yerr=std_ratio_top,
+            color="none",
+            edgecolor="none",
+            ecolor="r",
+            alpha=0.5,
+        )
         ax_l["ratios"].stairs(mean_ratio_top, edges_ratio_top, color="r", label=r"$t\bar{t}$ dataset")
     else:
         p_higgs_is_higgs_log = remove_nones(p_higgs_is_higgs_log)
         ax_l["sig"].hist(
             p_higgs_is_higgs_log,
-            bins=np.linspace(np.percentile(p_higgs_is_higgs_log, 0.01), np.percentile(p_higgs_is_higgs_log, 99.99), 200),
-            histtype="step", density=True,
+            bins=np.linspace(
+                np.percentile(p_higgs_is_higgs_log, 0.01), np.percentile(p_higgs_is_higgs_log, 99.99), 200
+            ),
+            histtype="step",
+            density=True,
             linewidth=2,
             alpha=0.7,
             color="b",
@@ -660,7 +749,8 @@ def plot_performance_metrics(
         ax_l["sig"].hist(
             p_top_is_higgs_log,
             bins=np.linspace(np.percentile(p_top_is_higgs_log, 0.01), np.percentile(p_top_is_higgs_log, 99.99), 200),
-            histtype="step", density=True,
+            histtype="step",
+            density=True,
             linewidth=2,
             alpha=0.7,
             color="r",
@@ -670,7 +760,8 @@ def plot_performance_metrics(
         ax_l["bg"].hist(
             p_higgs_is_top_log,
             bins=np.linspace(np.percentile(p_higgs_is_top_log, 0.01), np.percentile(p_higgs_is_top_log, 99.99), 200),
-            histtype="step", density=True,
+            histtype="step",
+            density=True,
             linewidth=2,
             alpha=0.7,
             color="b",
@@ -680,7 +771,8 @@ def plot_performance_metrics(
         ax_l["bg"].hist(
             p_top_is_top_log,
             bins=np.linspace(np.percentile(p_top_is_top_log, 0.01), np.percentile(p_top_is_top_log, 99.99), 200),
-            histtype="step", density=True,
+            histtype="step",
+            density=True,
             linewidth=2,
             alpha=0.7,
             color="r",
@@ -723,64 +815,157 @@ def plot_performance_metrics_wrapper(
     parquet_file_path_signal: str,
     parquet_file_path_bg: str,
     plot_dir: str,
+    check_files_higgs: bool = True,
+    check_files_top: bool = True,
 ) -> None:
     # General options
-    n_bins_1d: int = 750
-    bins_per_dim2d: np.ndarray = np.array([27, 27])
-    bins_per_dim3d: np.ndarray = np.array([20, 7, 7])
+    n_bins_1d: int = 1480
+    # Check if combined files exist (Naming pattern: columns_all.parquet)
+    if check_files_higgs:
+        try:
+            _ = hhf.get_data(
+                f"{parquet_file_path_signal}columns_all.parquet",
+                "pdf_input_vars_reco_top",
+                drop_nones=True,
+            )
+        except:
+            file_list = glob(f"{parquet_file_path_signal}*.parquet")
+            result = ak.concatenate([ak.from_parquet(file_list[0]), ak.from_parquet(file_list[1])], axis=0)
+            column_dict = {}
+            from IPython import embed
 
-    # Make sure files exist
-    try:
-        _ = hhf.get_data(
-            f"{parquet_file_path_bg}columns_all.parquet", "pdf_input_vars_reco_top", drop_nones=True,
-        )
-    except:
-        file_list: list = glob(f"{parquet_file_path_bg}*.parquet")
-        result: ak.Array = ak.concatenate(
-            [ak.from_parquet(file_list[0]),
-            ak.from_parquet(file_list[1])], axis=0)
-        for idx in range(2, len(file_list)):
-            result = ak.concatenate([result, ak.from_parquet(file_list[idx])], axis=0)
-            ak.to_parquet(result, f"{parquet_file_path_bg}columns_all.parquet")
-    finally:
-        path_top: str = f"{parquet_file_path_bg}columns_all.parquet"
-
+            embed(header="create all parquet")
+            for column in result.fields:
+                # ch_id_mask = result[column][result[column].fields[0]] != EMPTY_FLOAT
+                ch_id_mask = result[column]["channel_id"] == 3
+                column_dict[column] = result[column][ch_id_mask]
+                for idx in range(2, len(file_list)):
+                    imported = ak.from_parquet(file_list[idx])[column]
+                    # ch_id_mask = imported[imported.fields[0]] != EMPTY_FLOAT
+                    ch_id_mask = imported["channel_id"] == 3
+                    column_dict[column] = ak.to_packed(
+                        ak.concatenate([column_dict[column], imported[ch_id_mask]], axis=0)
+                    )
+            result = ak.zip(
+                {
+                    "pdf_input_vars_reco_higgs": column_dict["pdf_input_vars_reco_higgs"],
+                    "pdf_input_vars_reco_top": column_dict["pdf_input_vars_reco_top"],
+                }
+            )
+            ak.to_parquet(result, f"{parquet_file_path_signal}columns_all.parquet")
     path_higgs: str = f"{parquet_file_path_signal}columns_0.parquet"
+    if check_files_top:
+        try:
+            _ = hhf.get_data(
+                f"{parquet_file_path_bg}columns_all.parquet",
+                "pdf_input_vars_reco_top",
+                drop_nones=True,
+            )
+        except:
+            file_list = glob(f"{parquet_file_path_bg}*.parquet")
+            result = ak.concatenate([ak.from_parquet(file_list[0]), ak.from_parquet(file_list[1])], axis=0)
+            column_dict = {}
+            from IPython import embed
 
-    # Plotting
-    plot_performance_metrics(
-        path_higgs,
-        path_top,
-        n_bins_1d,
-        bins_per_dim2d=bins_per_dim2d,
-        bins_per_dim3d=bins_per_dim3d,
-        n_mc=300,
-        allow_hist_creations=True,
-        statistical_binning=True,
-        do_constr=True,
-        bin_filling=False,
-        calculate_uncertainties=False,
-        plot_dir="/afs/desy.de/user/d/diepholq/Documents/Plots/performance_metrics/",
-        do_jacobian=True,
-        # plot_dir="/tmp/",
-    )
+            embed(header="create all parquet")
+            for column in result.fields:
+                # ch_id_mask = result[column][result[column].fields[0]] != EMPTY_FLOAT
+                ch_id_mask = result[column]["channel_id"] == 3
+                column_dict[column] = result[column][ch_id_mask]
+                for idx in range(2, len(file_list)):
+                    imported = ak.from_parquet(file_list[idx])[column]
+                    # ch_id_mask = imported[imported.fields[0]] != EMPTY_FLOAT
+                    ch_id_mask = imported["channel_id"] == 3
+                    column_dict[column] = ak.to_packed(
+                        ak.concatenate([column_dict[column], imported[ch_id_mask]], axis=0)
+                    )
+            result = ak.zip(
+                {
+                    "pdf_input_vars_reco_higgs": column_dict["pdf_input_vars_reco_higgs"],
+                    "pdf_input_vars_reco_top": column_dict["pdf_input_vars_reco_top"],
+                }
+            )
+            ak.to_parquet(result, f"{parquet_file_path_bg}columns_all.parquet")
+    path_top: str = f"{parquet_file_path_bg}columns_all.parquet"
+    for statistical_binning in [True]:
+        for bins_per_dim3d in [
+            np.array([21, 8, 8]),
+            np.array([28, 7, 7]),
+            np.array([12, 11, 11]),
+            np.array([8, 13, 13]),
+            np.array([7, 14, 14]),
+        ]:
+            for bins_per_dim2d in [
+                np.array([38, 38]),
+                np.array([52, 25]),
+                np.array([100, 14]),
+                np.array([140, 10]),
+                np.array([14, 100]),
+                np.array([25, 52]),
+            ]:
+                # bins_per_dim2d: np.ndarray = np.array([38, 38])
+                # bins_per_dim3d: np.ndarray = np.array([21, 8, 8])
+
+                # Plotting
+                plot_performance_metrics(
+                    path_higgs,
+                    path_top,
+                    n_bins_1d,
+                    bins_per_dim2d=bins_per_dim2d,
+                    bins_per_dim3d=bins_per_dim3d,
+                    n_mc=300,
+                    allow_hist_creations=True,
+                    statistical_binning=statistical_binning,
+                    do_constr=True,
+                    bin_filling=False,
+                    calculate_uncertainties=False,
+                    plot_dir="/afs/desy.de/user/d/diepholq/Documents/Plots/performance_metrics/",
+                    do_jacobian=True,
+                    check_files_higgs=check_files_higgs,
+                    check_files_top=check_files_top,
+                    # plot_dir="/tmp/",
+                )
 
 
 if __name__ == "__main__":
     PATH_HIGGS = (
-        "/data/dust/user/diepholq/hh2bbtautau/hbt_store/analysis_hbt/cf.ProduceColumns/22pre_v14/"
-        "hh_ggf_hbb_htt_kl1_kt1_powheg/nominal/calib__default/sel__default/red__default/prod__pdf_inputs/"
-        "dev_likelihood_ratio/"
+        "/data/dust/user/diepholq/hh2bbtautau/hbt_store/analysis_hbt/cf.ProduceColumns/22post_v14/"
+        "hh_ggf_hbb_htt_kl1_kt1_powheg/nominal/calib__default/sel__default/red__default/prod__pdf_inputs/prod24/"
     )
+    # PATH_HIGGS = "/data/dust/user/diepholq/hh2bbtautau/hist_input_data/higgs/"
+
+    # 1boost 22post
+    PATH_HIGGS_1BOOST = "/data/dust/user/diepholq/hh2bbtautau/hbt_store/analysis_hbt/cf.ProduceColumns/22post_v14/hh_ggf_hbb_htt_kl1_kt1_powheg/nominal/calib__default/sel__default/red__default/prod__pdf_inputs/pdf_inputs_1boosts/"
+
+    # 2boost 22post
+    PATH_HIGGS_2BOOST = "/data/dust/user/diepholq/hh2bbtautau/hbt_store/analysis_hbt/cf.ProduceColumns/22post_v14/hh_ggf_hbb_htt_kl1_kt1_powheg/nominal/calib__default/sel__default/red__default/prod__pdf_inputs/pdf_inputs_2boosts/"
+    PATH_HIGGS_ALL = "/data/dust/user/diepholq/hh2bbtautau/hist_input_data/higgs/columns_all.parquet"
+    PATH_HIGGS_TEST = "/data/dust/user/diepholq/hh2bbtautau/hbt_store/analysis_hbt/cf.ProduceColumns/22post_v14/hh_ggf_hbb_htt_kl1_kt1_powheg/nominal/calib__default/sel__default/red__default/prod__pdf_inputs/dev_pdf_inputs/columns_0.parquet"
 
     PATH_TOP = (
-        "/data/dust/user/diepholq/hh2bbtautau/hbt_store/analysis_hbt/cf.ProduceColumns/22pre_v14/tt_dl_powheg/"
-        "nominal/calib__default/sel__default/red__default/prod__pdf_inputs/dev_likelihood_ratio/"
+        "/data/dust/user/diepholq/hh2bbtautau/hbt_store/analysis_hbt/cf.ProduceColumns/22post_v14/"
+        "tt_dl_powheg/nominal/calib__default/sel__default/red__default/prod__pdf_inputs/prod24/"
     )
+    # PATH_TOP = "/data/dust/user/diepholq/hh2bbtautau/hist_input_data/top/"
+
+    # 2boost 22post
+    PATH_TOP_2BOOST = "/data/dust/user/diepholq/hh2bbtautau/hbt_store/analysis_hbt/cf.ProduceColumns/22post_v14/tt_dl_powheg/nominal/calib__default/sel__default/red__default/prod__pdf_inputs/pdf_inputs_2boosts/"
+
+    # 1boost 22post
+    PATH_TOP_1BOOST = "/data/dust/user/diepholq/hh2bbtautau/hbt_store/analysis_hbt/cf.ProduceColumns/22post_v14/tt_dl_powheg/nominal/calib__default/sel__default/red__default/prod__pdf_inputs/pdf_inputs_1boosts/"
+    PATH_TOP_ALL = "/data/dust/user/diepholq/hh2bbtautau/hist_input_data/top/columns_all.parquet"
     plot_performance_metrics_wrapper(
-        PATH_HIGGS,
-        PATH_TOP,
+        PATH_HIGGS_1BOOST,
+        PATH_TOP_1BOOST,
         "/afs/desy.de/user/d/diepholq/Documents/Plots/performance_metrics/",
+        check_files_higgs=False,
     )
-    # print_correlation_matrix(PATH_HIGGS, "pdf_input_vars_reco_higgs")
-    # print_correlation_matrix(PATH_TOP, "pdf_input_vars_reco_top")
+    PATH_HIGGS_GEN = (
+        "/data/dust/user/diepholq/hh2bbtautau/hbt_store/analysis_hbt/cf.ProduceColumns/22pre_v14/"
+        "hh_ggf_hbb_htt_kl1_kt1_powheg/nominal/calib__default/sel__default/red__default/"
+        "prod__create_pdf_input_vars_higgs_gen/prod24/columns_0.parquet"
+    )
+    # print_correlation_matrix(f"{PATH_HIGGS_1BOOST}columns_0.parquet", "pdf_input_vars_reco_higgs")
+    # print_correlation_matrix(f"{PATH_TOP_1BOOST}columns_all.parquet", "pdf_input_vars_reco_top")
+    # print_correlation_matrix(PATH_HIGGS_TEST, "pdf_input_vars_reco_higgs")
+    # print_correlation_matrix(PATH_HIGGS_GEN, "pdf_input_vars_gen_higgs")

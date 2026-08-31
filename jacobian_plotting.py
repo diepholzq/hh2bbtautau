@@ -1,4 +1,3 @@
-
 from hbt.production.histogram_helper_functions import get_data
 import numpy as np
 
@@ -11,17 +10,28 @@ def log_and_remove_nans(data: np.ndarray) -> np.ndarray:
 
 
 def plot_jac_det(
-    higgs_path: str, top_path: str, save_fig: bool = False, plot_path: str = None, plot_name: str = None,
+    higgs_path: str,
+    top_path: str,
+    save_fig: bool = False,
+    plot_path: str = None,
+    plot_name: str = None,
 ) -> None:
     # get jacobian terms
+    # from IPython import embed
+    #
+    # embed(header="plot jac det ")
     higgs_is_higgs_data = get_data(higgs_path, "pdf_input_vars_reco_higgs", drop_nones=True)
     higgs_is_top_data = get_data(higgs_path, "pdf_input_vars_reco_top", drop_nones=True)
     top_is_top_data = get_data(top_path, "pdf_input_vars_reco_top", drop_nones=True)
     top_is_higgs_data = get_data(top_path, "pdf_input_vars_reco_higgs", drop_nones=True)
 
     # calc. log
-    higgs_is_higgs_det, top_is_top_det = log_and_remove_nans(abs(higgs_is_higgs_data.jac_det)), log_and_remove_nans(abs(top_is_top_data.jac_det))
-    higgs_is_top_det, top_is_higgs_det = log_and_remove_nans(abs(higgs_is_top_data.jac_det)), log_and_remove_nans(abs(top_is_higgs_data.jac_det))
+    higgs_is_higgs_det, top_is_top_det = log_and_remove_nans(abs(higgs_is_higgs_data.jac_det)), log_and_remove_nans(
+        abs(top_is_top_data.jac_det)
+    )
+    higgs_is_top_det, top_is_higgs_det = log_and_remove_nans(abs(higgs_is_top_data.jac_det)), log_and_remove_nans(
+        abs(top_is_higgs_data.jac_det)
+    )
 
     # set edges for plotting
     min_edge_higgs = min(np.percentile(higgs_is_higgs_det, 0.01), np.percentile(top_is_higgs_det, 0.01))
@@ -89,7 +99,7 @@ def plot_jac_det(
         color=("b", "r"),
         linewidth=2,
     )
-    ax[0].legend(), ax[1].legend()
+    ax[0].legend(), ax[1].legend(), ax[2].legend()
     ax[0].set_title(r"Signal Dataset")
     ax[1].set_title(r"Background Dataset")
     plot_name_diff = "jac_det_differences"
@@ -108,15 +118,17 @@ def print_jac_matrix_examples(matrix: np.ndarray) -> None:
 
 
 if __name__ == "__main__":
-    PATH_HIGGS = (
-        "/data/dust/user/diepholq/hh2bbtautau/hbt_store/analysis_hbt/cf.ProduceColumns/22pre_v14/"
-        "hh_ggf_hbb_htt_kl1_kt1_powheg/nominal/calib__default/sel__default/red__default/prod__pdf_inputs/"
-        "dev_likelihood_ratio/"
-    )
-
-    PATH_TOP = (
-        "/data/dust/user/diepholq/hh2bbtautau/hbt_store/analysis_hbt/cf.ProduceColumns/22pre_v14/tt_dl_powheg/"
-        "nominal/calib__default/sel__default/red__default/prod__pdf_inputs/dev_likelihood_ratio/"
-    )
+    # PATH_HIGGS = (
+    #     "/data/dust/user/diepholq/hh2bbtautau/hbt_store/analysis_hbt/cf.ProduceColumns/22pre_v14/"
+    #     "hh_ggf_hbb_htt_kl1_kt1_powheg/nominal/calib__default/sel__default/red__default/prod__pdf_inputs/prod24/columns_0.parquet"
+    # )
+    # PATH_TOP = (
+    #     "/data/dust/user/diepholq/hh2bbtautau/hbt_store/analysis_hbt/cf.ProduceColumns/22pre_v14/"
+    #     "tt_dl_powheg/nominal/calib__default/sel__default/red__default/prod__pdf_inputs/prod24/columns_all.parquet"
+    # )
+    PATH_HIGGS_1BOOST = "/data/dust/user/diepholq/hh2bbtautau/hbt_store/analysis_hbt/cf.ProduceColumns/22post_v14/hh_ggf_hbb_htt_kl1_kt1_powheg/nominal/calib__default/sel__default/red__default/prod__pdf_inputs/pdf_inputs_1boosts/"
+    PATH_HIGGS_2BOOST = "/data/dust/user/diepholq/hh2bbtautau/hbt_store/analysis_hbt/cf.ProduceColumns/22post_v14/hh_ggf_hbb_htt_kl1_kt1_powheg/nominal/calib__default/sel__default/red__default/prod__pdf_inputs/pdf_inputs_2boosts/"
+    PATH_TOP_1BOOST = "/data/dust/user/diepholq/hh2bbtautau/hbt_store/analysis_hbt/cf.ProduceColumns/22post_v14/tt_dl_powheg/nominal/calib__default/sel__default/red__default/prod__pdf_inputs/pdf_inputs_1boosts/"
+    PATH_TOP_2BOOST = "/data/dust/user/diepholq/hh2bbtautau/hbt_store/analysis_hbt/cf.ProduceColumns/22post_v14/tt_dl_powheg/nominal/calib__default/sel__default/red__default/prod__pdf_inputs/pdf_inputs_2boosts/"
     PLOT_PATH = "/afs/desy.de/user/d/diepholq/Documents/Plots/jacobians/"
-    plot_jac_det(PATH_HIGGS, PATH_TOP, save_fig=True, plot_path=PLOT_PATH)
+    plot_jac_det(PATH_HIGGS_2BOOST, PATH_TOP_2BOOST, save_fig=True, plot_path=PLOT_PATH)
