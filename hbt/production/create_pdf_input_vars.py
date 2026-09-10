@@ -139,7 +139,8 @@ def create_pdf_input_vars_higgs(self: Producer, events: ak.Array, **kwargs) -> a
 )
 def create_pdf_input_vars_higgs_gen(self: Producer, events: ak.Array, **kwargs) -> ak.Array:
     """
-    Creates a new column "pdf_input_vars" that stores the PDF input variables for the Higgs decay products.
+    Creates a new column "pdf_input_vars_gen" that stores the PDF input variables for the Higgs decay products
+    on gen level
     """
     # Get higgs_family column and attach coffea behavior
     # events = self[attach_coffea_behavior](events, collections={"higgs_family": {"type_name": "GenParticle",
@@ -191,26 +192,39 @@ def create_pdf_input_vars_higgs_gen(self: Producer, events: ak.Array, **kwargs) 
     # Using direct boost ansatz
     # boost tau into cms of htautau
     h2 = gen_higgs.h[:, 1]
+    h2_cms_dihiggs = h2.boostCM_of(dihiggs_system)
     # Use only visible tau
     tau_nu1 = gen_higgs.tau_children[:, 1, 1, 0]
 
     # Toggle between tau_vis and tau
     # tau_vis1 = tau1 - tau_nu1
     tau_vis1 = tau1
-    tau_vis1_cms_h2 = tau_vis1.boostCM_of(h2.boostvec)
+    tau_vis1_cms_dihiggs = tau_vis1.boostCM_of(dihiggs_system)
+    tau_vis1_cms_h2 = tau_vis1_cms_dihiggs.boostCM_of(h2_cms_dihiggs.boostvec)
     # theta_cms_h2_tau_vis1 = h2.deltaangle(tau_vis1_cms_h2)   # angle between tau_vis1 in cms of h2 and h2 in lab system
-    cos_theta_cms_h2_tau_vis1 = signed_cos_deltaangle(tau_vis1_cms_h2, h2)
+    cos_theta_cms_h2_tau_vis1 = signed_cos_deltaangle(tau_vis1_cms_h2, h2_cms_dihiggs)
     phi_cms_h2_tau_vis1 = tau_vis1_cms_h2.phi  # phi of tau_vis1 in h2's cms
 
     # boost b1 into cms of hbb
-    b1 = gen_higgs.h_children[:, 0, 1]
-    b1_cms_h1 = b1.boostCM_of(h1.boostvec)
-    b2 = gen_higgs.h_children[:, 0, 0]
-    b2_cms_h1 = b2.boostCM_of(h1.boostvec)
+    # select random b, the same seed as for reco for comparability
+    rng = np.random.default_rng(seed=42)
+    which_b1 = rng.integers(0, 1, endpoint=True, size=len(events))
+    which_b2 = np.where(which_b1 == 0, 1, 0)
+    b_mask = np.concatenate([which_b1[:, None], which_b2[:, None]], axis=1)
+    b_mask = ak.Array([b_mask])[0]
+    bs = gen_higgs.h_children[:, 0]
+    sorted_bs = bs[b_mask]
+    b1 = sorted_bs[:, 0]
+    b2 = sorted_bs[:, 1]
+    b1_cms_dihiggs = b1.boostCM_of(dihiggs_system)
+    b1_cms_h1 = b1_cms_dihiggs.boostCM_of(h1_cms_dihiggs.boostvec)
+
+    b2_cms_dihiggs = b2.boostCM_of(dihiggs_system)
+    b2_cms_h1 = b2_cms_dihiggs.boostCM_of(h1_cms_dihiggs.boostvec)
 
     # angle between b1 in cms of h1 and h1 in lab system
-    cos_theta_cms_h1_b1 = signed_cos_deltaangle(b1_cms_h1, h1)
-    cos_theta_cms_h1_b2 = signed_cos_deltaangle(b2_cms_h1, h1)
+    cos_theta_cms_h1_b1 = signed_cos_deltaangle(b1_cms_h1, h1_cms_dihiggs)
+    cos_theta_cms_h1_b2 = signed_cos_deltaangle(b2_cms_h1, h1_cms_dihiggs)
     phi_cms_h1_b1 = b1_cms_h1.phi  # phi of b1 in h1's cms
     # assorted_channels = ak.where(full_hadr_mask, events.channel_id, EMPTY_FLOAT)
 
@@ -227,12 +241,135 @@ def create_pdf_input_vars_higgs_gen(self: Producer, events: ak.Array, **kwargs) 
             "cos_theta_cms_h1_b1": cos_theta_cms_h1_b1,
             "cos_theta_cms_h1_b2": cos_theta_cms_h1_b2,
             "phi_cms_h1_b1": phi_cms_h1_b1,
+            "channel_id": events.channel_id,
         },
         with_name="pdf_input_vars_gen_higgs",
     )
     pdf_input_vars_gen_higgs = ak.mask(pdf_input_vars_gen_higgs, full_hadr_mask)
 
     events = set_ak_column(events, "pdf_input_vars_gen_higgs", pdf_input_vars_gen_higgs)
+
+    return events
+
+
+@producer(
+    uses={"gen_top.*.*", attach_coffea_behavior, "channel_id"},
+    produces={"pdf_input_vars_gen_top.*"},
+)
+def create_pdf_input_vars_top_gen(self: Producer, events: ak.Array, **kwargs) -> ak.Array:
+    """
+    Creates a new column "pdf_input_vars_gen" that stores the PDF input variables for the ttbar decay products
+    on gen level
+    """
+    events = self[attach_coffea_behavior](
+        events,
+        collections={"top_family": {"type_name": "GenParticle", "check_attr": "metric_table", "skip_fields": "*Idx*G"}},
+        **kwargs,
+    )
+
+    gen_top = attach_coffea_behavior_fn(
+        events.gen_top,
+        collections={
+            "b": {
+                "type_name": "GenParticle",
+                "check_attr": "metric_table",
+                "skip_fields": "*Idx*G",
+            },
+            "t": {
+                "type_name": "GenParticle",
+                "check_attr": "metric_table",
+                "skip_fields": "*Idx*G",
+            },
+            "w": {
+                "type_name": "GenParticle",
+                "check_attr": "metric_table",
+                "skip_fields": "*Idx*G",
+            },
+            "w_children": {
+                "type_name": "GenParticle",
+                "check_attr": "metric_table",
+                "skip_fields": "*Idx*G",
+            },
+        },
+    )
+
+    # Only use channel 3
+    # Collect necessary particles: tt, WW, tautau
+    t1 = gen_top.t[:, 0]  # particle, charge + 2/3
+    t2 = gen_top.t[:, 1]
+    w_plus, w_minus = gen_top.w[:, 0], gen_top.w[:, 1]
+    tau_plus, tau_minus = gen_top.w_children[:, 0, 0], gen_top.w_children[:, 1, 0]
+
+    # Build tt system:
+    ditop_system = t1.add(t2)
+
+    # Build HSO, same names as for reco, don't get confused
+    # tt system in detector cms
+    tt_vis_system_mass = ditop_system.mass
+    tt_vis_system_pt = ditop_system.pt
+    tt_vis_system_pz = ditop_system.pz
+    tt_vis_system_phi = ditop_system.phi
+
+    # ttbar cms
+    t1_cms_ttbar = t1.boostCM_of(ditop_system)
+    t2_cms_ttbar = t2.boostCM_of(ditop_system)
+    t_vis_y_diff = t1_cms_ttbar.rapidity - t2_cms_ttbar.rapidity
+    t1_vis_phi = t1_cms_ttbar.phi
+
+    # t1 cms
+    tau_plus_cms_ttbar = tau_plus.boostCM_of(ditop_system)
+    tau1_cms_t1 = tau_plus_cms_ttbar.boostCM_of(t1_cms_ttbar)
+    tau1_phi = tau_plus.phi
+    tau1_cos_theta_star_cms_t1_vis = signed_cos_deltaangle(tau1_cms_t1, t1_cms_ttbar)
+
+    # t2 cms
+    tau_minus_cms_ttbar = tau_minus.boostCM_of(ditop_system)
+    tau2_cms_t2 = tau_minus_cms_ttbar.boostCM_of(t2_cms_ttbar)
+    tau2_phi = tau_minus.phi
+    tau2_cos_theta_star_cms_t2_vis = signed_cos_deltaangle(tau2_cms_t2, t2_cms_ttbar)
+
+    # W_plus cms
+    w_plus_cms_ttbar = w_plus.boostCM_of(ditop_system)
+    w_plus_cms_t1 = w_plus_cms_ttbar.boostCM_of(t1_cms_ttbar)
+    tau1_cms_wplus = tau1_cms_t1.boostCM_of(w_plus_cms_t1)
+    tau1_cos_theta_star_cms_wplus = signed_cos_deltaangle(tau1_cms_wplus, w_plus_cms_t1)
+
+    # W_minus cms
+    w_minus_cms_ttbar = w_minus.boostCM_of(ditop_system)
+    w_minus_cms_t2 = w_minus_cms_ttbar.boostCM_of(t2_cms_ttbar)
+    tau2_cms_wminus = tau2_cms_t2.boostCM_of(w_minus_cms_t2)
+    tau2_cos_theta_star_cms_wminus = signed_cos_deltaangle(tau2_cms_wminus, w_minus_cms_t2)
+
+    # make the column
+    pdf_input_vars_gen_top = ak.zip(
+        {
+            "tt_vis_system_mass": ak.fill_none(ak.mask(tt_vis_system_mass, events.channel_id == 3), EMPTY_FLOAT),
+            "tt_vis_system_pt": ak.fill_none(ak.mask(tt_vis_system_pt, events.channel_id == 3), EMPTY_FLOAT),
+            "tt_vis_system_pz": ak.fill_none(ak.mask(tt_vis_system_pz, events.channel_id == 3), EMPTY_FLOAT),
+            "tt_vis_system_phi": ak.fill_none(ak.mask(tt_vis_system_phi, events.channel_id == 3), EMPTY_FLOAT),
+            "t_vis_y_diff": ak.fill_none(ak.mask(t_vis_y_diff, events.channel_id == 3), EMPTY_FLOAT),
+            "t1_vis_phi": ak.fill_none(ak.mask(t1_vis_phi, events.channel_id == 3), EMPTY_FLOAT),
+            "tau1_phi": ak.fill_none(ak.mask(tau1_phi, events.channel_id == 3), EMPTY_FLOAT),
+            "tau1_cos_theta_star_cms_t1_vis": ak.fill_none(
+                ak.mask(tau1_cos_theta_star_cms_t1_vis, events.channel_id == 3), EMPTY_FLOAT
+            ),
+            "tau2_phi": ak.fill_none(ak.mask(tau2_phi, events.channel_id == 3), EMPTY_FLOAT),
+            "tau2_cos_theta_star_cms_t2_vis": ak.fill_none(
+                ak.mask(tau2_cos_theta_star_cms_t2_vis, events.channel_id == 3), EMPTY_FLOAT
+            ),
+            "tau1_cos_theta_star_cms_wplus": ak.fill_none(
+                ak.mask(tau1_cos_theta_star_cms_wplus, events.channel_id == 3), EMPTY_FLOAT
+            ),
+            "tau2_cos_theta_star_cms_wminus": ak.fill_none(
+                ak.mask(tau2_cos_theta_star_cms_wminus, events.channel_id == 3), EMPTY_FLOAT
+            ),
+            "channel_id": events.channel_id,
+        },
+        with_name="pdf_input_vars_gen_top",
+    )
+
+    # store the column
+    events = set_ak_column(events, "pdf_input_vars_gen_top", pdf_input_vars_gen_top)
 
     return events
 

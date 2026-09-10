@@ -713,7 +713,7 @@ def create_background_hist(
                 drop_nones=True,
             )
         except:
-            print(f"No united 22pre and 22post file found at {parquet_file_path_signal}, creating one...")
+            print(f"No united 22pre and 22post file found at {parquet_file_path_bg}, creating one...")
             file_list = glob(f"{parquet_file_path_bg}*.parquet")
             result = ak.concatenate([ak.from_parquet(file_list[0]), ak.from_parquet(file_list[1])], axis=0)
             column_dict = {}

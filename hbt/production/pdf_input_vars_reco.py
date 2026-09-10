@@ -1164,7 +1164,7 @@ def create_pdf_input_vars_reco_higgs(
     two_boosts = True
     # get four-momenta of b's and taus
     # Select random b as b1, other as b2
-    rng = np.random.default_rng()
+    rng = np.random.default_rng(seed=42)
     which_b1 = rng.integers(0, 1, endpoint=True, size=len(events))
     which_b2 = np.where(which_b1 == 0, 1, 0)
     b_mask = np.concatenate([which_b1[:, None], which_b2[:, None]], axis=1)

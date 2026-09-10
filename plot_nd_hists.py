@@ -162,7 +162,7 @@ def print_correlation_matrix(eval_data_path: str, column_name: str, do_constr: b
         r"$cos(\theta^{*}_{\tau^{-}})^{t_{vis}}$",
         r"$\phi_{\tau^{-}}$",
         r"$cos(\theta^{*}_{\tau^{+}})^{W^{+}}$",
-        r"$cos(\theta^{*}_{\tau^{.}})^{W^{+}}$",
+        r"$cos(\theta^{*}_{\tau^{-}})^{W^{-}}$",
     ]
 
     if np.any(column_name.split("_") == np.full_like(column_name.split("_"), "higgs", dtype=f"<U{len('higgs')}")):

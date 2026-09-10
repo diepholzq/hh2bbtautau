@@ -2540,6 +2540,8 @@ def add_config(
                     "pdf_input_vars_reco_top.*",
                     "pdf_inputs_inputs.*",
                     "likelihood_ratio",
+                    "signal_likelihood",
+                    "background_likelihood",
                     *skip_column("*_{up,down}"),
                 },
                 # columns for dnn-based dy weight tests
